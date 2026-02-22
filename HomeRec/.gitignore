@@ -1,0 +1,27 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.DS_Store
+DerivedData/
+*.swp
+
+# Build artifacts
+build/
+*.app
+*.dSYM
+
+# Claude Code
+.claude/sessions/
+.claude/cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*~
+
+# Audio test files
+test_recordings/

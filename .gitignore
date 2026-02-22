@@ -1,62 +1,52 @@
 # Xcode
-#
-# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
-
-## User settings
-xcuserdata/
-
-## Obj-C/Swift specific
+**/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.moved-aside
 *.hmap
-
-## App packaging
 *.ipa
-*.dSYM.zip
-*.dSYM
+*.xcuserstate
 
-## Playgrounds
-timeline.xctimeline
-playground.xcworkspace
+# Build artifacts
+build/
+*.app
+*.dSYM
+*.dSYM.zip
+*.xcresult
 
 # Swift Package Manager
-#
-# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
-# Packages/
-# Package.pins
-# Package.resolved
-# *.xcodeproj
-#
-# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
-# hence it is not needed unless you have added a package configuration file to your project
-# .swiftpm
-
 .build/
+Packages/
+Package.pins
+Package.resolved
 
-# CocoaPods
-#
-# We recommend against adding the Pods directory to your .gitignore. However
-# you should judge for yourself, the pros and cons are mentioned at:
-# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
-#
-# Pods/
-#
-# Add this line if you want to avoid checking in source code from the Xcode workspace
-# *.xcworkspace
+# Code signing
+*.mobileprovision
+*.provisionprofile
 
-# Carthage
-#
-# Add this line if you want to avoid checking in source code from Carthage dependencies.
-# Carthage/Checkouts
+# Claude Code
+.claude/
+CLAUDE.md
 
-Carthage/Build/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+**/.DS_Store
 
-# fastlane
-#
-# It is recommended to not store the screenshots in the git repo.
-# Instead, use fastlane to re-generate the screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/#source-control
+# Temporary files
+*.tmp
+*~
+*.swp
+*.swo
 
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/screenshots/**/*.png
-fastlane/test_output
+# Audio test files
+test_recordings/
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.p12
+*.key
