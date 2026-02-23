@@ -63,10 +63,10 @@ struct RecorderView: View {
             }) {
                 HStack {
                     if viewModel.permissionStatus == .granted {
-                        Image(systemName: viewModel.permissionButtonIcon)
+                        Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
                             .font(.system(size: 24))
                     }
-                    Text(viewModel.permissionButtonLabel)
+                    Text(viewModel.permissionStatus != .granted ? "Open System Settings" : (viewModel.isRecording ? "Stop Recording" : "Start Recording"))
                         .font(.custom("Archivo", size: 15, relativeTo: .body))
                         .fontWeight(.medium)
                 }

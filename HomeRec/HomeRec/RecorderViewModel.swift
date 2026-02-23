@@ -132,8 +132,10 @@ class RecorderViewModel: ObservableObject {
     }
 
     /// Open System Settings
+    /// Triggers a screen capture access request first so the app registers
+    /// in the Screen Recording permission list before the user sees Settings.
     func openSystemSettings() {
-        PermissionManager.openSystemPreferences()
+        PermissionManager.registerAndOpenSettings()
     }
 
     // MARK: - Private Methods
@@ -178,28 +180,6 @@ class RecorderViewModel: ObservableObject {
             return "Almost ready"
         } else {
             return "Play something, then hit record"
-        }
-    }
-
-    /// Button label adapts to permission state
-    var permissionButtonLabel: String {
-        if permissionStatus != .granted {
-            return "Open System Settings"
-        } else if isRecording {
-            return "Stop Recording"
-        } else {
-            return "Start Recording"
-        }
-    }
-
-    /// Button icon adapts to permission state
-    var permissionButtonIcon: String {
-        if permissionStatus != .granted {
-            return "gearshape"
-        } else if isRecording {
-            return "stop.circle.fill"
-        } else {
-            return "record.circle"
         }
     }
 

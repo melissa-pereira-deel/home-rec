@@ -5,6 +5,30 @@ All notable changes to Home Rec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-02-22 - Build Fixes & Permission UX
+
+### Fixed
+- **Main actor isolation error** — Added `@MainActor` to `MenuBarController` to fix compiler error when accessing `$isRecording` from `RecorderViewModel`
+- **Swift 6 deinit warning** — Refactored `RecordingController.deinit` to capture managers as local variables, avoiding `self` capture in a closure that outlives deinitialization
+- **Deployment target warning** — Lowered `MACOSX_DEPLOYMENT_TARGET` from 26.1 to 15.0 across all targets (within Xcode's supported range of 10.13–15.5.99)
+
+### Improved
+- **Permission registration on first click** — "Open System Settings" button now calls `CGRequestScreenCaptureAccess()` before opening Settings, so the app appears in the Screen Recording permission list immediately — no need to attempt a recording first
+- **Installation guide** — Added Prerequisites section to README with Apple Developer account requirement and step-by-step Xcode code signing instructions for less technical users
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `MenuBarController.swift` | Added `@MainActor` annotation |
+| `RecordingController.swift` | Refactored `deinit` to avoid capturing `self` |
+| `PermissionManager.swift` | Added `registerAndOpenSettings()` method |
+| `RecorderViewModel.swift` | Updated `openSystemSettings()` to use new registration method; removed unused computed properties |
+| `RecorderView.swift` | Updated main button to show icon only for Start/Stop states |
+| `project.pbxproj` | `MACOSX_DEPLOYMENT_TARGET` 26.1 → 15.0 (6 occurrences) |
+| `README.md` | Added Prerequisites and code signing setup to Installation |
+
+---
+
 ## [0.3.0] - 2026-02-21 - Menu Bar Integration
 
 ### Added

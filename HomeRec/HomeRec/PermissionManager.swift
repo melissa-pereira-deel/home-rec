@@ -52,6 +52,17 @@ class PermissionManager {
         }
     }
 
+    /// Register the app in the Screen Recording permission list, then open System Settings.
+    /// Calling `CGRequestScreenCaptureAccess()` ensures the app appears in the list
+    /// even if the user has never attempted a recording.
+    static func registerAndOpenSettings() {
+        // Trigger the access request so macOS adds the app to the permission list
+        if #available(macOS 14.0, *) {
+            _ = CGRequestScreenCaptureAccess()
+        }
+        openSystemPreferences()
+    }
+
     /// Open System Settings to Screen Recording privacy pane
     static func openSystemPreferences() {
         // Open System Settings to Privacy & Security > Screen Recording
