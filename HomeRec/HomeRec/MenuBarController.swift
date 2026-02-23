@@ -9,6 +9,7 @@ import AppKit
 import SwiftUI
 import Combine
 
+@MainActor
 class MenuBarController: NSObject {
 
     private var statusItem: NSStatusItem

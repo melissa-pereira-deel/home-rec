@@ -36,13 +36,25 @@ Home Rec is a lightweight macOS app that captures system audio output and saves 
 
 ## Installation
 
+### Prerequisites
+
+- **Apple Developer Account** — You need a free or paid [Apple Developer account](https://developer.apple.com/account) to sign and run the app on your Mac. If you don't have one, sign up at [developer.apple.com](https://developer.apple.com) using your Apple ID.
+- **Xcode 15+** — Download from the [Mac App Store](https://apps.apple.com/app/xcode/id497799835) or [developer.apple.com/xcode](https://developer.apple.com/xcode/).
+
 ### From Source
 
 1. Clone this repository
 2. Open `HomeRec/HomeRec.xcodeproj` in Xcode
-3. Build and run (Cmd+R)
-4. Grant Screen Recording permission when prompted
-5. Start recording!
+3. **Configure code signing** (required on first open):
+   - Select the **HomeRec** project in the sidebar (the blue icon at the top)
+   - Go to the **Signing & Capabilities** tab
+   - Check **"Automatically manage signing"**
+   - Under **Team**, select your Apple Developer account from the dropdown
+   - If the bundle identifier (`com.mdebritto.HomeRec`) conflicts, change it to something unique (e.g. `com.yourname.HomeRec`)
+   - Repeat for the **HomeRecTests** and **HomeRecUITests** targets if you plan to run tests
+4. Build and run (**Cmd+R**)
+5. Grant Screen Recording permission when prompted (see [Granting Permissions](#granting-permissions) below)
+6. Start recording!
 
 ### Pre-built App
 

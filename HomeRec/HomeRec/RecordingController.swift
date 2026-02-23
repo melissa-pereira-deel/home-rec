@@ -121,11 +121,14 @@ class RecordingController {
     // MARK: - Cleanup
 
     deinit {
-        // Clean up resources on deallocation
+        // Capture managers directly to avoid referencing self inside the Task closure
+        let captureManager = captureManager
+        let audioRecorder = audioRecorder
+        guard captureManager.capturing else { return }
         Task {
-            if isRecording {
-                try? await stopRecording()
-            }
+            try? await captureManager.stopCapture()
+            try? audioRecorder.stopRecording()
+            await captureManager.cleanup()
         }
     }
 }
