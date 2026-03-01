@@ -28,6 +28,21 @@ Home Rec is a lightweight macOS app that captures system audio output and saves 
 - **Finder Integration** — Quick "Reveal in Finder" button after recording
 - **Permission Management** — Automatic Screen Recording permission handling
 
+### Alternatives
+
+There are several other tools for capturing system audio on macOS. Here's how Home Rec compares:
+
+| Tool | Type | Price | How It Works |
+|------|------|-------|--------------|
+| **Home Rec** | Native app | Free & open-source | Uses ScreenCaptureKit directly — no virtual devices, no kernel extensions, no configuration |
+| **[BlackHole](https://github.com/ExistentialAudio/BlackHole)** | Virtual audio driver | Free & open-source | Creates a virtual loopback device; requires manual Audio MIDI Setup configuration and a multi-output aggregate device |
+| **[Loopback](https://rogueamoeba.com/loopback/)** | Virtual audio router | $118 (paid) | Creates virtual devices with a visual routing UI; powerful but complex for simple recording |
+| **[Audio Hijack](https://rogueamoeba.com/audiohijack/)** | Audio capture suite | $72 (paid) | Block-based audio pipeline with effects, scheduling, and multiple export formats |
+| **[Soundflower](https://github.com/mattingalls/Soundflower)** | Virtual audio driver | Free & open-source | Legacy kernel extension (kext); no longer maintained, incompatible with Apple Silicon without workarounds |
+| **[Recordia](https://sindresorhus.com/recordia)** | Menu bar recorder | $10 (paid) | Lightweight menu bar app for screen + audio recording |
+
+Home Rec is designed for users who want the simplest possible path to recording system audio — launch, click record, done. No drivers to install, no audio routing to configure, no subscriptions.
+
 ## Requirements
 
 - macOS 12.3 or later (for ScreenCaptureKit)
