@@ -250,7 +250,13 @@ _Note: Test coverage is a work in progress._
 3. **Quit and relaunch** the app (permission only takes effect after restart)
 
 ### Home Rec Doesn't Appear in the Screen Recording List
-The app registers itself on launch via an `SCShareableContent` probe. If it still doesn't appear, try quitting and relaunching the app. You can also reset the permission with `tccutil reset ScreenCapture com.mdebritto.HomeRec` and relaunch.
+The app registers itself on launch via an `SCShareableContent` probe. If it still doesn't appear, try quitting and relaunching the app. You can also reset the permission and relaunch:
+
+```bash
+tccutil reset ScreenCapture <your-bundle-id>
+```
+
+The default bundle identifier is `com.mdebritto.HomeRec`. If you changed it during code signing setup, use your own (check **Xcode > target > General > Bundle Identifier**).
 
 ### Recording File is Empty (44 bytes)
 This was a critical bug resolved in v0.1.0. Ensure you're on the latest version.
