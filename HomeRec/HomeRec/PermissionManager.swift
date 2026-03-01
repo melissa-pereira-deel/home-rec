@@ -19,48 +19,33 @@ enum PermissionStatus {
 /// Manages Screen Recording permission (required for Core Audio Taps)
 class PermissionManager {
 
-    /// Check current Screen Recording permission status
+    /// Check current Screen Recording permission status using SCShareableContent.
+    /// This also registers the app in System Settings > Screen Recording.
     /// - Returns: Current permission status
-    static func checkPermission() -> PermissionStatus {
-        // Check if we can get screen content
-        // This is a proxy for Screen Recording permission
-        if #available(macOS 14.0, *) {
-            // For macOS 14+, use ScreenCaptureKit
-            // If we can query content, we have permission
-            let canCapture = CGPreflightScreenCaptureAccess()
-            return canCapture ? .granted : .denied
-        } else {
+    static func checkPermission() async -> PermissionStatus {
+        do {
+            // Probing SCShareableContent registers the app in the Screen Recording list
+            // and succeeds only if permission is already granted.
+            _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            return .granted
+        } catch {
             return .denied
         }
     }
 
-    /// Request Screen Recording permission
-    /// - Returns: True if permission is granted, false otherwise
+    /// Request Screen Recording permission.
+    /// Probes SCShareableContent to register the app, then opens System Settings
+    /// so the user can flip the toggle (the app will now appear in the list).
+    /// - Returns: True if permission is already granted, false otherwise
     @MainActor
     static func requestPermission() async -> Bool {
-        if #available(macOS 14.0, *) {
-            // Request permission - this will show system dialog if needed
-            _ = CGRequestScreenCaptureAccess()
-
-            // Wait a moment for the system dialog
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-
-            // Check final status
-            return CGPreflightScreenCaptureAccess()
-        } else {
-            return false
+        let status = await checkPermission()
+        if status == .granted {
+            return true
         }
-    }
-
-    /// Register the app in the Screen Recording permission list, then open System Settings.
-    /// Calling `CGRequestScreenCaptureAccess()` ensures the app appears in the list
-    /// even if the user has never attempted a recording.
-    static func registerAndOpenSettings() {
-        // Trigger the access request so macOS adds the app to the permission list
-        if #available(macOS 14.0, *) {
-            _ = CGRequestScreenCaptureAccess()
-        }
+        // The probe above registered the app; now open Settings so the user can enable it
         openSystemPreferences()
+        return false
     }
 
     /// Open System Settings to Screen Recording privacy pane

@@ -5,6 +5,30 @@ All notable changes to Home Rec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-03-01 - Screen Recording Permission Fix
+
+### Changed
+- **Permission check uses SCShareableContent** — Replaced deprecated `CGPreflightScreenCaptureAccess()` with an `SCShareableContent` probe that both checks permission status and registers the app in System Settings > Screen Recording
+- **Permission request uses SCShareableContent** — Replaced `CGRequestScreenCaptureAccess()` with the same probe; on denial, opens System Settings directly (the app now reliably appears in the permission list)
+- **Async permission flow** — `PermissionManager.checkPermission()` is now `async`; `RecorderViewModel` and `RecorderView` updated accordingly
+
+### Fixed
+- **App not appearing in Screen Recording list** — When built from Xcode (DerivedData path), the old `CGRequestScreenCaptureAccess()` did not always register the app. The `SCShareableContent` probe reliably registers the app on first launch.
+
+### Removed
+- `CGPreflightScreenCaptureAccess` usage (deprecated since macOS 15.1)
+- `CGRequestScreenCaptureAccess` usage
+- `PermissionManager.registerAndOpenSettings()` (superseded by SCShareableContent probe at launch)
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `PermissionManager.swift` | Replaced CG-based APIs with `SCShareableContent` probe; `checkPermission()` now async; removed `registerAndOpenSettings()` |
+| `RecorderViewModel.swift` | `checkPermission()` now async; `init()` wraps call in `Task`; `openSystemSettings()` calls `openSystemPreferences()` directly |
+| `RecorderView.swift` | `.onAppear` wraps `checkPermission()` in `Task` |
+
+---
+
 ## [0.3.1] - 2026-02-22 - Build Fixes & Permission UX
 
 ### Fixed

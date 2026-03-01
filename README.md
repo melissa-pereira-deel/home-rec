@@ -9,7 +9,7 @@
 ![macOS](https://img.shields.io/badge/macOS-12.3+-blue.svg)
 ![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)
 ![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)
-![Version](https://img.shields.io/badge/Version-0.3.0-informational.svg)
+![Version](https://img.shields.io/badge/Version-0.3.2-informational.svg)
 
 ## Overview
 
@@ -73,19 +73,19 @@ _Coming soon: Notarized .app download_
 
 ### Granting Permissions
 
-Home Rec requires **Screen Recording** permission to access system audio. The app **will not appear** in the permission list until it first attempts to record.
+Home Rec requires **Screen Recording** permission to access system audio. The app registers itself in the Screen Recording permission list automatically at launch.
 
 **First-time setup:**
 
-1. **Launch Home Rec** and click **"Start Recording"**
-2. macOS will show a permission prompt — click **"Open System Settings"**
-3. In **System Settings > Privacy & Security > Screen Recording**, find **Home Rec** and enable the toggle
+1. **Launch Home Rec** — the app automatically registers in System Settings
+2. Open **System Settings > Privacy & Security > Screen Recording**
+3. Find **Home Rec** in the list and enable the toggle
 4. **Quit and relaunch** Home Rec (the permission takes effect after restart)
-5. Click "Start Recording" again — it should now work
+5. Click "Start Recording" — it should now work
 
-**If the permission prompt doesn't appear:**
+**If you click "Start Recording" and nothing happens:**
 
-If you clicked "Start Recording" and nothing happened, the app may already be in the permission list but disabled:
+The app may already be in the permission list but disabled:
 
 1. Open **System Settings** > **Privacy & Security** > **Screen Recording**
 2. Look for **Home Rec** in the list and enable it
@@ -245,13 +245,12 @@ _Note: Test coverage is a work in progress._
 ## Troubleshooting
 
 ### "Screen Recording Permission Required"
-1. Click "Start Recording" once — this registers the app with macOS
-2. Go to **System Settings > Privacy & Security > Screen Recording**
-3. Find **Home Rec** in the list and enable the toggle
-4. **Quit and relaunch** the app (permission only takes effect after restart)
+1. The app registers itself at launch — go to **System Settings > Privacy & Security > Screen Recording**
+2. Find **Home Rec** in the list and enable the toggle
+3. **Quit and relaunch** the app (permission only takes effect after restart)
 
 ### Home Rec Doesn't Appear in the Screen Recording List
-The app only appears after it attempts to use audio capture. Click "Start Recording" at least once, then check the list again. If it still doesn't appear, try quitting and relaunching the app.
+The app registers itself on launch via an `SCShareableContent` probe. If it still doesn't appear, try quitting and relaunching the app. You can also reset the permission with `tccutil reset ScreenCapture com.mdebritto.HomeRec` and relaunch.
 
 ### Recording File is Empty (44 bytes)
 This was a critical bug resolved in v0.1.0. Ensure you're on the latest version.
@@ -289,4 +288,4 @@ Copyright 2026 Melissa de Britto
 
 ---
 
-**Version:** 0.3.0 | **Last Updated:** 2026-02-22
+**Version:** 0.3.2 | **Last Updated:** 2026-03-01

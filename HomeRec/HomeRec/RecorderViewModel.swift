@@ -32,14 +32,16 @@ class RecorderViewModel: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        checkPermission()
+        Task {
+            await checkPermission()
+        }
     }
 
     // MARK: - Public Methods
 
     /// Check permission status
-    func checkPermission() {
-        permissionStatus = PermissionManager.checkPermission()
+    func checkPermission() async {
+        permissionStatus = await PermissionManager.checkPermission()
     }
 
     /// Request permission
@@ -132,10 +134,8 @@ class RecorderViewModel: ObservableObject {
     }
 
     /// Open System Settings
-    /// Triggers a screen capture access request first so the app registers
-    /// in the Screen Recording permission list before the user sees Settings.
     func openSystemSettings() {
-        PermissionManager.registerAndOpenSettings()
+        PermissionManager.openSystemPreferences()
     }
 
     // MARK: - Private Methods

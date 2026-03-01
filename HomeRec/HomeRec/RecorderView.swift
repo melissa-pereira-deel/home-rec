@@ -118,7 +118,9 @@ struct RecorderView: View {
             }
         }
         .onAppear {
-            viewModel.checkPermission()
+            Task {
+                await viewModel.checkPermission()
+            }
         }
     }
 }
