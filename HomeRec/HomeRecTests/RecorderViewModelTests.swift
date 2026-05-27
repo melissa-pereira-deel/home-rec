@@ -180,6 +180,21 @@ struct RecorderViewModelTests {
         #expect(second.showOnboarding)
     }
 
+    @Test("An unavailable save folder records to Desktop with a non-blocking notice")
+    func unavailableSaveLocationShowsNoticeWhileRecording() async {
+        let gone = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gone-\(UUID().uuidString)", isDirectory: true)
+        let saveLocation = MockSaveLocationProviding(directory: gone)
+        saveLocation.isConfiguredLocationUnavailable = true
+        let viewModel = makeViewModel(saveLocation: saveLocation)
+
+        await viewModel.startRecording()
+
+        #expect(viewModel.state == .recording)          // recording proceeds (to Desktop)
+        #expect(viewModel.showError)                     // non-blocking notice
+        #expect(viewModel.recoverySuggestion == .chooseFolder)
+    }
+
     @Test("View model reflects a custom save location and resets it to Desktop")
     func saveLocationDisplayAndReset() {
         let dir = FileManager.default.temporaryDirectory
