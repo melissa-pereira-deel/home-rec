@@ -99,6 +99,31 @@ struct RecorderView: View {
                 .keyboardShortcut("o", modifiers: .command)
             }
 
+            // Save location (idle only) — quiet, configure-once destination line.
+            if !viewModel.isRecording {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder")
+                        .foregroundColor(.secondary)
+                    Button(action: {
+                        viewModel.chooseSaveLocation()
+                    }) {
+                        Text("Saving to \(viewModel.saveLocationName)")
+                            .font(.custom("Inter-Regular", size: 12, relativeTo: .caption))
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewModel.saveLocationPath)
+
+                    if viewModel.hasCustomSaveLocation {
+                        Button("Reset") {
+                            viewModel.resetSaveLocation()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.custom("Inter-Regular", size: 11, relativeTo: .caption))
+                    }
+                }
+                .foregroundColor(.secondary)
+            }
+
             Spacer()
         }
         .padding(40)

@@ -23,12 +23,14 @@ struct RecorderViewModelTests {
     private func makeViewModel(
         controller: MockRecordingControlling? = nil,
         permission: PermissionStatus = .granted,
-        clock: ManualClock? = nil
+        clock: ManualClock? = nil,
+        saveLocation: SaveLocationProviding? = nil
     ) -> RecorderViewModel {
         RecorderViewModel(
             controller: controller ?? MockRecordingControlling(),
             permissions: MockPermissionProviding(permission),
-            clock: clock ?? ManualClock()
+            clock: clock ?? ManualClock(),
+            saveLocation: saveLocation
         )
     }
 
@@ -176,6 +178,23 @@ struct RecorderViewModelTests {
         // …but it can be re-opened on demand.
         second.showOnboardingAgain()
         #expect(second.showOnboarding)
+    }
+
+    @Test("View model reflects a custom save location and resets it to Desktop")
+    func saveLocationDisplayAndReset() {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vm-save-\(UUID().uuidString)", isDirectory: true)
+        let mock = MockSaveLocationProviding(directory: dir)
+        let viewModel = makeViewModel(saveLocation: mock)
+
+        #expect(viewModel.saveLocationName == dir.lastPathComponent)
+        #expect(viewModel.hasCustomSaveLocation)
+
+        viewModel.resetSaveLocation()
+
+        #expect(viewModel.saveLocationName == "Desktop")
+        #expect(viewModel.hasCustomSaveLocation == false)
+        #expect(mock.resetCount == 1)
     }
 
     @Test("Disk-space threshold logic")

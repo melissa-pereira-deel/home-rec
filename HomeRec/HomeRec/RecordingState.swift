@@ -15,6 +15,7 @@ enum RecorderError: Error, Equatable, Sendable {
     case stopFailed(String)
     case streamFailed(String)
     case diskFull
+    case saveLocationUnavailable
 
     /// The underlying technical detail (e.g. a system error description).
     /// Retained for logs/diagnostics — never shown directly to the user.
@@ -24,6 +25,8 @@ enum RecorderError: Error, Equatable, Sendable {
             return detail
         case .diskFull:
             return "insufficient free disk space"
+        case .saveLocationUnavailable:
+            return "configured save folder is missing or unwritable"
         }
     }
 
@@ -38,6 +41,8 @@ enum RecorderError: Error, Equatable, Sendable {
             return "Recording stopped unexpectedly. This usually means Screen Recording permission was turned off, or another app took over audio capture."
         case .diskFull:
             return "There isn't enough free space to start recording. Free up some disk space and try again."
+        case .saveLocationUnavailable:
+            return "Your chosen save folder isn't available, so this recording is going to your Desktop instead."
         }
     }
 
@@ -48,6 +53,8 @@ enum RecorderError: Error, Equatable, Sendable {
             return .tryAgain
         case .streamFailed:
             return .openSettings
+        case .saveLocationUnavailable:
+            return .chooseFolder
         case .stopFailed, .diskFull:
             return nil
         }
@@ -58,11 +65,13 @@ enum RecorderError: Error, Equatable, Sendable {
 enum RecoverySuggestion: Equatable, Sendable {
     case openSettings
     case tryAgain
+    case chooseFolder
 
     nonisolated var label: String {
         switch self {
         case .openSettings: return "Open Settings"
         case .tryAgain: return "Try Again"
+        case .chooseFolder: return "Choose Folder…"
         }
     }
 }

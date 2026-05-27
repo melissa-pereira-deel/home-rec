@@ -84,6 +84,31 @@ final class MockPermissionProviding: PermissionProviding {
 }
 
 @MainActor
+final class MockSaveLocationProviding: SaveLocationProviding {
+    var configuredDirectory: URL?
+    var resolvedDirectory: URL
+    var isConfiguredLocationUnavailable = false
+    private(set) var setCount = 0
+    private(set) var resetCount = 0
+
+    init(directory: URL) {
+        self.resolvedDirectory = directory
+        self.configuredDirectory = directory
+    }
+
+    func setSaveDirectory(_ url: URL) {
+        setCount += 1
+        configuredDirectory = url
+        resolvedDirectory = url
+    }
+
+    func reset() {
+        resetCount += 1
+        configuredDirectory = nil
+    }
+}
+
+@MainActor
 final class ManualClock: DurationClock {
     var now: Date = Date(timeIntervalSinceReferenceDate: 0)
     private var tick: (@MainActor () -> Void)?

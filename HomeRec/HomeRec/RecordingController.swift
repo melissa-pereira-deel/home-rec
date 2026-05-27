@@ -20,6 +20,7 @@ class RecordingController: RecordingControlling {
 
     private let captureManager: AudioCapturing
     private let audioRecorder: AudioFileWriting
+    private let saveLocation: SaveLocationProviding
 
     private var currentRecordingURL: URL?
 
@@ -33,10 +34,12 @@ class RecordingController: RecordingControlling {
 
     init(
         captureManager: AudioCapturing? = nil,
-        audioRecorder: AudioFileWriting? = nil
+        audioRecorder: AudioFileWriting? = nil,
+        saveLocation: SaveLocationProviding? = nil
     ) {
         self.captureManager = captureManager ?? ScreenCaptureAudioManager()
         self.audioRecorder = audioRecorder ?? AudioRecorder()
+        self.saveLocation = saveLocation ?? SaveLocationManager()
         self.captureManager.onStreamError = { [weak self] message in
             self?.onStreamError?(message)
         }
@@ -117,21 +120,27 @@ class RecordingController: RecordingControlling {
         return currentRecordingURL
     }
 
-    // MARK: - Private Methods
+    // MARK: - File path
 
-    /// Generate file path with timestamp
-    /// - Returns: URL for the new recording file
-    private func generateFilePath() -> URL {
-        // Get Desktop directory
-        let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
+    /// Generate a unique file path in the resolved save directory.
+    /// `internal` for unit testing. The directory comes from `SaveLocationProviding`,
+    /// which always resolves to a writable folder (falling back to the Desktop).
+    func generateFilePath() -> URL {
+        let directory = saveLocation.resolvedDirectory
 
-        // Generate filename with timestamp
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = formatter.string(from: Date())
-        let filename = "recording_\(timestamp).wav"
+        let base = "recording_\(timestamp)"
 
-        return desktopURL.appendingPathComponent(filename)
+        // Avoid clobbering an existing file (timestamps are second-granular).
+        var candidate = directory.appendingPathComponent("\(base).wav")
+        var suffix = 1
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = directory.appendingPathComponent("\(base) (\(suffix)).wav")
+            suffix += 1
+        }
+        return candidate
     }
 
     // MARK: - Cleanup

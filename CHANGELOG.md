@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > manual GUI pass. Distribution is the resume point.
 
 ### Added
+- **Choose where recordings are saved** — Recordings no longer always go to the Desktop: a "Saving to <Folder>" line in the main window opens a folder picker, with a Reset that returns to the Desktop default. The choice persists across launches. If the chosen folder is later missing or unwritable (e.g. an unplugged drive), Home Rec falls back to the Desktop, keeps your choice, and tells you — a recording is never lost. (BL-010)
 - **Distribution scaffolding (untested)** — `scripts/build-dmg.sh` orchestrates the direct-distribution flow (archive → Developer ID export → notarize → staple → `create-dmg` → notarize/staple DMG), with `docs/distribution/build.md` and `notarization.md` documenting the required Release settings and one-time Keychain/notarytool setup. Not yet run — requires an Apple Developer account and matching toolchain. No secrets are committed; `dist/` is git-ignored. (BL-030–033)
 - **CI pipeline** — A GitHub Actions workflow (`.github/workflows/ci.yml`) runs the unit-test suite under Thread Sanitizer on every push to `main` and on PRs (UI tests excluded — they need TCC permission). Requires a one-time check that the runner's Xcode matches the project SDK and that the signing approach lets the test host launch. (BL-050)
 - **First-run onboarding** — A one-screen welcome sheet on first launch explains what Home Rec does and why it needs Screen Recording permission (audio only, never the screen), with an "Open Settings" button and a live "you're ready" confirmation once permission is granted (re-detected automatically). Shown once (persisted) and re-openable from the Help menu. (BL-041)
@@ -69,7 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | `HomeRecApp.swift` | Help menu "Welcome to Home Rec" command (BL-041) |
 | `.github/workflows/ci.yml` | New — GitHub Actions unit tests under TSan (BL-050) |
 | `MenuBarPopoverView.swift` | Help row: Export Diagnostics… / Report a Problem (BL-042) |
-| `RecorderViewModel.swift` | Owns `RecordingState`; transitions + state-derived `isRecording`/`statusText` (BL-006); `handleStreamFailure` wiring (BL-020); re-probes permission on app activation (BL-040) |
+| `RecorderViewModel.swift` | Owns `RecordingState`; transitions + state-derived `isRecording`/`statusText` (BL-006); `handleStreamFailure` wiring (BL-020); re-probes permission on app activation (BL-040); save-location display/picker/reset + fallback notice (BL-010) |
+| `SaveLocationProviding.swift` | New — `SaveLocationManager` (UserDefaults-persisted path, Desktop fallback) (BL-010) |
+| `RecordingController.swift` | `generateFilePath()` uses the resolved save directory, collision-safe (BL-010) |
 | `MenuBarController.swift` | Observes `$state` (mapped to recording) instead of `$isRecording` (BL-006) |
 | `WAVWriter.swift` | `WAVWriterError` made `Equatable` (BL-004); periodic in-place header rewrite for crash safety (BL-022) |
 | `AudioCapturing.swift`, `RecordingControlling.swift` | Added `onStreamError`; `RecordingControlling.finalizeAfterFailure()` (BL-020) |

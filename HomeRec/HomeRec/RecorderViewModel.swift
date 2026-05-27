@@ -31,15 +31,23 @@ class RecorderViewModel: ObservableObject {
     @Published var lastRecordingURL: URL?
     @Published var permissionStatus: PermissionStatus = .notDetermined
     @Published var waveformSamples: [Float] = Array(repeating: 0, count: 200)
+    /// Display name of the current save location (folder name, or "Desktop").
+    @Published private(set) var saveLocationName: String = "Desktop"
+    /// Whether a non-default save location is configured (controls the Reset affordance).
+    @Published private(set) var hasCustomSaveLocation = false
 
     /// Whether a recording is actively capturing. Derived from `state`.
     var isRecording: Bool { state == .recording }
+
+    /// Full path of the current save location, for tooltips / accessibility.
+    var saveLocationPath: String { saveLocation.resolvedDirectory.path }
 
     // MARK: - Private Properties
 
     private let controller: RecordingControlling
     private let permissions: PermissionProviding
     private let clock: DurationClock
+    private let saveLocation: SaveLocationProviding
     private var recordingStartTime: Date?
     private var longRecordingWarned = false
     private var activationObserver: NSObjectProtocol?
@@ -52,9 +60,12 @@ class RecorderViewModel: ObservableObject {
         controller: RecordingControlling? = nil,
         permissions: PermissionProviding? = nil,
         clock: DurationClock? = nil,
+        saveLocation: SaveLocationProviding? = nil,
         defaults: UserDefaults = .standard
     ) {
-        self.controller = controller ?? RecordingController()
+        let resolvedSaveLocation = saveLocation ?? SaveLocationManager(defaults: defaults)
+        self.saveLocation = resolvedSaveLocation
+        self.controller = controller ?? RecordingController(saveLocation: resolvedSaveLocation)
         self.permissions = permissions ?? PermissionManager()
         self.clock = clock ?? SystemDurationClock()
         self.defaults = defaults
@@ -62,6 +73,7 @@ class RecorderViewModel: ObservableObject {
         self.controller.onStreamError = { [weak self] message in
             self?.handleStreamFailure(message)
         }
+        refreshSaveLocationDisplay()
         // Re-probe permission whenever the app regains focus, so granting Screen
         // Recording in System Settings takes effect without a relaunch.
         activationObserver = NotificationCenter.default.addObserver(
@@ -136,6 +148,12 @@ class RecorderViewModel: ObservableObject {
             // Start duration timer
             startTimer()
 
+            // If the chosen save folder was unavailable, the recording fell back to
+            // the Desktop — tell the user (non-blocking; recording continues).
+            if saveLocation.isConfiguredLocationUnavailable {
+                presentError(RecorderError.saveLocationUnavailable.message, recovery: .chooseFolder)
+            }
+
         } catch RecordingControllerError.insufficientDiskSpace {
             Log.recorder.error("Refusing to record: insufficient disk space")
             transition(to: .error(.diskFull))
@@ -188,6 +206,30 @@ class RecorderViewModel: ObservableObject {
     /// Open System Settings
     func openSystemSettings() {
         permissions.openSystemPreferences()
+    }
+
+    /// Present the folder chooser; persist the picked directory.
+    func chooseSaveLocation() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = saveLocation.resolvedDirectory
+        panel.prompt = "Choose"
+        panel.message = "Choose where Home Rec saves recordings"
+
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK, let url = panel.url {
+            saveLocation.setSaveDirectory(url)
+            refreshSaveLocationDisplay()
+        }
+    }
+
+    /// Reset the save location back to the Desktop default.
+    func resetSaveLocation() {
+        saveLocation.reset()
+        refreshSaveLocationDisplay()
     }
 
     /// Mark first-run onboarding complete and dismiss it.
@@ -262,9 +304,17 @@ class RecorderViewModel: ObservableObject {
             openSystemSettings()
         case .tryAgain:
             Task { await startRecording() }
+        case .chooseFolder:
+            chooseSaveLocation()
         case nil:
             break
         }
+    }
+
+    /// Refresh the published save-location display from the provider.
+    private func refreshSaveLocationDisplay() {
+        saveLocationName = saveLocation.configuredDirectory?.lastPathComponent ?? "Desktop"
+        hasCustomSaveLocation = saveLocation.configuredDirectory != nil
     }
 
     // MARK: - Computed Properties
