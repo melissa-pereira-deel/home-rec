@@ -12,7 +12,7 @@ struct RecorderView: View {
     @EnvironmentObject var viewModel: RecorderViewModel
 
     var body: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: 24) {
             // App Logo + Status grouped closer together
             VStack(spacing: 0) {
                 Image(nsImage: NSApp.applicationIconImage)
@@ -51,80 +51,93 @@ struct RecorderView: View {
                 }
             }
 
-            // Main Control Button
-            Button(action: {
-                if viewModel.permissionStatus != .granted {
-                    viewModel.openSystemSettings()
-                } else {
-                    Task {
-                        await viewModel.toggleRecording()
-                    }
-                }
-            }) {
-                HStack {
-                    if viewModel.permissionStatus == .granted {
-                        Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
-                            .font(.system(size: 24))
-                    }
-                    Text(viewModel.permissionStatus != .granted ? "Open System Settings" : (viewModel.isRecording ? "Stop Recording" : "Start Recording"))
-                        .font(.custom("Archivo", size: 15, relativeTo: .body))
-                        .fontWeight(.medium)
-                }
-                .frame(width: 220, height: 50)
-                .foregroundColor(.white)
-                .background(viewModel.permissionStatus != .granted ? Color.gray.opacity(0.3) : Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut("r", modifiers: .command)
-
-            // Reveal in Finder Button
-            if let _ = viewModel.lastRecordingURL, !viewModel.isRecording {
+            // Primary action + contextual Reveal, grouped tighter than the rest.
+            VStack(spacing: 16) {
+                // Main Control Button
                 Button(action: {
-                    viewModel.revealInFinder()
+                    if viewModel.permissionStatus != .granted {
+                        viewModel.openSystemSettings()
+                    } else {
+                        Task {
+                            await viewModel.toggleRecording()
+                        }
+                    }
                 }) {
                     HStack {
-                        Image(systemName: "folder")
-                        Text("Reveal in Finder")
-                            .font(.custom("Inter-Regular", size: 13, relativeTo: .body))
+                        if viewModel.permissionStatus == .granted {
+                            Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
+                                .font(.system(size: 24))
+                        }
+                        Text(viewModel.permissionStatus != .granted ? "Open System Settings" : (viewModel.isRecording ? "Stop Recording" : "Start Recording"))
+                            .font(.custom("Archivo", size: 15, relativeTo: .body))
+                            .fontWeight(.medium)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                    )
+                    .frame(width: 220, height: 50)
+                    .foregroundColor(.white)
+                    .background(viewModel.permissionStatus != .granted ? Color.gray.opacity(0.3) : Color.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .buttonStyle(.plain)
-                .keyboardShortcut("o", modifiers: .command)
-            }
+                .keyboardShortcut("r", modifiers: .command)
 
-            // Save location (idle only) — quiet, configure-once destination line.
-            if !viewModel.isRecording {
-                HStack(spacing: 6) {
-                    Image(systemName: "folder")
-                        .foregroundColor(.secondary)
+                // Reveal in Finder — contextual action, only after a recording.
+                if let _ = viewModel.lastRecordingURL, !viewModel.isRecording {
                     Button(action: {
-                        viewModel.chooseSaveLocation()
+                        viewModel.revealInFinder()
                     }) {
-                        Text("Saving to \(viewModel.saveLocationName)")
-                            .font(.custom("Inter-Regular", size: 12, relativeTo: .caption))
+                        HStack {
+                            Image(systemName: "folder")
+                            Text("Reveal in Finder")
+                                .font(.custom("Inter-Regular", size: 13, relativeTo: .body))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
-                    .help(viewModel.saveLocationPath)
-
-                    if viewModel.hasCustomSaveLocation {
-                        Button("Reset") {
-                            viewModel.resetSaveLocation()
-                        }
-                        .buttonStyle(.plain)
-                        .font(.custom("Inter-Regular", size: 11, relativeTo: .caption))
-                    }
+                    .keyboardShortcut("o", modifiers: .command)
                 }
-                .foregroundColor(.secondary)
             }
 
             Spacer()
+
+            // Settings shelf (bottom): the save destination is a quiet, native
+            // pop-up, visually separated from the action controls. No folder icon
+            // (reserved for Reveal); a chevron signals the pop-up. Hidden while recording.
+            if !viewModel.isRecording {
+                VStack(spacing: 10) {
+                    Divider()
+                        .frame(width: 300)
+                        .opacity(0.15)
+
+                    Menu {
+                        Button("Choose Folder…") {
+                            viewModel.chooseSaveLocation()
+                        }
+                        if viewModel.hasCustomSaveLocation {
+                            Button("Reset to Desktop") {
+                                viewModel.resetSaveLocation()
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Saving to \(viewModel.saveLocationName)")
+                                .font(.custom("Inter-Regular", size: 12, relativeTo: .caption))
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9))
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help(viewModel.saveLocationPath)
+                    .accessibilityLabel("Save location, currently \(viewModel.saveLocationName)")
+                }
+            }
         }
         .padding(40)
         .frame(width: 450, height: 450)
