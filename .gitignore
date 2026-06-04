@@ -57,6 +57,11 @@ docs/product-strategy/
 
 # ─── Marketing artifacts (keep local, publish via website host) ───
 home-rec-website.html
+privacy.html
+terms.html
+
+# Build logs from scripts/build-dmg.sh (contain local paths + submission IDs)
+dist-build.log
 
 # ─── Environment & secrets (NEVER publish) ───
 .env
