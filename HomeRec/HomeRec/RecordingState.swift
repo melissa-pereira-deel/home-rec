@@ -69,9 +69,9 @@ enum RecoverySuggestion: Equatable, Sendable {
 
     nonisolated var label: String {
         switch self {
-        case .openSettings: return "Open Settings"
-        case .tryAgain: return "Try Again"
-        case .chooseFolder: return "Choose Folder…"
+        case .openSettings: return "Open settings"
+        case .tryAgain: return "Try again"
+        case .chooseFolder: return "Choose folder…"
         }
     }
 }

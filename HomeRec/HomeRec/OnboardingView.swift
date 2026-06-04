@@ -52,7 +52,7 @@ struct OnboardingView: View {
 
             Spacer(minLength: 0)
 
-            Button(viewModel.permissionStatus == .granted ? "Get Started" : "Done") {
+            Button(viewModel.permissionStatus == .granted ? "Get started" : "Done") {
                 viewModel.completeOnboarding()
             }
             .keyboardShortcut(.defaultAction)

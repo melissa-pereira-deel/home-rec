@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > profile — `create-dmg` is installed), verify the CI workflow's first run, and do a
 > manual GUI pass. Distribution is the resume point.
 
+### Changed
+- **Sentence-case button labels** — Main and menu-bar buttons now use sentence case ("Stop recording", "Start recording", "Choose folder…", "Keep recording", "Export diagnostics…", "Report a problem", "Show window", "Get started", "Open settings", "Try again") for a softer, less shouty feel. Proper nouns stay capitalized (Finder, Home Rec, System Settings, Desktop, OK).
+
 ### Added
 - **Choose where recordings are saved** — Recordings no longer always go to the Desktop: a quiet "Saving to <Folder>" pop-up menu at the bottom of the main window (Choose Folder… / Reset to Desktop) sets the destination. The choice persists across launches. If the chosen folder is later missing or unwritable (e.g. an unplugged drive), Home Rec falls back to the Desktop, keeps your choice, and tells you — a recording is never lost. (BL-010)
 - **Distribution: notarized `.dmg`** — `scripts/build-dmg.sh` runs end-to-end and produces a Gatekeeper-accepted, notarized `Home Rec X.Y.Z.dmg` (universal x86_64 + arm64, Hardened Runtime, signed with `Developer ID Application: Melissa Pereira (S3J47F2UXA)`, stapled notarization tickets on both the `.app` and the `.dmg`). Real-run hardening landed in the script: force macOS destination on the multi-platform target, strip iCloud `com.apple.FinderInfo` xattrs after export, derive the DMG filename from `MARKETING_VERSION`, set the volume icon. `docs/distribution/build.md` and `notarization.md` document Release settings and one-time Keychain/notarytool setup. No secrets are committed; `dist/` is git-ignored. (BL-030, BL-031, BL-032, BL-033)

@@ -79,7 +79,7 @@ struct RecordingStateTests {
         #expect(RecorderError.streamFailed("x").recovery == .openSettings)
         #expect(RecorderError.stopFailed("x").recovery == nil)
         #expect(RecorderError.diskFull.recovery == nil)
-        #expect(RecoverySuggestion.openSettings.label == "Open Settings")
-        #expect(RecoverySuggestion.tryAgain.label == "Try Again")
+        #expect(RecoverySuggestion.openSettings.label == "Open settings")
+        #expect(RecoverySuggestion.tryAgain.label == "Try again")
     }
 }

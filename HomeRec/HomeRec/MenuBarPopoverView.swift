@@ -75,7 +75,7 @@ struct MenuBarPopoverView: View {
             }) {
                 HStack {
                     Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
-                    Text(viewModel.isRecording ? "Stop Recording" : "Start Recording")
+                    Text(viewModel.isRecording ? "Stop recording" : "Start recording")
                         .font(.custom("Archivo", size: 13, relativeTo: .body))
                         .fontWeight(.medium)
                 }
@@ -118,7 +118,7 @@ struct MenuBarPopoverView: View {
 
             // Footer row
             HStack {
-                Button("Show Window") {
+                Button("Show window") {
                     NSApp.activate(ignoringOtherApps: true)
                     if let window = NSApp.windows.first(where: { $0.title == "Home Rec" || $0.contentView is NSHostingView<AnyView> }) {
                         window.makeKeyAndOrderFront(nil)
@@ -141,13 +141,13 @@ struct MenuBarPopoverView: View {
 
             // Help row
             HStack {
-                Button("Export Diagnostics…") {
+                Button("Export diagnostics…") {
                     Diagnostics.exportReport()
                 }
 
                 Spacer()
 
-                Button("Report a Problem") {
+                Button("Report a problem") {
                     Diagnostics.reportProblem()
                 }
             }

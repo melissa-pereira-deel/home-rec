@@ -68,7 +68,7 @@ struct RecorderView: View {
                             Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
                                 .font(.system(size: 24))
                         }
-                        Text(viewModel.permissionStatus != .granted ? "Open System Settings" : (viewModel.isRecording ? "Stop Recording" : "Start Recording"))
+                        Text(viewModel.permissionStatus != .granted ? "Open System Settings" : (viewModel.isRecording ? "Stop recording" : "Start recording"))
                             .font(.custom("Archivo", size: 15, relativeTo: .body))
                             .fontWeight(.medium)
                     }
@@ -124,7 +124,7 @@ struct RecorderView: View {
                             accessibilityLabel: "Save location",
                             accessibilityValue: viewModel.saveLocationName
                         ) {
-                            Button("Choose Folder…") {
+                            Button("Choose folder…") {
                                 viewModel.chooseSaveLocation()
                             }
                             if viewModel.hasCustomSaveLocation {
@@ -175,7 +175,7 @@ struct RecorderView: View {
             }
         }
         .alert("Still recording", isPresented: $viewModel.showLongRecordingWarning) {
-            Button("Keep Recording", role: .cancel) {
+            Button("Keep recording", role: .cancel) {
                 viewModel.showLongRecordingWarning = false
             }
             Button("Stop") {
