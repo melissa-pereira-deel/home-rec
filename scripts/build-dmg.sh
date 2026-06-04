@@ -38,7 +38,10 @@ DIST_DIR="$(pwd)/dist"
 ARCHIVE="$DIST_DIR/$BUILT_APP_NAME.xcarchive"
 EXPORT_DIR="$DIST_DIR/export"
 APP="$EXPORT_DIR/$APP_NAME.app"   # after the rename below
-DMG="$DIST_DIR/$APP_NAME $VERSION.dmg"
+# DMG filename is versionless (`HomeRec.dmg`) so the GitHub "releases/latest/download"
+# URL pattern stays stable across releases. The version is visible inside the bundle
+# (Info.plist CFBundleShortVersionString) and in the GitHub release page itself.
+DMG="$DIST_DIR/HomeRec.dmg"
 
 : "${TEAM_ID:?Set TEAM_ID to your Apple Developer Team ID}"
 : "${AC_PROFILE:?Set AC_PROFILE to your stored notarytool profile name}"
@@ -120,6 +123,19 @@ xcrun notarytool submit "$DMG" --keychain-profile "$AC_PROFILE" --wait
 xcrun stapler staple "$DMG"
 
 echo "==> Validating Gatekeeper acceptance…"
-spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG" || true
+# The DMG ticket: a stapled notarization ticket is the canonical Gatekeeper signal.
+xcrun stapler validate "$DMG"
+# The real-world Gatekeeper check is on the .app inside the mounted DMG. We mount,
+# probe with `spctl --assess --type execute`, and detach. `spctl --type install` on
+# the DMG file would look for a codesign signature on the container itself, which
+# we deliberately don't add — the staple is sufficient.
+MOUNT_DIR="/Volumes/Home Rec"
+hdiutil attach "$DMG" -nobrowse -readonly >/dev/null
+spctl --assess --type execute --verbose=2 "$MOUNT_DIR/$APP_NAME.app"
+hdiutil detach "$MOUNT_DIR" >/dev/null
 
-echo "==> Done: $DMG"
+echo "==> Emitting SHA-256 sidecar…"
+( cd "$DIST_DIR" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256" )
+
+echo "==> Done: $DMG (v$VERSION)"
+echo "         $(awk '{print $1}' "$DMG.sha256")  sha256"

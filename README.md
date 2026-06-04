@@ -6,10 +6,10 @@
 
 <p align="center">A native macOS application for recording system audio to WAV files</p>
 
-![macOS](https://img.shields.io/badge/macOS-12.3+-blue.svg)
-![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)
+![macOS](https://img.shields.io/badge/macOS-15.0+-blue.svg)
+![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)
-![Version](https://img.shields.io/badge/Version-0.3.2-informational.svg)
+![Version](https://img.shields.io/badge/Version-1.0-informational.svg)
 
 ## Overview
 
@@ -45,18 +45,35 @@ Home Rec is designed for users who want the simplest possible path to recording 
 
 ## Requirements
 
-- macOS 12.3 or later (for ScreenCaptureKit)
+- macOS 15 (Sequoia) or later
 - Xcode 15+ (for development)
 - Screen Recording permission (automatically requested)
 
 ## Installation
 
-### Prerequisites
+### Download (recommended)
+
+Download the latest signed and notarized DMG:
+
+**[⬇ HomeRec.dmg](https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg)**
+
+- Universal binary (Apple Silicon + Intel)
+- Signed with Developer ID and notarized by Apple — opens with no Gatekeeper warning
+- [Verify the SHA-256](https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg.sha256) if you care
+- [Release notes](https://github.com/melissa-pereira-deel/home-rec/releases/latest)
+
+After downloading, double-click the DMG and drag Home Rec to Applications. macOS will show a one-time "downloaded from the Internet" dialog the first time you launch — that's normal for any non-Mac-App-Store app. Click **Open**.
+
+### From source
+
+If you want to build it yourself:
+
+**Prerequisites:**
 
 - **Apple Developer Account** — You need a free or paid [Apple Developer account](https://developer.apple.com/account) to sign and run the app on your Mac. If you don't have one, sign up at [developer.apple.com](https://developer.apple.com) using your Apple ID.
-- **Xcode 15+** — Download from the [Mac App Store](https://apps.apple.com/app/xcode/id497799835) or [developer.apple.com/xcode](https://developer.apple.com/xcode/).
+- **Xcode 16+** — Download from the [Mac App Store](https://apps.apple.com/app/xcode/id497799835) or [developer.apple.com/xcode](https://developer.apple.com/xcode/).
 
-### From Source
+**Steps:**
 
 1. Clone this repository
 2. Open `HomeRec/HomeRec.xcodeproj` in Xcode
@@ -70,10 +87,6 @@ Home Rec is designed for users who want the simplest possible path to recording 
 4. Build and run (**Cmd+R**)
 5. Grant Screen Recording permission when prompted (see [Granting Permissions](#granting-permissions) below)
 6. Start recording!
-
-### Pre-built App
-
-_Coming soon: Notarized .app download_
 
 ## Usage
 
