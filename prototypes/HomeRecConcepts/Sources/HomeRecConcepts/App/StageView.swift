@@ -30,92 +30,31 @@ struct StageView: View {
 
     @ViewBuilder
     private var conceptPanel: some View {
-        // Placeholder host — concept faces land here (task #4).
-        VStack(spacing: 14) {
-            primitivesGallery
-            debugReadout
+        switch (store.concept, store.screen) {
+        case (.pocketOperator, .recorder):
+            POFace()
+        case (.dictaphone, .recorder):
+            DTFace()
+        case (.braun, .recorder):
+            BRFace()
+        case (.glassShelf, .recorder):
+            GSFace()
+        default:
+            comingSoon
         }
     }
 
-    /// Temporary visual QA for SharedUI primitives; replaced by concept faces.
-    private var primitivesGallery: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 18) {
-                SegmentLCD(text: "0:02.4", color: Color(red: 0.61, green: 0.91, blue: 0.44), size: 30)
-                SegmentLCD(text: "REC", color: Color(red: 1.0, green: 0.69, blue: 0.13), size: 18)
-            }
-            .padding(12)
-            .background(Color(red: 0.08, green: 0.1, blue: 0.07), in: RoundedRectangle(cornerRadius: 6))
-
-            HStack(spacing: 20) {
-                Button {} label: {
-                    Text("REC")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.black.opacity(0.8))
-                        .frame(width: 52, height: 36)
-                        .background(
-                            LinearGradient(
-                                colors: [Color(red: 1.0, green: 0.47, blue: 0.10),
-                                         Color(red: 0.88, green: 0.36, blue: 0.02)],
-                                startPoint: .top, endPoint: .bottom
-                            ),
-                            in: RoundedRectangle(cornerRadius: 7)
-                        )
-                }
-                .buttonStyle(PressableKeyStyle())
-
-                VUNeedle(level: { store.currentLevel })
-                    .frame(width: 150, height: 74)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-
-            BarWaveform(
-                samples: store.library[1].samples,
-                accent: Color(red: 1.0, green: 0.24, blue: 0.24),
-                progress: 0.42
-            )
-            .frame(width: 380, height: 60)
-            .overlay(alignment: .top) {
-                TimecodeChip(time: 17, progress: 0.42).frame(width: 380)
-            }
-
-            TickRuler(value: $store.gain, accent: Color(red: 1.0, green: 0.24, blue: 0.24))
-                .frame(width: 380)
-
-            HStack(spacing: 10) {
-                TextureCanvas.dotGrille(dotColor: Color(red: 0.84, green: 0.82, blue: 0.79))
-                    .frame(width: 120, height: 44)
-                    .background(Color(red: 0.95, green: 0.94, blue: 0.91))
-                TextureCanvas.speckle()
-                    .frame(width: 120, height: 44)
-                    .background(Color(white: 0.09))
-                TextureCanvas.brushedMetal()
-                    .frame(width: 120, height: 44)
-            }
+    private var comingSoon: some View {
+        VStack(spacing: 10) {
+            Text("\(store.concept.label) · \(store.screen == .recorder ? "recorder" : "library")")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+            Text("not built yet")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.tertiary)
         }
-    }
-
-    /// Temporary gate for the shared core: proves the timer runs and levels
-    /// jitter before any concept face exists. Removed once faces land.
-    private var debugReadout: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("state    \(String(describing: store.transport).prefix(28))")
-            Text("elapsed  \(Formatters.timecode(store.elapsed, tenths: true))")
-            Text("level    \(String(format: "%.2f", store.currentLevel))  " + bar(store.currentLevel))
-            Text("gain     \(String(format: "%.2f", store.gain))")
-            Text("library  \(store.library.count) recordings")
-        }
-        .font(.system(size: 12, design: .monospaced))
-        .foregroundStyle(Color(red: 0.61, green: 0.91, blue: 0.44))
-        .padding(20)
-        .frame(width: 450, alignment: .leading)
-        .background(Color(white: 0.06), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func bar(_ level: Float) -> String {
-        let filled = Int(level * 20)
-        return String(repeating: "▮", count: filled)
-            + String(repeating: "▯", count: max(0, 20 - filled))
+        .frame(width: 450, height: 450)
+        .background(Color(white: 0.05), in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Chrome

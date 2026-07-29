@@ -22,6 +22,15 @@ final class PrototypeStateStore: ObservableObject {
     @Published private(set) var currentLevel: Float = 0
     /// Fader/dial position. Purely visual — scales the synth output.
     @Published var gain: Double = 0.7
+    /// Mirrors the shipping app's format picker; visual only.
+    @Published var selectedFormat: FakeFormat = .wav
+    /// Dictaphone reels: accumulated rotation (degrees) banked across takes,
+    /// so the reels hold their position when the machine stops — a tell that
+    /// this is a machine, not a GIF. Live rotation adds on top while recording.
+    @Published var reelBankedRotation: Double = 0
+
+    /// Supply-reel angular velocity while recording (deg/s). Take-up runs 1.15×.
+    static let reelSpeed: Double = 72
 
     // Library
     @Published var library: [FakeRecording]
@@ -90,6 +99,9 @@ final class PrototypeStateStore: ObservableObject {
     func forceState(_ state: TransportState) {
         cancelTransitions()
         recordTask?.cancel()
+        if transport.isRecording {
+            bankReels()
+        }
         switch state {
         case .recording:
             beginRecording()
@@ -110,6 +122,19 @@ final class PrototypeStateStore: ObservableObject {
             resetLiveData()
             transition(to: state)
         }
+    }
+
+    func cycleFormat() {
+        let all = FakeFormat.allCases
+        guard let index = all.firstIndex(of: selectedFormat) else { return }
+        selectedFormat = all[(index + 1) % all.count]
+    }
+
+    /// Ordinal shortcut (PO number keys): jump to the library with take N open.
+    func openLibrary(at index: Int) {
+        screen = .library
+        guard index < library.count else { return }
+        select(library[index])
     }
 
     // MARK: - Playback sim
@@ -184,8 +209,16 @@ final class PrototypeStateStore: ObservableObject {
         liveSamples.append(level)
     }
 
+    private func bankReels() {
+        reelBankedRotation += elapsed * Self.reelSpeed
+    }
+
     private func finishTake() -> FakeRecording {
         let duration = elapsed
+        bankReels()
+        // The rewind clunk: reels snap a few degrees backward as the
+        // mechanism disengages. Views animate this with a loose spring.
+        reelBankedRotation -= 8
         let samples = WaveformFactory.downsample(captureHistory)
         let megabytes = duration * 0.1875 // 48kHz 16-bit stereo ≈ 11.25MB/min
         let recording = FakeRecording(
