@@ -75,6 +75,18 @@ enum SnapshotDriver {
                                     store.scrub(to: 0.42)
                                 }))
         }
+        // Continuity proof: start one recording, then hop concepts WITHOUT
+        // touching transport. Timers in these captures must keep counting.
+        all.append(Scenario(name: "continuity-0-start", settleMilliseconds: 1200,
+                            apply: { store in
+                                store.screen = .recorder
+                                store.concept = .pocketOperator
+                                store.forceState(.recording(startedAt: .now))
+                            }))
+        for concept in [ConceptID.dictaphone, .braun, .glassShelf] {
+            all.append(Scenario(name: "continuity-\(concept.rawValue)", settleMilliseconds: 900,
+                                apply: { store in store.concept = concept }))
+        }
         return all
     }
 

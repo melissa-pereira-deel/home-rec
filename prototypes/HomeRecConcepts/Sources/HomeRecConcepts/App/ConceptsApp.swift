@@ -45,6 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.first?.makeKeyAndOrderFront(nil)
         SnapshotDriver.runIfRequested()
+        // Perf harness: start recording immediately (HRC_AUTORECORD=concept#).
+        if let raw = ProcessInfo.processInfo.environment["HRC_AUTORECORD"] {
+            let store = PrototypeStateStore.shared
+            store.concept = Int(raw).flatMap(ConceptID.init(rawValue:)) ?? .pocketOperator
+            store.forceState(.recording(startedAt: .now))
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
