@@ -165,6 +165,18 @@ enum SnapshotDriver {
                                     store.stop()
                                 }
                             }))
+        all.append(Scenario(name: "spec-12a-onboarding-nd", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.permissionStatus = .notDetermined
+                                store.forceState(.disarmed)
+                                store.showOnboarding = true
+                            }))
+        all.append(Scenario(name: "spec-12b-onboarding-granted", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.showOnboarding = true
+                            }))
         // Continuity proof: start one recording, then hop concepts WITHOUT
         // touching transport. Timers in these captures must keep counting.
         all.append(Scenario(name: "continuity-0-start", settleMilliseconds: 1200,

@@ -13,9 +13,14 @@ struct GSFaceV2: View {
             GSTheme.backdrop
             panel
                 .padding(22)
+            if store.showOnboarding {
+                GSOnboarding()
+                    .transition(.opacity)
+            }
         }
         .frame(width: 450, height: 450)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .animation(.easeOut(duration: 0.2), value: store.showOnboarding)
     }
 
     private var panel: some View {
