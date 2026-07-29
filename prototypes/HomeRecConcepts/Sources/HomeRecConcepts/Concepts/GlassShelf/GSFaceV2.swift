@@ -193,7 +193,7 @@ struct GSFaceV2: View {
             HStack(spacing: 10) {
                 BarWaveform(samples: recording.samples, accent: .white, progress: nil)
                     .frame(width: 72, height: 18)
-                GSTheme.lowercase(recording.name, size: 12)
+                GSTheme.lowercase(store.displayName(for: recording), size: 12)
                     .lineLimit(1)
                 Spacer()
                 GSTheme.mono(Formatters.timecode(recording.duration), size: 10)

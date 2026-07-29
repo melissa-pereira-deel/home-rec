@@ -30,8 +30,3 @@ struct LibraryStyle {
     }
 }
 
-/// Optional chip filter (Glass concept): lowercase label + predicate.
-struct LibraryChip {
-    let label: String
-    let matches: (FakeRecording) -> Bool
-}

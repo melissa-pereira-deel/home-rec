@@ -7,15 +7,13 @@ import SwiftUI
 struct LibraryScaffold<Header: View>: View {
     @EnvironmentObject private var store: PrototypeStateStore
     let style: LibraryStyle
-    var chips: [LibraryChip] = []
+    var showsChips: Bool = false
     @ViewBuilder let header: () -> Header
-
-    @State private var activeChip = 0
 
     var body: some View {
         VStack(spacing: 12) {
             header()
-            if !chips.isEmpty { chipRow }
+            if showsChips { chipRow }
             if filtered.isEmpty {
                 emptyState
             } else {
@@ -36,27 +34,27 @@ struct LibraryScaffold<Header: View>: View {
     }
 
     private var filtered: [FakeRecording] {
-        guard !chips.isEmpty else { return store.library }
-        return store.library.filter(chips[activeChip].matches)
+        showsChips ? store.filteredLibrary : store.library
     }
 
     // MARK: - Chips
 
     private var chipRow: some View {
         HStack(spacing: 6) {
-            ForEach(Array(chips.enumerated()), id: \.offset) { index, chip in
+            ForEach(Array(LibraryFilter.chips.enumerated()), id: \.offset) { _, chip in
+                let isActive = store.libraryFilter == chip
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { activeChip = index }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        store.libraryFilter = chip
+                    }
                 } label: {
                     Text(chip.label)
                         .font(.custom("Inter", size: 12, relativeTo: .caption))
-                        .foregroundStyle(
-                            index == activeChip ? style.title : style.meta
-                        )
+                        .foregroundStyle(isActive ? style.title : style.meta)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 5)
                         .background(
-                            index == activeChip
+                            isActive
                                 ? AnyShapeStyle(style.rowFill)
                                 : AnyShapeStyle(style.rowFill.opacity(0.35)),
                             in: Capsule()
@@ -82,7 +80,7 @@ struct LibraryScaffold<Header: View>: View {
                     .frame(width: 96, height: 28)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        style.titleText(recording.name)
+                        style.titleText(store.displayName(for: recording))
                             .lineLimit(1)
                         if recording.versionCount > 1 {
                             style.metaText("v\(recording.versionCount)", size: 9)
@@ -123,7 +121,7 @@ struct LibraryScaffold<Header: View>: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    style.titleText(recording.name, size: 14)
+                    style.titleText(store.displayName(for: recording), size: 14)
                     Spacer()
                     style.metaText(Formatters.relative(recording.date))
                 }

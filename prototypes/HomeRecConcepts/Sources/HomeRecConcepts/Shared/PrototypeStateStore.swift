@@ -40,6 +40,18 @@ final class PrototypeStateStore: ObservableObject {
     @Published var selectedRecordingID: UUID?
     @Published var playbackProgress: Double = 0
     @Published var isPlaying = false
+    /// Store-held so it survives screen switches; hiding the selected row
+    /// deselects it (and stops playback) rather than orphaning an invisible
+    /// player.
+    @Published var libraryFilter: LibraryFilter = .all {
+        didSet { deselectIfFilteredOut() }
+    }
+    /// Spec honesty: flips the library between the poetic concept names and
+    /// the shipping filename scheme.
+    @Published var useRealisticNames = false
+    /// Frozen at init — "this week" and relative dates must be deterministic
+    /// for snapshots.
+    let referenceNow: Date
 
     static let liveSampleCount = 200
 
@@ -51,13 +63,35 @@ final class PrototypeStateStore: ObservableObject {
     private var captureHistory: [Float] = []
 
     init() {
+        let now = Date()
+        referenceNow = now
         liveSamples = Array(repeating: 0, count: Self.liveSampleCount)
-        library = FakeLibrary.canned()
+        library = FakeLibrary.seeded(.eight, now: now)
     }
 
     var selectedRecording: FakeRecording? {
         guard let id = selectedRecordingID else { return nil }
         return library.first { $0.id == id }
+    }
+
+    var filteredLibrary: [FakeRecording] {
+        library.filter { libraryFilter.matches($0, now: referenceNow) }
+    }
+
+    func displayName(for recording: FakeRecording) -> String {
+        useRealisticNames ? recording.fileName : recording.name
+    }
+
+    func applySeed(_ seed: LibrarySeed) {
+        deselect()
+        libraryFilter = .all
+        library = FakeLibrary.seeded(seed, now: referenceNow)
+    }
+
+    private func deselectIfFilteredOut() {
+        guard let selected = selectedRecording,
+              !libraryFilter.matches(selected, now: referenceNow) else { return }
+        deselect()
     }
 
     // MARK: - Transport intents
@@ -252,10 +286,12 @@ final class PrototypeStateStore: ObservableObject {
         reelBankedRotation -= 8
         let samples = WaveformFactory.downsample(captureHistory)
         let megabytes = duration * 0.1875 // 48kHz 16-bit stereo ≈ 11.25MB/min
+        let takenAt = Date.now
         let recording = FakeRecording(
             id: UUID(),
-            name: Formatters.recordingName(),
-            date: .now,
+            name: Formatters.recordingName(at: takenAt),
+            fileName: Formatters.recordingName(at: takenAt),
+            date: takenAt,
             duration: duration,
             format: selectedFormat,
             sampleRate: "48kHz",

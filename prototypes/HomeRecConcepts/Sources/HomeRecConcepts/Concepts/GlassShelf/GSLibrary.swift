@@ -17,22 +17,11 @@ struct GSLibrary: View {
         )
     }
 
-    private var chips: [LibraryChip] {
-        [
-            LibraryChip(label: "all") { _ in true },
-            LibraryChip(label: "wav") { $0.format == .wav },
-            LibraryChip(label: "flac") { $0.format == .flac },
-            LibraryChip(label: "this week") {
-                $0.date > Date.now.addingTimeInterval(-7 * 86_400)
-            },
-        ]
-    }
-
     var body: some View {
         ZStack {
             GSTheme.backdrop
             VStack(spacing: 12) {
-                LibraryScaffold(style: style, chips: chips) {
+                LibraryScaffold(style: style, showsChips: true) {
                     header
                 }
             }
