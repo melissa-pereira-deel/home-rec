@@ -11,21 +11,22 @@ struct GSFaceV2: View {
         ZStack {
             GSTheme.backdrop
             panel
-                .padding(26)
+                .padding(22)
         }
         .frame(width: 450, height: 450)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var panel: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             header
             Spacer(minLength: 0)
             centerpiece
             Spacer(minLength: 0)
             shelf
         }
-        .padding(20)
+        .padding(18)
+        .frame(maxHeight: 450 - 44)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
         .overlay(
             RoundedRectangle(cornerRadius: 22)
@@ -46,9 +47,9 @@ struct GSFaceV2: View {
 
     @ViewBuilder
     private var centerpiece: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             Text(Formatters.timecode(timerValue, tenths: timerValue < 3600))
-                .font(.system(size: 32, weight: .light, design: .monospaced))
+                .font(.system(size: 30, weight: .light, design: .monospaced))
                 .foregroundStyle(.white.opacity(store.transport.isRecording ? 1 : 0.55))
                 .monospacedDigit()
                 .contentTransition(.numericText())
@@ -79,9 +80,9 @@ struct GSFaceV2: View {
                 )
             }
         }
-        .frame(height: 56)
+        .frame(height: 44)
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(GSTheme.card.opacity(0.85), in: RoundedRectangle(cornerRadius: 14))
         .overlay(
@@ -100,7 +101,7 @@ struct GSFaceV2: View {
     // MARK: - Shelf: the three most recent takes
 
     private var shelf: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             HStack {
                 GSTheme.mono("recent", size: 10)
                 Spacer()
@@ -124,14 +125,14 @@ struct GSFaceV2: View {
         } label: {
             HStack(spacing: 10) {
                 BarWaveform(samples: recording.samples, accent: .white, progress: nil)
-                    .frame(width: 72, height: 20)
+                    .frame(width: 72, height: 18)
                 GSTheme.lowercase(recording.name, size: 12)
                     .lineLimit(1)
                 Spacer()
                 GSTheme.mono(Formatters.timecode(recording.duration), size: 10)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.vertical, 7)
             .background(GSTheme.card.opacity(0.85), in: RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
