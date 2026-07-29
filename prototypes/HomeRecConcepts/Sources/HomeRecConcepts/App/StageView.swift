@@ -83,32 +83,117 @@ struct StageView: View {
     }
 
     private var stateScrubber: some View {
-        HStack(spacing: 10) {
-            scrubButton("DISARM") { store.forceState(.disarmed) }
-            scrubButton("IDLE") { store.forceState(.idle) }
-            scrubButton("REC") { store.forceState(.recording(startedAt: .now)) }
-            scrubButton("SAVE") { store.forceState(.saved(store.library[0])) }
-            Spacer()
-            Text("1–4 concept · tab screen · space rec/stop")
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(.tertiary)
+        VStack(spacing: 6) {
+            // Row 1: transport + permission/translocation entry points.
+            HStack(spacing: 8) {
+                scrubButton("ND") { scrubDisarmed(.notDetermined) }
+                scrubButton("DENIED") { scrubDisarmed(.denied) }
+                scrubButton("TRANSLOC", active: store.translocationBlocked) {
+                    clearAxes()
+                    store.permissionStatus = .granted
+                    store.translocationBlocked = true
+                    store.forceState(.idle)
+                }
+                scrubButton("IDLE") { scrubTransport(.idle) }
+                scrubButton("REC") { scrubTransport(.recording(startedAt: .now)) }
+                scrubButton("REC 1:12") {
+                    // Wall-clock payload honored: instantly a 1:12:03 take,
+                    // which also trips the long-recording warning latch.
+                    scrubTransport(.recording(startedAt: .now.addingTimeInterval(-4323)))
+                }
+                scrubButton("SAVE") {
+                    guard let latest = store.library.first else { return }
+                    scrubTransport(.saved(latest))
+                }
+                Spacer()
+            }
+            // Row 2: error/guardrail/surface/data axes.
+            HStack(spacing: 8) {
+                scrubButton(errorCycleLabel, active: store.activeError != nil) {
+                    cycleError()
+                }
+                scrubButton("DISKFULL", active: store.simulateDiskFullOnRecord) {
+                    store.simulateDiskFullOnRecord.toggle()
+                }
+                scrubButton("ONBOARD", active: store.showOnboarding) {
+                    store.showOnboarding.toggle()
+                }
+                scrubButton("SEED \(store.library.count)") { cycleSeed() }
+                scrubButton("NAMES", active: store.useRealisticNames) {
+                    store.useRealisticNames.toggle()
+                }
+                Spacer()
+                Text("1–4 · tab · space · ⌘r")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(Color(white: 0.08))
     }
 
-    private func scrubButton(_ label: String, action: @escaping () -> Void) -> some View {
+    private func scrubButton(
+        _ label: String, active: Bool = false, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 10, design: .monospaced))
                 .tracking(1.0)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(active ? Color.black : .secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 4))
+                .background(
+                    active ? Color(white: 0.75) : Color(white: 0.14),
+                    in: RoundedRectangle(cornerRadius: 4)
+                )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Scrub actions
+
+    /// Transport scrubs reset conflicting axes so states compose predictably.
+    private func clearAxes() {
+        store.dismissError()
+        store.translocationBlocked = false
+        store.showOnboarding = false
+    }
+
+    private func scrubTransport(_ state: TransportState) {
+        clearAxes()
+        store.permissionStatus = .granted
+        store.forceState(state)
+    }
+
+    private func scrubDisarmed(_ status: FakePermissionStatus) {
+        clearAxes()
+        store.permissionStatus = status
+        store.forceState(.disarmed)
+    }
+
+    private var errorCycleLabel: String {
+        switch store.activeError {
+        case nil: "ERR ▸"
+        case .startFailed: "ERR START"
+        case .stopFailed: "ERR STOP"
+        case .streamFailed: "ERR STREAM"
+        case .diskFull: "ERR DISK"
+        case .saveLocationUnavailable: "ERR FOLDER"
+        }
+    }
+
+    private func cycleError() {
+        let cycle: [FakeRecorderError?] = [nil] + FakeRecorderError.allCases
+        let index = cycle.firstIndex(of: store.activeError) ?? 0
+        store.activeError = cycle[(index + 1) % cycle.count]
+    }
+
+    private func cycleSeed() {
+        let seeds = LibrarySeed.allCases
+        let current = seeds.firstIndex { $0.rawValue == store.library.count }
+        let next = seeds[((current ?? 1) + 1) % seeds.count]
+        store.applySeed(next)
     }
 
     // MARK: - Keyboard
@@ -128,8 +213,13 @@ struct StageView: View {
         case .space:
             store.toggleRecording()
             return .handled
+        case "r" where press.modifiers.contains(.command):
+            // ⌘R mirrors the shipping shortcut — record/stop from any screen.
+            store.toggleRecording()
+            return .handled
         case "s":
-            store.forceState(.saved(store.library[0]))
+            guard let latest = store.library.first else { return .ignored }
+            store.forceState(.saved(latest))
             return .handled
         default:
             return .ignored
