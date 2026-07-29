@@ -38,7 +38,8 @@ struct StageView: View {
         case (.braun, .recorder):
             BRFace()
         case (.glassShelf, .recorder):
-            GSFace()
+            // V2: flat record pill. Original GSFace preserved — swap back here.
+            GSFaceV2()
         case (.pocketOperator, .library):
             POLibrary()
         case (.dictaphone, .library):
