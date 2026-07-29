@@ -158,18 +158,22 @@ struct LibraryScaffold<Header: View>: View {
                 )
             }
 
-            // Transport.
+            // Transport: flat pill, same register as the Glass record button.
             HStack(spacing: 12) {
-                Button {
-                    store.togglePlayback(for: recording)
-                } label: {
-                    Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(style.rowFill)
-                        .frame(width: 44, height: 30)
-                        .background(style.accent, in: RoundedRectangle(cornerRadius: 7))
+                FlatPillButton(action: { store.togglePlayback(for: recording) }) {
+                    HStack(spacing: 7) {
+                        Image(systemName: store.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(store.isPlaying ? "pause" : "play")
+                            .font(.custom("Inter", size: 12, relativeTo: .caption))
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(style.accentLabel)
+                    .padding(.horizontal, 16)
+                    .frame(height: 32)
+                    .background(style.accent, in: Capsule())
+                    .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
                 style.metaText(
                     Formatters.timecode(store.playbackProgress * recording.duration)
                         + " / " + Formatters.timecode(recording.duration)
@@ -237,5 +241,34 @@ struct LibraryScaffold<Header: View>: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Flat pill control — the untitled/Spotify register shared by the Glass
+/// record button and the library transport: subtle scale on hover (1.03)
+/// and press (0.97), slight darken on press, no chrome.
+struct FlatPillButton<Label: View>: View {
+    var action: () -> Void
+    @ViewBuilder var label: () -> Label
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            label()
+        }
+        .buttonStyle(FlatPillPressStyle())
+        .scaleEffect(hovering ? 1.03 : 1.0)
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .onHover { hovering = $0 }
+    }
+}
+
+struct FlatPillPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .brightness(configuration.isPressed ? -0.06 : 0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }

@@ -13,6 +13,9 @@ struct LibraryStyle {
     var thumb: Color
     /// Row shadow (index cards want one; flush rows don't).
     var rowShadow: Color = .clear
+    /// Label/icon color on accent-filled controls (the flat play pill).
+    /// White reads on red; orange and amber want dark labels.
+    var accentLabel: Color = .white
 
     func titleText(_ text: String, size: CGFloat = 13) -> some View {
         Text(text)

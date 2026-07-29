@@ -3,7 +3,10 @@ import SwiftUI
 /// Glass shelf, metal heart: frosted materials, warm charcoal cards, and the
 /// brand red — the single accent — reserved for the record state.
 enum GSTheme {
-    static let accent = Color(red: 1.0, green: 0.243, blue: 0.243)        // brand #FF3E3E
+    /// Brand red, pulled ~5% darker than the wordmark's #FF3E3E — large
+    /// solid fills (the pills) read hotter than thin strokes, so the flat
+    /// UI wants a slightly deeper tone.
+    static let accent = Color(red: 0.949, green: 0.227, blue: 0.227)      // #F23A3A
     static let accentDeep = Color(red: 0.78, green: 0.13, blue: 0.13)
     static let card = Color(red: 0.110, green: 0.110, blue: 0.118)        // #1C1C1E
     static let metalBase = Color(red: 0.557, green: 0.573, blue: 0.596)   // #8E9298

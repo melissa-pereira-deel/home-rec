@@ -13,7 +13,8 @@ struct DTLibrary: View {
             meta: DTTheme.cream.opacity(0.45),
             accent: DTTheme.amber,
             cornerRadius: 8,
-            thumb: DTTheme.cream.opacity(0.7)
+            thumb: DTTheme.cream.opacity(0.7),
+            accentLabel: DTTheme.counterBed
         )
     }
 

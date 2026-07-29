@@ -6,6 +6,7 @@ import SwiftUI
 /// scale on hover/press, no chrome. Everything else is untouched GSFace.
 struct GSFaceV2: View {
     @EnvironmentObject private var store: PrototypeStateStore
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -36,11 +37,77 @@ struct GSFaceV2: View {
     }
 
     private var header: some View {
-        HStack {
-            GSTheme.lowercase("home rec", size: 13)
+        HStack(spacing: 10) {
+            Text("home rec")
+                .font(.custom("Inter", size: 13, relativeTo: .body).weight(.bold))
+                .foregroundStyle(.white.opacity(0.95))
             Spacer()
             GSTheme.mono(store.selectedFormat.rawValue + " · 48kHz")
+            settingsButton
         }
+    }
+
+    // MARK: - Settings (sliders icon, not a gear)
+
+    private var settingsButton: some View {
+        Button {
+            showSettings.toggle()
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(GSTheme.textDim)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+            settingsPopover
+        }
+    }
+
+    private var settingsPopover: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                GSTheme.mono("format", size: 10)
+                HStack(spacing: 6) {
+                    ForEach(FakeFormat.allCases, id: \.self) { format in
+                        formatChip(format)
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                GSTheme.mono("input gain", size: 10)
+                TickRuler(value: $store.gain, accent: GSTheme.accent)
+                    .frame(width: 210)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                GSTheme.mono("saving to", size: 10)
+                Text("~/Desktop")
+                    .font(.custom("Inter", size: 12, relativeTo: .caption))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+        .padding(16)
+    }
+
+    private func formatChip(_ format: FakeFormat) -> some View {
+        let selected = store.selectedFormat == format
+        return Button {
+            store.selectedFormat = format
+        } label: {
+            Text(format.rawValue)
+                .font(.custom("Inter", size: 12, relativeTo: .caption))
+                .foregroundStyle(selected ? .white : GSTheme.textDim)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 5)
+                .background(
+                    GSTheme.card.opacity(selected ? 1 : 0.35),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule().strokeBorder(.white.opacity(selected ? 0.25 : 0.08), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Centerpiece: timer + live wave + the flat record pill
@@ -147,18 +214,14 @@ struct GSFaceV2: View {
 // MARK: - The flat record pill
 
 /// Flat, confident, quiet — the untitled/Spotify register. Solid brand-red
-/// capsule, lowercase label, icon swap for state. Feedback is a subtle
-/// scale (hover 1.03, press 0.97) and a slight darken on press. No wells,
-/// no gradients, no travel.
+/// capsule, lowercase label, icon swap for state. Built on the shared
+/// FlatPillButton so the library's play pill and this stay in lockstep.
 struct GSFlatRecordButton: View {
     @EnvironmentObject private var store: PrototypeStateStore
-    @State private var hovering = false
 
     var body: some View {
         let recording = store.transport.isRecording
-        Button {
-            store.toggleRecording()
-        } label: {
+        FlatPillButton(action: { store.toggleRecording() }) {
             HStack(spacing: 9) {
                 Image(systemName: recording ? "stop.fill" : "circle.fill")
                     .font(.system(size: 9, weight: .bold))
@@ -166,26 +229,14 @@ struct GSFlatRecordButton: View {
                     .font(.custom("Inter", size: 14, relativeTo: .body))
                     .fontWeight(.semibold)
             }
+            // Optical centering: Inter's cap height sits low in the capsule.
+            .offset(y: -1)
             .foregroundStyle(.white)
             .padding(.horizontal, 26)
             .frame(height: 44)
             .background(GSTheme.accent, in: Capsule())
             .contentShape(Capsule())
         }
-        .buttonStyle(GSFlatPressStyle())
-        .scaleEffect(hovering ? 1.03 : 1.0)
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .onHover { hovering = $0 }
-    }
-}
-
-/// Flat press feedback: scale down a touch and darken — nothing physical.
-private struct GSFlatPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .brightness(configuration.isPressed ? -0.06 : 0)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 

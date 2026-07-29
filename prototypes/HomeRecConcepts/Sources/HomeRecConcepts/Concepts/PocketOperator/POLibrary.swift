@@ -13,7 +13,8 @@ struct POLibrary: View {
             meta: POTheme.label,
             accent: POTheme.orange,
             cornerRadius: 4,
-            thumb: POTheme.lcdLit.opacity(0.8)
+            thumb: POTheme.lcdLit.opacity(0.8),
+            accentLabel: .black.opacity(0.8)
         )
     }
 
