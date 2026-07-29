@@ -39,22 +39,15 @@ struct StageView: View {
             BRFace()
         case (.glassShelf, .recorder):
             GSFace()
-        default:
-            comingSoon
+        case (.pocketOperator, .library):
+            POLibrary()
+        case (.dictaphone, .library):
+            DTLibrary()
+        case (.braun, .library):
+            BRLibrary()
+        case (.glassShelf, .library):
+            GSLibrary()
         }
-    }
-
-    private var comingSoon: some View {
-        VStack(spacing: 10) {
-            Text("\(store.concept.label) · \(store.screen == .recorder ? "recorder" : "library")")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
-            Text("not built yet")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.tertiary)
-        }
-        .frame(width: 450, height: 450)
-        .background(Color(white: 0.05), in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: - Chrome
