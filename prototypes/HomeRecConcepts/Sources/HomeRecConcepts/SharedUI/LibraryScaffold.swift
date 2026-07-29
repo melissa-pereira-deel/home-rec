@@ -154,7 +154,10 @@ struct LibraryScaffold<Header: View>: View {
                         set: { store.scrub(to: $0) }
                     ),
                     accent: style.accent,
-                    tickColor: style.meta
+                    tickColor: style.meta,
+                    onEditingChanged: { editing in
+                        editing ? store.beginScrub() : store.endScrub()
+                    }
                 )
             }
 

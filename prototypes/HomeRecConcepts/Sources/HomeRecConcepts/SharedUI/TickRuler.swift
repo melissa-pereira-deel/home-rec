@@ -6,6 +6,11 @@ struct TickRuler: View {
     @Binding var value: Double   // 0...1
     var accent: Color
     var tickColor: Color = .white
+    /// Fired with `true` on the first drag change, `false` on release — lets
+    /// the owner suspend a playback task so it can't fight the drag.
+    var onEditingChanged: ((Bool) -> Void)? = nil
+
+    @State private var isDragging = false
 
     var body: some View {
         GeometryReader { geo in
@@ -38,7 +43,15 @@ struct TickRuler: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { drag in
+                        if !isDragging {
+                            isDragging = true
+                            onEditingChanged?(true)
+                        }
                         value = min(1, max(0, drag.location.x / geo.size.width))
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        onEditingChanged?(false)
                     }
             )
         }

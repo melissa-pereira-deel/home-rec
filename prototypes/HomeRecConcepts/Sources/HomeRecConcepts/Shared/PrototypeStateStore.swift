@@ -11,7 +11,10 @@ final class PrototypeStateStore: ObservableObject {
 
     // Stage chrome
     @Published var concept: ConceptID = .pocketOperator
-    @Published var screen: ScreenID = .recorder
+    @Published var screen: ScreenID = .recorder {
+        // Leaving a screen never leaves a phantom playhead running behind it.
+        didSet { if oldValue != screen { pausePlayback() } }
+    }
 
     // Transport
     @Published private(set) var transport: TransportState = .idle
@@ -61,14 +64,16 @@ final class PrototypeStateStore: ObservableObject {
 
     func toggleRecording() {
         switch transport {
-        case .idle: record()
+        case .idle, .saved: record()
         case .recording: stop()
         default: break
         }
     }
 
     func record() {
-        guard transport == .idle else { return }
+        // `.saved` is immediately re-armable — a recorder must never present a
+        // dead record control while the previous take's beat plays out.
+        guard transport == .idle || transport.isSaved else { return }
         cancelTransitions()
         transition(to: .starting)
         transitionTask = Task { [weak self] in
@@ -99,12 +104,15 @@ final class PrototypeStateStore: ObservableObject {
     func forceState(_ state: TransportState) {
         cancelTransitions()
         recordTask?.cancel()
+        pausePlayback()
         if transport.isRecording {
             bankReels()
         }
         switch state {
-        case .recording:
-            beginRecording()
+        case .recording(let startedAt):
+            // Honor the payload: "recording that started 20 minutes ago" is a
+            // real state the scrubber must be able to reach.
+            beginRecording(startedAt: startedAt)
         case .saved:
             // Replay the saved beat with the most recent library entry.
             resetLiveData()
@@ -162,6 +170,22 @@ final class PrototypeStateStore: ObservableObject {
         playbackProgress = min(1, max(0, progress))
     }
 
+    // MARK: - Scrub suspend/resume (drag must not fight the playback task)
+
+    private var wasPlayingBeforeScrub = false
+
+    func beginScrub() {
+        wasPlayingBeforeScrub = isPlaying
+        pausePlayback()
+    }
+
+    func endScrub() {
+        defer { wasPlayingBeforeScrub = false }
+        guard wasPlayingBeforeScrub, playbackProgress < 1,
+              let recording = selectedRecording else { return }
+        startPlayback(duration: recording.duration)
+    }
+
     private func startPlayback(duration: TimeInterval) {
         isPlaying = true
         playbackTask = Task { [weak self] in
@@ -180,7 +204,7 @@ final class PrototypeStateStore: ObservableObject {
         }
     }
 
-    private func pausePlayback() {
+    func pausePlayback() {
         isPlaying = false
         playbackTask?.cancel()
         playbackTask = nil
@@ -188,9 +212,12 @@ final class PrototypeStateStore: ObservableObject {
 
     // MARK: - Recording engine
 
-    private func beginRecording() {
+    private func beginRecording(startedAt: Date = .now) {
         resetLiveData()
-        transition(to: .recording(startedAt: .now))
+        transition(to: .recording(startedAt: startedAt))
+        // Seed elapsed immediately so a forced "35 minutes in" state renders
+        // the right timecode on its first frame, not after the first tick.
+        elapsed = max(0, Date.now.timeIntervalSince(startedAt))
         recordTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(33))
@@ -201,7 +228,11 @@ final class PrototypeStateStore: ObservableObject {
     }
 
     private func tick() {
-        elapsed += 0.033
+        // Wall-clock derived, matching the shipping app (`clock.now - startTime`).
+        // Accumulating the nominal tick interval drifts: Task.sleep guarantees a
+        // minimum, so +=0.033 undercounts real time by minutes on long takes.
+        guard case .recording(let startedAt) = transport else { return }
+        elapsed = Date.now.timeIntervalSince(startedAt)
         let level = LevelSynth.level(at: elapsed) * Float(0.35 + 0.65 * gain)
         currentLevel = level
         captureHistory.append(level)
@@ -226,9 +257,9 @@ final class PrototypeStateStore: ObservableObject {
             name: Formatters.recordingName(),
             date: .now,
             duration: duration,
-            format: .wav,
+            format: selectedFormat,
             sampleRate: "48kHz",
-            bitDepth: "16-bit",
+            bitDepth: selectedFormat == .flac ? "24-bit" : "16-bit",
             fileSize: megabytes < 1
                 ? String(format: "%.0fKB", megabytes * 1024)
                 : String(format: "%.1fMB", megabytes),

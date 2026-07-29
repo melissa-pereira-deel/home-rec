@@ -41,6 +41,11 @@ enum TransportState: Equatable {
         return false
     }
 
+    var isSaved: Bool {
+        if case .saved = self { return true }
+        return false
+    }
+
     static func == (lhs: TransportState, rhs: TransportState) -> Bool {
         switch (lhs, rhs) {
         case (.disarmed, .disarmed), (.idle, .idle), (.starting, .starting),
