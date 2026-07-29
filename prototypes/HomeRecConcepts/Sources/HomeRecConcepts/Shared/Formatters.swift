@@ -16,6 +16,21 @@ enum Formatters {
         return String(format: "%d:%02d", m, s)
     }
 
+    /// Timecode with a format pinned to the recording's total duration, so a
+    /// moving playhead label never changes width (no jump at 0:59.9 → 1:00,
+    /// hours stay h:mm:ss from the first frame).
+    static func timecode(_ t: TimeInterval, matching duration: TimeInterval) -> String {
+        let total = Int(t)
+        if duration >= 3600 {
+            return String(format: "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
+        }
+        if duration < 60 {
+            let frac = Int((t - floor(t)) * 10)
+            return String(format: "%d:%02d.%d", total / 60, total % 60, frac)
+        }
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
     /// Relative date in the quiet untitled voice: "2h", "3d", "2w".
     static func relative(_ date: Date, now: Date = .now) -> String {
         let seconds = max(0, now.timeIntervalSince(date))

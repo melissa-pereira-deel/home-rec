@@ -15,19 +15,30 @@ struct LibraryScaffold<Header: View>: View {
             header()
             if showsChips { chipRow }
             if filtered.isEmpty {
-                emptyState
+                store.library.isEmpty ? AnyView(emptyState) : AnyView(noMatchesState)
             } else {
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 8) {
-                        ForEach(filtered) { recording in
-                            if store.selectedRecordingID == recording.id {
-                                expandedRow(recording)
-                            } else {
-                                row(recording)
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: 8) {
+                            ForEach(filtered) { recording in
+                                Group {
+                                    if store.pendingDeleteID == recording.id {
+                                        deleteConfirmRow(recording)
+                                    } else if store.selectedRecordingID == recording.id {
+                                        expandedRow(recording)
+                                    } else {
+                                        row(recording)
+                                    }
+                                }
+                                .id(recording.id)
                             }
                         }
+                        .padding(.bottom, 4)
                     }
-                    .padding(.bottom, 4)
+                    .onChange(of: store.scrollTargetID) { _, target in
+                        guard let target else { return }
+                        proxy.scrollTo(target, anchor: .center)
+                    }
                 }
             }
         }
@@ -80,8 +91,12 @@ struct LibraryScaffold<Header: View>: View {
                     .frame(width: 96, height: 28)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        style.titleText(store.displayName(for: recording))
-                            .lineLimit(1)
+                        if store.renamingID == recording.id {
+                            LibraryRenameField(recording: recording, style: style)
+                        } else {
+                            style.titleText(store.displayName(for: recording))
+                                .lineLimit(1)
+                        }
                         if recording.versionCount > 1 {
                             style.metaText("v\(recording.versionCount)", size: 9)
                                 .padding(.horizontal, 5)
@@ -108,6 +123,53 @@ struct LibraryScaffold<Header: View>: View {
             .shadow(color: style.rowShadow, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Reveal in Finder") { /* fake */ }
+            Button("Rename") { store.renamingID = recording.id }
+            Button("Copy path") { /* fake */ }
+            Divider()
+            Button("Delete", role: .destructive) {
+                store.pendingDeleteID = recording.id
+            }
+        }
+    }
+
+    /// Inline destructive confirm — the row morphs; no NSAlert (capturable,
+    /// and stays in the glass register).
+    private func deleteConfirmRow(_ recording: FakeRecording) -> some View {
+        HStack(spacing: 10) {
+            style.titleText("delete \"\(store.displayName(for: recording))\"?")
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            FlatPillButton(action: { store.delete(id: recording.id) }) {
+                Text("delete")
+                    .font(.custom("Inter", size: 11, relativeTo: .caption))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(style.accentLabel)
+                    .padding(.horizontal, 12)
+                    .frame(height: 26)
+                    .background(style.accent, in: Capsule())
+                    .contentShape(Capsule())
+            }
+            FlatPillButton(action: { store.pendingDeleteID = nil }) {
+                Text("keep")
+                    .font(.custom("Inter", size: 11, relativeTo: .caption))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(style.title)
+                    .padding(.horizontal, 12)
+                    .frame(height: 26)
+                    .background(style.rowFill.opacity(0.8), in: Capsule())
+                    .overlay(Capsule().strokeBorder(style.rowStroke, lineWidth: 1))
+                    .contentShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(style.rowFill, in: RoundedRectangle(cornerRadius: style.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: style.cornerRadius)
+                .strokeBorder(style.accent.opacity(0.5), lineWidth: 1)
+        )
     }
 
     // MARK: - Expanded player
@@ -142,7 +204,8 @@ struct LibraryScaffold<Header: View>: View {
                 .overlay(alignment: .top) {
                     TimecodeChip(
                         time: store.playbackProgress * recording.duration,
-                        progress: store.playbackProgress
+                        progress: store.playbackProgress,
+                        duration: recording.duration
                     )
                     .offset(y: -8)
                 }
@@ -232,12 +295,17 @@ struct LibraryScaffold<Header: View>: View {
         .shadow(color: style.rowShadow, radius: 6, y: 3)
     }
 
-    /// Older takes stacked under the active one, untitled-style.
+    /// Older takes stacked under the active one, untitled-style. Capped at
+    /// the 3 newest; deeper stacks expand on demand.
+    @State private var expandedVersions = false
+
     private func versionStack(_ recording: FakeRecording) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let versions = Array((1...recording.versionCount).reversed())
+        let shown = expandedVersions ? versions : Array(versions.prefix(3))
+        return VStack(alignment: .leading, spacing: 6) {
             style.metaText("versions", size: 9)
                 .opacity(0.7)
-            ForEach((1...recording.versionCount).reversed(), id: \.self) { version in
+            ForEach(shown, id: \.self) { version in
                 HStack(spacing: 8) {
                     Rectangle()
                         .fill(style.meta.opacity(0.35))
@@ -248,18 +316,35 @@ struct LibraryScaffold<Header: View>: View {
                     )
                     .opacity(0.7)
                     if version == recording.versionCount {
-                        style.metaText("active", size: 9)
+                        // Built directly: metaText's inner foregroundStyle
+                        // would silently win over an outer accent modifier.
+                        Text("active")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(style.accent)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1.5)
                             .overlay(Capsule().strokeBorder(style.accent.opacity(0.6), lineWidth: 1))
-                            .foregroundStyle(style.accent)
                     }
                     Spacer()
                 }
                 .padding(.leading, 4)
             }
+            if versions.count > 3, !expandedVersions {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { expandedVersions = true }
+                } label: {
+                    style.metaText("show all \(versions.count) versions", size: 9)
+                        .underline()
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 22)
+            }
         }
         .padding(.top, 2)
+        .onChange(of: store.selectedRecordingID) { _, _ in
+            expandedVersions = false
+        }
     }
 
     /// Deterministic fake durations for older versions.
@@ -279,6 +364,51 @@ struct LibraryScaffold<Header: View>: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// A filtered-out library is NOT an empty library — different state,
+    /// different words, and a way back.
+    private var noMatchesState: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            style.titleText("no \(store.libraryFilter.label) takes.")
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    store.libraryFilter = .all
+                }
+            } label: {
+                style.metaText("show all", size: 11)
+                    .underline()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Inline rename: title becomes a text field; return commits, escape cancels.
+private struct LibraryRenameField: View {
+    @EnvironmentObject private var store: PrototypeStateStore
+    let recording: FakeRecording
+    let style: LibraryStyle
+
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", text: $draft)
+            .textFieldStyle(.plain)
+            .font(.custom("Inter", size: 13, relativeTo: .body))
+            .foregroundStyle(style.title)
+            .focused($focused)
+            .onAppear {
+                draft = recording.name
+                focused = true
+            }
+            .onSubmit { store.rename(id: recording.id, to: draft) }
+            .onExitCommand { store.renamingID = nil }
     }
 }
 

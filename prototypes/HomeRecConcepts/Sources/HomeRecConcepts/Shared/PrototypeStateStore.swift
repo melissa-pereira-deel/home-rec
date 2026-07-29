@@ -69,6 +69,11 @@ final class PrototypeStateStore: ObservableObject {
     /// The last take's duration survives the saved beat so the timer never
     /// snaps to 0:00.0 the moment a take lands.
     @Published private(set) var lastTakeDuration: TimeInterval?
+    // Row actions — store-held so the snapshot driver can force them.
+    @Published var renamingID: UUID?
+    @Published var pendingDeleteID: UUID?
+    /// Set to scroll the library to a row (snapshot scenarios, deep links).
+    @Published var scrollTargetID: UUID?
     @Published var saveLocation = SaveLocationSim()
 
     /// Prototype-compressed threshold so the warning is demoable in a sitting;
@@ -117,6 +122,22 @@ final class PrototypeStateStore: ObservableObject {
         guard let selected = selectedRecording,
               !libraryFilter.matches(selected, now: referenceNow) else { return }
         deselect()
+    }
+
+    // MARK: - Row actions (fake, in-memory)
+
+    func rename(id: UUID, to newName: String) {
+        defer { renamingID = nil }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = library.firstIndex(where: { $0.id == id }) else { return }
+        library[index].name = trimmed
+    }
+
+    func delete(id: UUID) {
+        if selectedRecordingID == id { deselect() }
+        library.removeAll { $0.id == id }
+        pendingDeleteID = nil
     }
 
     // MARK: - Transport intents
