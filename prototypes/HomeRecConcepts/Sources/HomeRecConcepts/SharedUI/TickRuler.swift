@@ -1,0 +1,60 @@
+import SwiftUI
+
+/// Tick-ruler slider in the untitled.stream style: no filled track, just a
+/// field of hairline ticks and one accent indicator. Drag anywhere to set.
+struct TickRuler: View {
+    @Binding var value: Double   // 0...1
+    var accent: Color
+    var tickColor: Color = .white
+
+    var body: some View {
+        GeometryReader { geo in
+            Canvas { context, size in
+                let pitch: CGFloat = 3
+                let count = Int(size.width / pitch)
+                for i in 0...count {
+                    let x = CGFloat(i) * pitch
+                    let major = i.isMultiple(of: 10)
+                    let h: CGFloat = major ? 8 : 4
+                    context.fill(
+                        Path(CGRect(x: x, y: (size.height - h) / 2, width: 1, height: h)),
+                        with: .color(tickColor.opacity(major ? 0.5 : 0.3))
+                    )
+                }
+                // Accent indicator: triangle above a full-height line.
+                let x = size.width * value
+                context.fill(
+                    Path(CGRect(x: x - 0.75, y: 2, width: 1.5, height: size.height - 4)),
+                    with: .color(accent)
+                )
+                var triangle = Path()
+                triangle.move(to: CGPoint(x: x - 3.5, y: 0))
+                triangle.addLine(to: CGPoint(x: x + 3.5, y: 0))
+                triangle.addLine(to: CGPoint(x: x, y: 4))
+                triangle.closeSubpath()
+                context.fill(triangle, with: .color(accent))
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        value = min(1, max(0, drag.location.x / geo.size.width))
+                    }
+            )
+        }
+        .frame(height: 18)
+    }
+}
+
+#Preview("Tick ruler") {
+    struct Host: View {
+        @State private var v = 0.42
+        var body: some View {
+            TickRuler(value: $v, accent: Color(red: 1.0, green: 0.24, blue: 0.24))
+                .frame(width: 380)
+                .padding(30)
+                .background(Color.black)
+        }
+    }
+    return Host()
+}
