@@ -39,6 +39,14 @@ struct LibraryScaffold<Header: View>: View {
                         guard let target else { return }
                         proxy.scrollTo(target, anchor: .center)
                     }
+                    .onAppear {
+                        // Target may have been set before this scaffold mounted
+                        // (screen switch + scroll in the same store update).
+                        guard let target = store.scrollTargetID else { return }
+                        DispatchQueue.main.async {
+                            proxy.scrollTo(target, anchor: .center)
+                        }
+                    }
                 }
             }
         }
@@ -105,6 +113,7 @@ struct LibraryScaffold<Header: View>: View {
                         }
                     }
                     style.metaText(recording.specLine)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 3) {

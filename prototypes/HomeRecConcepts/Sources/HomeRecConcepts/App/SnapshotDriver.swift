@@ -26,7 +26,10 @@ enum SnapshotDriver {
         // Let the window settle before the first capture.
         try? await Task.sleep(for: .milliseconds(700))
 
+        // HRC_SNAPSHOT_FILTER=<substring> runs a subset for fast iteration.
+        let filter = ProcessInfo.processInfo.environment["HRC_SNAPSHOT_FILTER"]
         for scenario in scenarios() {
+            if let filter, !scenario.name.contains(filter) { continue }
             scenario.apply(store)
             try? await Task.sleep(for: .milliseconds(scenario.settleMilliseconds))
             capture(to: "\(outputDir)/\(scenario.name).png")
@@ -103,8 +106,104 @@ enum SnapshotDriver {
             store.saveLocation = SaveLocationSim()
             store.dismissError()
             store.showOnboarding = false
+            store.useRealisticNames = false
+            store.renamingID = nil
+            store.pendingDeleteID = nil
+            store.scrollTargetID = nil
+            store.applySeed(.eight)
             store.forceState(.idle)
         }
+        all.append(Scenario(name: "spec-01-idle-honest", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.useRealisticNames = true
+                            }))
+        all.append(Scenario(name: "spec-02a-starting", settleMilliseconds: 150,
+                            apply: { store in
+                                specReset(store)
+                                store.forceState(.starting)
+                            }))
+        all.append(Scenario(name: "spec-02b-recording", settleMilliseconds: 800,
+                            apply: { store in
+                                specReset(store)
+                                store.forceState(.recording(startedAt: .now.addingTimeInterval(-8)))
+                            }))
+        all.append(Scenario(name: "spec-02d-saved", settleMilliseconds: 600,
+                            apply: { store in
+                                specReset(store)
+                                if let latest = store.library.first {
+                                    store.forceState(.saved(latest))
+                                }
+                            }))
+        all.append(Scenario(name: "spec-08-library-50-scrolled", settleMilliseconds: 700,
+                            apply: { store in
+                                specReset(store)
+                                store.applySeed(.fifty)
+                                store.screen = .library
+                                if store.library.indices.contains(24) {
+                                    store.scrollTargetID = store.library[24].id
+                                }
+                            }))
+        all.append(Scenario(name: "spec-09a-empty", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.applySeed(.empty)
+                                store.screen = .library
+                            }))
+        all.append(Scenario(name: "spec-09b-filter-empty", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.applySeed(.three)
+                                store.screen = .library
+                                // Delete the only m4a take, then filter to m4a.
+                                if store.library.indices.contains(2) {
+                                    store.delete(id: store.library[2].id)
+                                }
+                                store.libraryFilter = .format(.m4a)
+                            }))
+        all.append(Scenario(name: "spec-10a-player-8s", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.screen = .library
+                                if store.library.indices.contains(4) {
+                                    store.select(store.library[4])   // "untitled", 8s
+                                    store.scrub(to: 0.42)
+                                }
+                            }))
+        all.append(Scenario(name: "spec-10b-player-hour-clamp-left", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.screen = .library
+                                if store.library.indices.contains(5) {
+                                    store.select(store.library[5])   // "band practice", 1:12:03
+                                    store.scrub(to: 0.03)
+                                }
+                            }))
+        all.append(Scenario(name: "spec-10c-player-hour-clamp-right", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.screen = .library
+                                if store.library.indices.contains(5) {
+                                    store.select(store.library[5])
+                                    store.scrub(to: 0.97)
+                                }
+                            }))
+        all.append(Scenario(name: "spec-11a-rename", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.screen = .library
+                                if store.library.indices.contains(1) {
+                                    store.renamingID = store.library[1].id
+                                }
+                            }))
+        all.append(Scenario(name: "spec-11b-delete-confirm", settleMilliseconds: 500,
+                            apply: { store in
+                                specReset(store)
+                                store.screen = .library
+                                if store.library.indices.contains(2) {
+                                    store.pendingDeleteID = store.library[2].id
+                                }
+                            }))
         all.append(Scenario(name: "spec-05a-perm-nd", settleMilliseconds: 400,
                             apply: { store in
                                 specReset(store)
@@ -202,8 +301,13 @@ enum SnapshotDriver {
     }
 
     private static func capture(to path: String) {
+        // Target the stage window by title — "first visible" would grab a
+        // popover or child window if one happened to be open.
+        let stage = NSApp.windows.first {
+            $0.title == "Home Rec — Concepts" && $0.isVisible
+        }
         guard
-            let window = NSApp.windows.first(where: { $0.isVisible }),
+            let window = stage ?? NSApp.windows.first(where: { $0.isVisible }),
             let view = window.contentView,
             let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)
         else {
