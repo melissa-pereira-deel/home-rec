@@ -93,6 +93,78 @@ enum SnapshotDriver {
                                     store.scrub(to: 0.42)
                                 }
                             }))
+        // Spec matrix: permission, errors, guardrails — all on Glass.
+        func specReset(_ store: PrototypeStateStore) {
+            store.concept = .glassShelf
+            store.screen = .recorder
+            store.permissionStatus = .granted
+            store.translocationBlocked = false
+            store.simulateDiskFullOnRecord = false
+            store.saveLocation = SaveLocationSim()
+            store.dismissError()
+            store.showOnboarding = false
+            store.forceState(.idle)
+        }
+        all.append(Scenario(name: "spec-05a-perm-nd", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.permissionStatus = .notDetermined
+                                store.forceState(.disarmed)
+                            }))
+        all.append(Scenario(name: "spec-05b-perm-denied", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.permissionStatus = .denied
+                                store.forceState(.disarmed)
+                            }))
+        all.append(Scenario(name: "spec-05c-perm-opening", settleMilliseconds: 700,
+                            apply: { store in
+                                specReset(store)
+                                store.permissionStatus = .denied
+                                store.forceState(.disarmed)
+                                store.simulateOpenSystemSettings()
+                            }))
+        all.append(Scenario(name: "spec-05d-transloc", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.translocationBlocked = true
+                            }))
+        all.append(Scenario(name: "spec-06a-err-startfailed", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.activeError = .startFailed
+                            }))
+        all.append(Scenario(name: "spec-06b-err-diskfull", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.simulateDiskFullOnRecord = true
+                                store.record()   // refusal on press
+                            }))
+        all.append(Scenario(name: "spec-06c-err-savefallback", settleMilliseconds: 1600,
+                            apply: { store in
+                                specReset(store)
+                                store.saveLocation.isUnavailable = true
+                                store.record()   // notice appears, recording continues
+                            }))
+        all.append(Scenario(name: "spec-06d-err-streamfailed", settleMilliseconds: 400,
+                            apply: { store in
+                                specReset(store)
+                                store.activeError = .streamFailed
+                            }))
+        all.append(Scenario(name: "spec-07-longrec", settleMilliseconds: 900,
+                            apply: { store in
+                                specReset(store)
+                                store.forceState(.recording(startedAt: .now.addingTimeInterval(-4323)))
+                            }))
+        all.append(Scenario(name: "spec-02c-stopping", settleMilliseconds: 550,
+                            apply: { store in
+                                specReset(store)
+                                store.forceState(.recording(startedAt: .now.addingTimeInterval(-8)))
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(300))
+                                    store.stop()
+                                }
+                            }))
         // Continuity proof: start one recording, then hop concepts WITHOUT
         // touching transport. Timers in these captures must keep counting.
         all.append(Scenario(name: "continuity-0-start", settleMilliseconds: 1200,

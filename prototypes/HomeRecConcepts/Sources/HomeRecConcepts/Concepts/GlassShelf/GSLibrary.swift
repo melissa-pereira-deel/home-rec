@@ -47,12 +47,9 @@ struct GSLibrary: View {
         HStack {
             GSTheme.lowercase("all takes", size: 13)
             Spacer()
-            Button {
+            GSNavLink(label: "← record") {
                 store.screen = .recorder
-            } label: {
-                GSTheme.mono("← record", size: 10)
             }
-            .buttonStyle(.plain)
         }
     }
 }

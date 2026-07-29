@@ -11,6 +11,8 @@ enum GSTheme {
     static let card = Color(red: 0.110, green: 0.110, blue: 0.118)        // #1C1C1E
     static let metalBase = Color(red: 0.557, green: 0.573, blue: 0.596)   // #8E9298
     static let textDim = Color(red: 0.557, green: 0.557, blue: 0.576)     // #8E8E93
+    /// Warning tone (long-recording notice) — amber, distinct from the error red.
+    static let warnAmber = Color(red: 0.92, green: 0.66, blue: 0.18)
 
     /// The backdrop the glass has something to blur: a quiet deep-blue mesh.
     @ViewBuilder
@@ -46,5 +48,41 @@ enum GSTheme {
         Text(text)
             .font(.system(size: size, design: .monospaced))
             .foregroundStyle(textDim)
+    }
+}
+
+/// Navigation text with real affordance: 24pt hit area, hover background,
+/// pointing-hand cursor — interactive text must not read as metadata.
+struct GSNavLink: View {
+    let label: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(hovering ? .white.opacity(0.9) : GSTheme.textDim)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .background(
+                    hovering ? Color.white.opacity(0.07) : .clear,
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            if isHovering, !hovering { NSCursor.pointingHand.push() }
+            if !isHovering, hovering { NSCursor.pop() }
+            hovering = isHovering
+        }
+        .onDisappear {
+            if hovering {
+                NSCursor.pop()
+                hovering = false
+            }
+        }
     }
 }

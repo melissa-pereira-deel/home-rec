@@ -56,6 +56,13 @@ struct TickRuler: View {
             )
         }
         .frame(height: 18)
+        // A Canvas + DragGesture is invisible to assistive tech; expose it
+        // as the slider it behaves as.
+        .accessibilityRepresentation {
+            Slider(value: $value, in: 0...1) {
+                Text("position")
+            }
+        }
     }
 }
 

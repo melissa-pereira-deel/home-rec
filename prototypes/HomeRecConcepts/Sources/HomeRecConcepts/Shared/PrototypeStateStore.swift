@@ -66,6 +66,9 @@ final class PrototypeStateStore: ObservableObject {
     /// Policy C explainer: shown the first time playback runs during a
     /// capture, dismissible for the session.
     @Published var monitorExplainerDismissed = false
+    /// The last take's duration survives the saved beat so the timer never
+    /// snaps to 0:00.0 the moment a take lands.
+    @Published private(set) var lastTakeDuration: TimeInterval?
     @Published var saveLocation = SaveLocationSim()
 
     /// Prototype-compressed threshold so the warning is demoable in a sitting;
@@ -177,6 +180,12 @@ final class PrototypeStateStore: ObservableObject {
         permissionTask?.cancel()
         isOpeningSystemSettings = false
         pausePlayback()
+        // The long-recording warning belongs to an active take; a forced
+        // non-recording state must not inherit it.
+        if !state.isRecording {
+            longRecordingWarned = false
+            longRecordingWarningVisible = false
+        }
         if transport.isRecording {
             bankReels()
         }
@@ -344,6 +353,7 @@ final class PrototypeStateStore: ObservableObject {
 
     private func beginRecording(startedAt: Date = .now) {
         resetLiveData()
+        lastTakeDuration = nil
         longRecordingWarned = false
         longRecordingWarningVisible = false
         transition(to: .recording(startedAt: startedAt))
@@ -383,6 +393,7 @@ final class PrototypeStateStore: ObservableObject {
 
     private func finishTake() -> FakeRecording {
         let duration = elapsed
+        lastTakeDuration = duration
         bankReels()
         // The rewind clunk: reels snap a few degrees backward as the
         // mechanism disengages. Views animate this with a loose spring.

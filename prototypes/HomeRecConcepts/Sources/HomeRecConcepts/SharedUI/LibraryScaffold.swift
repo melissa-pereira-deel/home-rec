@@ -293,12 +293,24 @@ struct FlatPillButton<Label: View>: View {
 
     var body: some View {
         Button(action: action) {
+            // Scale the visual only — the hit region must stay constant or
+            // the pill jitters at its own boundary.
             label()
+                .scaleEffect(hovering ? 1.03 : 1.0)
+                .animation(.easeOut(duration: 0.12), value: hovering)
         }
         .buttonStyle(FlatPillPressStyle())
-        .scaleEffect(hovering ? 1.03 : 1.0)
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .onHover { hovering = $0 }
+        .onHover { isHovering in
+            if isHovering, !hovering { NSCursor.pointingHand.push() }
+            if !isHovering, hovering { NSCursor.pop() }
+            hovering = isHovering
+        }
+        .onDisappear {
+            if hovering {
+                NSCursor.pop()
+                hovering = false
+            }
+        }
     }
 }
 
