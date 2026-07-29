@@ -53,6 +53,25 @@ final class PrototypeStateStore: ObservableObject {
     /// for snapshots.
     let referenceNow: Date
 
+    // Orthogonal state axes (mirror shipping RecorderViewModel, where
+    // PermissionStatus and InstallLocation sit beside RecordingState).
+    @Published var permissionStatus: FakePermissionStatus = .granted
+    @Published private(set) var isOpeningSystemSettings = false
+    @Published var activeError: FakeRecorderError?
+    @Published private(set) var longRecordingWarningVisible = false
+    @Published var translocationBlocked = false
+    @Published var showOnboarding = false
+    /// Makes the disk-full refusal demoable: next record press refuses.
+    @Published var simulateDiskFullOnRecord = false
+    @Published var saveLocation = SaveLocationSim()
+
+    /// Prototype-compressed threshold so the warning is demoable in a sitting;
+    /// shipping is `DiskSpace.longRecordingThreshold = 30 * 60`.
+    static let longRecordingThresholdSim: TimeInterval = 20
+
+    private var longRecordingWarned = false
+    private var permissionTask: Task<Void, Never>?
+
     static let liveSampleCount = 200
 
     private var recordTask: Task<Void, Never>?
@@ -108,12 +127,26 @@ final class PrototypeStateStore: ObservableObject {
         // `.saved` is immediately re-armable — a recorder must never present a
         // dead record control while the previous take's beat plays out.
         guard transport == .idle || transport.isSaved else { return }
+        // Routing mirrors shipping order (RecorderViewModel.startRecording):
+        // translocation before permission, disk before start.
+        guard !translocationBlocked else { return }          // UI handles reveal
+        guard permissionStatus == .granted else { return }   // UI routes to settings
+        if simulateDiskFullOnRecord {
+            activeError = .diskFull                          // refusal, stays idle
+            return
+        }
+        dismissError()
         cancelTransitions()
         transition(to: .starting)
         transitionTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled, let self else { return }
             self.beginRecording()
+            // Shipping presents saveLocationUnavailable as a non-blocking
+            // notice AFTER the recording has started — recording continues.
+            if self.saveLocation.isUnavailable {
+                self.activeError = .saveLocationUnavailable
+            }
         }
     }
 
@@ -138,6 +171,8 @@ final class PrototypeStateStore: ObservableObject {
     func forceState(_ state: TransportState) {
         cancelTransitions()
         recordTask?.cancel()
+        permissionTask?.cancel()
+        isOpeningSystemSettings = false
         pausePlayback()
         if transport.isRecording {
             bankReels()
@@ -164,6 +199,64 @@ final class PrototypeStateStore: ObservableObject {
             resetLiveData()
             transition(to: state)
         }
+    }
+
+    // MARK: - Simulated permission / settings / guardrails
+
+    /// Mirrors shipping `openSystemSettings()`: ~2s registration window with
+    /// the button disabled, then a fake grant watcher lands the permission
+    /// ~3s in and the UI flips live (PermissionGrantWatcher behavior).
+    func simulateOpenSystemSettings() {
+        permissionTask?.cancel()
+        isOpeningSystemSettings = true
+        permissionTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            self.isOpeningSystemSettings = false
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self.permissionStatus = .granted
+            if self.transport == .disarmed {
+                self.forceState(.idle)
+            }
+        }
+    }
+
+    func dismissError() {
+        activeError = nil
+    }
+
+    func performRecovery() {
+        guard let error = activeError else { return }
+        dismissError()
+        switch error {
+        case .startFailed:
+            record()
+        case .streamFailed:
+            simulateOpenSystemSettings()
+        case .saveLocationUnavailable:
+            cycleFakeSaveFolder()
+        case .stopFailed, .diskFull:
+            break   // no recovery action in shipping either
+        }
+    }
+
+    func dismissLongRecordingWarning() {
+        longRecordingWarningVisible = false
+    }
+
+    func cycleFakeSaveFolder() {
+        saveLocation.index = (saveLocation.index + 1) % saveLocation.folders.count
+        saveLocation.isUnavailable = false
+    }
+
+    func resetSaveLocation() {
+        saveLocation.index = 0
+        saveLocation.isUnavailable = false
+    }
+
+    func completeOnboarding() {
+        showOnboarding = false
     }
 
     func cycleFormat() {
@@ -248,6 +341,8 @@ final class PrototypeStateStore: ObservableObject {
 
     private func beginRecording(startedAt: Date = .now) {
         resetLiveData()
+        longRecordingWarned = false
+        longRecordingWarningVisible = false
         transition(to: .recording(startedAt: startedAt))
         // Seed elapsed immediately so a forced "35 minutes in" state renders
         // the right timecode on its first frame, not after the first tick.
@@ -267,6 +362,11 @@ final class PrototypeStateStore: ObservableObject {
         // minimum, so +=0.033 undercounts real time by minutes on long takes.
         guard case .recording(let startedAt) = transport else { return }
         elapsed = Date.now.timeIntervalSince(startedAt)
+        // One-shot long-recording warning, mirroring the shipping latch.
+        if !longRecordingWarned, elapsed > Self.longRecordingThresholdSim {
+            longRecordingWarned = true
+            longRecordingWarningVisible = true
+        }
         let level = LevelSynth.level(at: elapsed) * Float(0.35 + 0.65 * gain)
         currentLevel = level
         captureHistory.append(level)

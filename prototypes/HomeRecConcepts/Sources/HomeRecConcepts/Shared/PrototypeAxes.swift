@@ -36,3 +36,56 @@ enum LibrarySeed: Int, CaseIterable {
     case eight = 8
     case fifty = 50
 }
+
+/// Mirrors shipping `PermissionStatus` (PermissionManager.swift:15).
+enum FakePermissionStatus {
+    case notDetermined
+    case denied
+    case granted
+}
+
+/// Mirrors shipping `RecorderError` — messages and recovery labels are
+/// VERBATIM from HomeRec/HomeRec/RecordingState.swift:34-76. The spec's
+/// contract is zero copy changes.
+enum FakeRecorderError: CaseIterable, Equatable {
+    case startFailed
+    case stopFailed
+    case streamFailed
+    case diskFull
+    case saveLocationUnavailable
+
+    var message: String {
+        switch self {
+        case .startFailed:
+            "Home Rec couldn't start recording. Make sure some audio is playing, then try again."
+        case .stopFailed:
+            "Home Rec couldn't finish saving the recording. The audio captured so far may still be on your Desktop."
+        case .streamFailed:
+            "Recording stopped unexpectedly. This usually means Screen Recording permission was turned off, or another app took over audio capture."
+        case .diskFull:
+            "There isn't enough free space to start recording. Free up some disk space and try again."
+        case .saveLocationUnavailable:
+            "Your chosen save folder isn't available, so this recording is going to your Desktop instead."
+        }
+    }
+
+    var recoveryLabel: String? {
+        switch self {
+        case .startFailed: "Try again"
+        case .streamFailed: "Open settings"
+        case .saveLocationUnavailable: "Choose folder…"
+        case .stopFailed, .diskFull: nil
+        }
+    }
+}
+
+/// Simulated save-location model: three fake folders, custom/unavailable
+/// states, mirroring the shipping keep-and-warn fallback behavior.
+struct SaveLocationSim: Equatable {
+    var folders = ["Desktop", "Recordings", "Field Notes"]
+    var index = 0
+    var isUnavailable = false
+
+    var isCustom: Bool { index != 0 }
+    var name: String { folders[index] }
+}
