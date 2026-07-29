@@ -21,6 +21,11 @@ struct GSLibrary: View {
         ZStack {
             GSTheme.backdrop
             VStack(spacing: 12) {
+                // Recording must stay visible and stoppable while browsing.
+                RecordingBar(
+                    accent: GSTheme.accent,
+                    cardFill: GSTheme.card.opacity(0.85)
+                )
                 LibraryScaffold(style: style, showsChips: true) {
                     header
                 }

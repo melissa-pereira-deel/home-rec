@@ -75,6 +75,24 @@ enum SnapshotDriver {
                                     store.scrub(to: 0.42)
                                 }))
         }
+        // Policy C / RecordingBar: recording continues into the library, and
+        // playback during a capture shows the monitoring guarantee.
+        all.append(Scenario(name: "spec-03-recbar-library", settleMilliseconds: 1200,
+                            apply: { store in
+                                store.concept = .glassShelf
+                                store.forceState(.recording(startedAt: .now.addingTimeInterval(-72)))
+                                store.screen = .library
+                            }))
+        all.append(Scenario(name: "spec-04-monitoring", settleMilliseconds: 1200,
+                            apply: { store in
+                                store.concept = .glassShelf
+                                store.forceState(.recording(startedAt: .now.addingTimeInterval(-72)))
+                                store.screen = .library
+                                if store.library.indices.contains(1) {
+                                    store.togglePlayback(for: store.library[1])
+                                    store.scrub(to: 0.42)
+                                }
+                            }))
         // Continuity proof: start one recording, then hop concepts WITHOUT
         // touching transport. Timers in these captures must keep counting.
         all.append(Scenario(name: "continuity-0-start", settleMilliseconds: 1200,

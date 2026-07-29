@@ -179,7 +179,44 @@ struct LibraryScaffold<Header: View>: View {
                     Formatters.timecode(store.playbackProgress * recording.duration)
                         + " / " + Formatters.timecode(recording.duration)
                 )
+                // Policy C: playback during a capture is monitoring — the
+                // app excludes its own audio from the stream, so it is
+                // provably not in the recording. Say so.
+                if store.transport.isRecording, store.isPlaying {
+                    style.metaText("monitoring · not recorded", size: 9)
+                        .fixedSize()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .overlay(Capsule().strokeBorder(style.meta.opacity(0.4), lineWidth: 1))
+                }
                 Spacer()
+            }
+
+            // One-time explainer, first playback during a capture.
+            if store.transport.isRecording, store.isPlaying,
+               !store.monitorExplainerDismissed {
+                HStack(spacing: 8) {
+                    style.metaText(
+                        "playback here is monitoring only — home rec excludes its own audio from the capture, so it won't be in your recording.",
+                        size: 10
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 4)
+                    Button {
+                        store.monitorExplainerDismissed = true
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(style.meta)
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("dismiss")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(style.rowFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
             }
 
             if recording.versionCount > 1 {

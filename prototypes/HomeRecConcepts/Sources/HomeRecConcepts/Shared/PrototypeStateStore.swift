@@ -63,6 +63,9 @@ final class PrototypeStateStore: ObservableObject {
     @Published var showOnboarding = false
     /// Makes the disk-full refusal demoable: next record press refuses.
     @Published var simulateDiskFullOnRecord = false
+    /// Policy C explainer: shown the first time playback runs during a
+    /// capture, dismissible for the session.
+    @Published var monitorExplainerDismissed = false
     @Published var saveLocation = SaveLocationSim()
 
     /// Prototype-compressed threshold so the warning is demoable in a sitting;
