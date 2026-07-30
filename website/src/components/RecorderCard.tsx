@@ -1,13 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 
-/* The Glass recorder, rebuilt native to the page: glass panel, mono timecode,
-   live waveform, red record pill. Mirrors the app's recording state — a thin
-   dotted amplitude line with a hot red burst at the write head.
+/* The recorder, flat: opaque surface, hairline rules, mono timecode, red
+   record control.
 
-   Motion honors prefers-reduced-motion (frozen frame at 0:08.7) and pauses
-   off-screen via IntersectionObserver, matching Canvas UI's own guidance. */
+   The waveform was rebuilt. It used to sweep a write head across a dead dotted
+   line on its own 9-second modulo loop, lighting only the nine bars behind the
+   head and hard-wrapping back to x=0 — which read as a blip cycling on a flat
+   line, and the wrap read as the animation running backwards. It also ran on a
+   period of its own while the timer counted real elapsed time, so the two
+   visibly disagreed.
 
-const FROZEN_SECONDS = 8.7;
+   Now there is one clock. `elapsed` drives both the timecode and the strip, so
+   they cannot disagree by construction. One bar is committed every BAR_MS, and
+   a bar's height is a pure function of its absolute index — once written it
+   never changes again, which is what makes the strip read as accumulated
+   history rather than an oscillating idle line. The strip fills left→right,
+   and when it reaches the right edge it does not wrap: it scrolls, the oldest
+   bar falling off the left while the newest is cut at the write head. Motion
+   is only ever leftward past a fixed head, which is how a live recorder
+   monitor actually behaves — and it never restarts.
+
+   Motion honors prefers-reduced-motion (frozen at a partly-filled strip) and
+   pauses off-screen via IntersectionObserver. */
+
+/* One bar committed every 90ms — the strip and the timecode share this rate. */
+const BAR_MS = 90;
+/* 2px bar on a 4px pitch: flat, square-ended, precisely spaced. */
+const BAR_W = 2;
+const PITCH = 4;
+const PAD = 16;
+
+/* 5.4s = exactly 60 bars, which leaves the frozen strip partly filled at every
+   card width, so the still frame still shows history behind the head. */
+const FROZEN_SECONDS = 5.4;
 
 function formatTimecode(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -17,23 +42,39 @@ function formatTimecode(seconds: number): string {
   return `${m}:${String(whole).padStart(2, "0")}.${tenth}`;
 }
 
-/** Deterministic pseudo-random so the static (reduced-motion) frame is stable. */
+/** Deterministic pseudo-random so every frame agrees about a given bar. */
 function hashNoise(n: number): number {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
 }
 
+/**
+ * Height of the bar at absolute index `i`, 0..1. A pure function of the index
+ * — never of time — so a bar committed at t=2s looks identical at t=40s.
+ * A slow swell and a slower phrase give it dynamics; the noise gives it grain.
+ */
+function barAmplitude(i: number): number {
+  /* The swell runs ~45 bars (≈4s), so a full window always shows several
+     crests rather than sitting inside one long quiet passage; the phrase runs
+     ~170 bars underneath it for slower variation. The floor keeps the strip
+     alive — real audio has silences, but a dead-looking strip is the exact
+     thing the client read as broken. */
+  const swell = 0.62 + 0.38 * Math.sin(i * 0.14);
+  const phrase = 0.78 + 0.22 * Math.sin(i * 0.037 + 2.1);
+  const detail = 0.5 + 0.5 * hashNoise(i);
+  return Math.max(0.14, Math.min(1, swell * phrase * detail * 1.55));
+}
+
 function TakeThumb({ seed }: { seed: number }) {
-  const bars = Array.from({ length: 26 }, (_, i) => {
+  const bars = Array.from({ length: 24 }, (_, i) => {
     const h = 2 + hashNoise(seed * 100 + i) * 9;
     return (
       <rect
         key={i}
-        x={i * 2.6}
+        x={i * 3}
         y={7 - h / 2}
-        width={1.3}
+        width={1.5}
         height={h}
-        rx={0.65}
         fill="currentColor"
       />
     );
@@ -41,9 +82,9 @@ function TakeThumb({ seed }: { seed: number }) {
   return (
     <svg
       className="take-thumb"
-      width="68"
+      width="72"
       height="14"
-      viewBox="0 0 68 14"
+      viewBox="0 0 72 14"
       aria-hidden="true"
     >
       {bars}
@@ -78,7 +119,7 @@ export default function RecorderCard() {
     let elapsed = reduced ? FROZEN_SECONDS : 0;
     let last = performance.now();
 
-    function draw(time: number) {
+    function draw(seconds: number) {
       const c = canvasRef.current;
       const context = ctx;
       if (!c || !context) return;
@@ -86,6 +127,7 @@ export default function RecorderCard() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = c.clientWidth;
       const h = c.clientHeight;
+      if (w === 0 || h === 0) return;
       if (c.width !== w * dpr || c.height !== h * dpr) {
         c.width = w * dpr;
         c.height = h * dpr;
@@ -94,34 +136,46 @@ export default function RecorderCard() {
       context.clearRect(0, 0, w, h);
 
       const mid = h / 2;
-      const step = 5;
-      const count = Math.floor((w - 24) / step);
-      // Write head sweeps left→right and wraps, like the app's monitor strip.
-      const headIndex = reduced
-        ? Math.floor(count * 0.72)
-        : Math.floor(((time / 9000) % 1) * count);
+      const usable = Math.max(PITCH * 8, w - PAD * 2);
+      const right = PAD + usable;
+      const capacity = Math.floor(usable / PITCH);
 
-      for (let i = 0; i < count; i += 1) {
-        const x = 12 + i * step;
-        const distance = headIndex - i;
-        const isTrail = distance >= 0 && distance < 9;
+      /* The single clock: bar position is derived from the same `seconds` that
+         prints in the timecode. The fractional part is kept so the strip moves
+         continuously instead of stepping. */
+      const exactBars = (seconds * 1000) / BAR_MS;
+      const written = Math.floor(exactBars);
 
-        if (isTrail) {
-          // Hot red burst trailing the write head.
-          const falloff = 1 - distance / 9;
-          const jitter = reduced
-            ? hashNoise(i * 3.7)
-            : 0.35 + 0.65 * Math.abs(Math.sin(time / 90 + i * 1.7));
-          const amp = 3 + falloff * jitter * (h * 0.36);
-          context.fillStyle = `rgba(242, 58, 58, ${0.45 + 0.55 * falloff})`;
-          context.fillRect(x - 1, mid - amp, 2, amp * 2);
-        } else {
-          // Idle dotted line — quiet signal, matching the app at rest.
-          const idle = hashNoise(i * 1.3) * 1.4;
-          context.fillStyle = "rgba(242, 58, 58, 0.34)";
-          context.fillRect(x - 0.75, mid - 0.75 - idle, 1.5, 1.5 + idle * 2);
-        }
+      /* Once the tape has run past the window it scrolls: `shift` is how many
+         bars have passed off the left edge. Before that it stays 0 and the
+         strip simply fills. */
+      const shift = Math.max(0, exactBars - capacity);
+      const headX = PAD + Math.min(exactBars, capacity) * PITCH;
+
+      /* The tape ahead of the head — a flat hairline, not a dotted idle
+         waveform, so nothing ahead of the head pretends to be signal. */
+      if (headX < right - 0.5) {
+        context.fillStyle = "rgba(255, 255, 255, 0.1)";
+        context.fillRect(headX, mid - 0.5, right - headX, 1);
       }
+
+      /* History. Only the bars currently inside the window are visited. */
+      const firstVisible = Math.max(0, Math.floor(shift) - 1);
+      for (let i = firstVisible; i <= written; i += 1) {
+        const x = PAD + (i - shift) * PITCH;
+        if (x < PAD - PITCH || x > right) continue;
+        const half = Math.max(1, barAmplitude(i) * (h * 0.42));
+        /* Two flat values, no gradient falloff: the bar being cut right now,
+           and everything already committed behind it. */
+        context.fillStyle =
+          i === written ? "#f23a3a" : "rgba(242, 58, 58, 0.72)";
+        context.fillRect(x, mid - half, BAR_W, half * 2);
+      }
+
+      /* The write head, as a 1px rule. In the scrolling phase it is pinned to
+         the right edge and the history moves leftward past it. */
+      context.fillStyle = "rgba(242, 58, 58, 0.9)";
+      context.fillRect(Math.min(headX, right - 1), 0, 1, h);
     }
 
     function frame(time: number) {
@@ -132,13 +186,15 @@ export default function RecorderCard() {
       if (timerRef.current) {
         timerRef.current.textContent = formatTimecode(elapsed);
       }
-      draw(time);
+      draw(elapsed);
       raf = requestAnimationFrame(frame);
     }
 
     function start() {
       if (running || !visible || reduced) return;
       running = true;
+      /* Reset the delta clock so time spent off-screen is not counted — the
+         timecode and the strip stay in step across a pause. */
       last = performance.now();
       raf = requestAnimationFrame(frame);
     }
@@ -149,8 +205,8 @@ export default function RecorderCard() {
     }
 
     // Static frame for reduced motion (and as the pre-animation paint).
-    timer.textContent = formatTimecode(reduced ? FROZEN_SECONDS : 0);
-    draw(0);
+    timer.textContent = formatTimecode(elapsed);
+    draw(elapsed);
 
     const io = new IntersectionObserver((entries) => {
       visible = entries[entries.length - 1]?.isIntersecting ?? true;
@@ -159,7 +215,7 @@ export default function RecorderCard() {
     });
     io.observe(canvas);
 
-    const ro = new ResizeObserver(() => draw(performance.now()));
+    const ro = new ResizeObserver(() => draw(elapsed));
     ro.observe(canvas);
 
     start();
@@ -197,8 +253,8 @@ export default function RecorderCard() {
               aria-hidden="true"
             >
               <path d="M1.5 4h12M1.5 11h12" />
-              <circle cx="5.5" cy="4" r="1.7" fill="var(--card)" />
-              <circle cx="9.5" cy="11" r="1.7" fill="var(--card)" />
+              <circle cx="5.5" cy="4" r="1.7" fill="var(--surface)" />
+              <circle cx="9.5" cy="11" r="1.7" fill="var(--surface)" />
             </svg>
           </span>
         </div>

@@ -1,43 +1,47 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Home Rec — "Glass" design language, translated from the app.
+   Home Rec — flat / Swiss design language.
 
-   Sources: GSTheme.swift (prototypes/HomeRecConcepts) + the Glass concept
-   screenshots. Near-black ground, translucent glass panels with 1px ~15%
-   white borders and generous radius, a single red accent reserved for the
-   record state, Archivo display + Inter body + monospace metadata.
+   Revised away from the earlier glassmorphic build (backdrop blur, translucent
+   fills, 28px radii, red glow shadows, radial mesh) toward the register the
+   client asked for, studied from untitled.stream:
 
-   Deliberately single-theme dark: the near-black ground IS the brand, the
-   same way the app has no light mode. Not a missing feature.
+     · zero backdrop-filter, zero glow — measured on untitled.stream, which
+       runs 0 blurred elements and 0 real box-shadows on the whole page
+     · a closed 4-step type scale, two weights, one uniform -0.03em tracking
+     · two text colors (white / grey) — hierarchy from size + color, never depth
+     · binary radius: 0 everywhere, pill for interactive buttons only
+     · structure carried entirely by hairline rules, column alignment, and
+       generous fixed gutters
+     · red reserved for the record signal and the primary action
+
+   Single-theme dark: the near-black ground IS the brand, the same way the app
+   has no light mode. Not a missing feature.
    ═══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* GSTheme.accent — #F23A3A, the only accent on the page. */
+  /* GSTheme.accent — #F23A3A, the only accent on the page. Flat fills only:
+     never a gradient, never a glow, never a background wash. */
   --accent: #f23a3a;
-  /* GSTheme.accentDeep — pressed / gradient partner for large fills. */
-  --accent-deep: #c72121;
-  /* GSTheme.card — warm charcoal. */
-  --card: #1c1c1e;
+  --accent-hover: #ff4a4a;
+
+  /* Near-black ground + two flat surfaces lifted off it. Opaque, not
+     translucent — a flat surface has a color, not a transparency. */
+  --ground: #08080a;
+  --surface: #0e0e11;
+  --surface-2: #141418;
+
+  /* Two text colors. That is the whole palette. */
+  --text: #ffffff;
+  --text-dim: #7c7c84;
+
   /* GSTheme.metalBase — icon + hardware grey. */
   --metal: #8e9298;
-  /* GSTheme.textDim */
-  --text-dim: #8e8e93;
-  --text: rgba(255, 255, 255, 0.92);
-  --text-soft: rgba(255, 255, 255, 0.66);
 
-  /* Near-black ground. */
-  --ground: #08080a;
+  /* Hairlines are the only structural device. */
+  --line: rgba(255, 255, 255, 0.13);
+  --line-soft: rgba(255, 255, 255, 0.06);
 
-  /* Glass recipe: translucent fill, 1px white ~15% border, generous radius. */
-  --glass-fill: rgba(255, 255, 255, 0.045);
-  --glass-fill-strong: rgba(28, 28, 30, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.15);
-  --glass-border-soft: rgba(255, 255, 255, 0.08);
-  --hairline: rgba(255, 255, 255, 0.08);
-
-  --radius-xl: 28px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --radius-sm: 9px;
+  /* Binary radius. Surfaces are square; buttons are pills. Nothing between. */
   --radius-pill: 999px;
 
   --font-display: "Archivo", "Inter", system-ui, sans-serif;
@@ -45,7 +49,15 @@
   --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas,
     monospace;
 
-  --wrap: 1128px;
+  /* Full-bleed grid with fixed, generous gutters — capped only so the measure
+     stays readable on very wide screens. */
+  --wrap: 1440px;
+  --gutter: 64px;
+
+  /* The marginal label column: eyebrows and section labels sit in it, the
+     content sits in the main column. Repeated in every section for rhythm. */
+  --label-col: 180px;
+  --label-gap: 40px;
 }
 
 * {
@@ -68,8 +80,9 @@ body {
   background: var(--ground);
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -87,24 +100,43 @@ a {
 }
 
 ::selection {
-  background: rgba(242, 58, 58, 0.35);
+  background: var(--accent);
+  color: #fff;
 }
 
 .wrap {
   width: 100%;
   max-width: var(--wrap);
   margin: 0 auto;
-  padding: 0 28px;
+  padding: 0 var(--gutter);
 }
 
-/* ── Type roles ────────────────────────────────────────────────────────── */
+@media (max-width: 1000px) {
+  :root {
+    --gutter: 40px;
+    --label-col: 140px;
+    --label-gap: 28px;
+  }
+}
+
+@media (max-width: 700px) {
+  :root {
+    --gutter: 24px;
+  }
+}
+
+/* ── Type roles ────────────────────────────────────────────────────────────
+   A closed scale. Uniform -0.03em tracking on the sans, positive tracking on
+   the mono. Weight does almost no work — size and color carry hierarchy. */
 
 /* Lowercase control voice: eyebrows and control labels render lowercase in
    mono — via text-transform, so the markup keeps the site copy verbatim. */
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
+  font-weight: 400;
   letter-spacing: 0.14em;
+  line-height: 1.4;
   text-transform: lowercase;
   color: var(--text-dim);
 }
@@ -112,9 +144,10 @@ a {
 .h-display {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.02;
+  letter-spacing: -0.035em;
+  line-height: 0.99;
   color: var(--text);
+  text-wrap: balance;
 }
 
 .mono {
@@ -122,7 +155,9 @@ a {
   color: var(--text-dim);
 }
 
-/* ── Buttons ───────────────────────────────────────────────────────────── */
+/* ── Buttons ───────────────────────────────────────────────────────────────
+   Pill radius is reserved for interactive controls — the one place the page
+   is not square. Flat fills, hairline borders, no shadow of any kind. */
 
 .btn {
   display: inline-flex;
@@ -132,65 +167,42 @@ a {
   font-family: var(--font-body);
   font-weight: 500;
   font-size: 15px;
+  letter-spacing: -0.02em;
   line-height: 1;
   padding: 15px 26px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   cursor: pointer;
   transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
-.btn:active {
-  transform: translateY(1px);
-}
-
-/* The record red — the one place the accent is allowed to be loud. */
+/* The record red — flat, at full strength, no gradient and no glow. */
 .btn-red {
-  background: linear-gradient(180deg, var(--accent), #e02f2f);
+  background: var(--accent);
   color: #fff;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.25) inset,
-    0 8px 24px rgba(242, 58, 58, 0.28);
 }
 
 .btn-red:hover {
-  background: linear-gradient(180deg, #ff4747, var(--accent));
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.25) inset,
-    0 10px 30px rgba(242, 58, 58, 0.38);
+  background: var(--accent-hover);
 }
 
-/* Glass ghost button. */
 .btn-ghost {
-  background: var(--glass-fill);
-  border-color: var(--glass-border);
+  background: transparent;
+  border-color: var(--line);
   color: var(--text);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .btn-sm {
   font-size: 13px;
   padding: 10px 18px;
-}
-
-/* ── Glass panels ──────────────────────────────────────────────────────── */
-
-.glass {
-  background: var(--glass-fill);
-  border: 1px solid var(--glass-border-soft);
-  border-radius: var(--radius-lg);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
 }
 
 /* ── Nav ───────────────────────────────────────────────────────────────── */
@@ -201,41 +213,39 @@ a {
   left: 0;
   right: 0;
   z-index: 40;
-  background: rgba(8, 8, 10, 0.62);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
-  border-bottom: 1px solid var(--hairline);
+  background: var(--ground);
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .nav-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
+  height: 62px;
 }
 
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
 }
 
 .nav-logo img {
-  width: 27px;
-  height: 27px;
+  width: 24px;
+  height: 24px;
 }
 
 .logo-name {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 16.5px;
-  letter-spacing: -0.01em;
+  font-size: 16px;
+  letter-spacing: -0.03em;
 }
 
 .nav-meta {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
   text-transform: lowercase;
   color: var(--text-dim);
 }
@@ -243,10 +253,10 @@ a {
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 24px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .nav-meta {
     display: none;
   }
@@ -256,152 +266,154 @@ a {
 
 .hero {
   position: relative;
-  overflow: hidden;
-  padding: 156px 0 110px;
-}
-
-/* GSTheme.backdrop translated: the quiet deep-blue mesh the glass blurs.
-   Radial stops approximate the 3×3 MeshGradient control points. */
-.hero-mesh {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(52% 44% at 55% 45%, rgba(33, 36, 64, 0.85) 0%, transparent 70%),
-    radial-gradient(40% 36% at 12% 18%, rgba(26, 31, 56, 0.7) 0%, transparent 72%),
-    radial-gradient(46% 40% at 88% 24%, rgba(20, 26, 48, 0.6) 0%, transparent 70%),
-    radial-gradient(50% 44% at 20% 88%, rgba(18, 20, 38, 0.55) 0%, transparent 72%),
-    var(--ground);
-}
-
-/* A whisper of the accent behind the recorder card — the record state
-   bleeding through the glass. */
-.hero-mesh::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    34% 30% at 72% 52%,
-    rgba(242, 58, 58, 0.09) 0%,
-    transparent 70%
-  );
+  padding: 150px 0 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .hero-inner {
-  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
-  align-items: center;
-  gap: 64px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  align-items: start;
+  gap: 0;
+}
+
+/* The vertical hairline between copy and product is the only thing dividing
+   the two columns — no panel, no shadow, no depth. */
+.hero-figure {
+  border-left: 1px solid var(--line-soft);
+  padding-left: 56px;
 }
 
 .hero-copy {
-  max-width: 520px;
+  padding-right: 56px;
+  padding-bottom: 24px;
 }
 
 .hero-h1 {
-  font-size: clamp(46px, 6.6vw, 78px);
-  margin: 20px 0 22px;
+  font-size: clamp(44px, 7.4vw, 92px);
+  margin: 22px 0 28px;
 }
 
 .hero-sub {
-  font-size: 17.5px;
-  color: var(--text-soft);
-  max-width: 44ch;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  max-width: 42ch;
 }
 
 .hero-ctas {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 34px;
+  gap: 12px;
+  margin-top: 36px;
 }
 
+/* Requirements read as a spec rule across the foot of the hero: one hairline
+   above, 1px rules between items. The dot separators are gone.
+
+   This is a fixed-column grid, not a wrapping flex row. A flex row with
+   separator borders is exactly the failure mode the footer had — on wrap the
+   separators hang into empty space and the wrapped item loses the gutter. With
+   an explicit column count per breakpoint there is no ragged wrap to handle. */
 .hero-req {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 26px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  margin-top: 72px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
   text-transform: lowercase;
   color: var(--text-dim);
 }
 
-.req-sep {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
+.hero-req > span {
+  padding: 18px 0 18px 24px;
+  border-left: 1px solid var(--line-soft);
 }
 
-@media (max-width: 940px) {
+.hero-req > span:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+/* Below the point where three mono columns still fit, each requirement takes
+   its own full-width row on a rule and aligns to the page gutter. */
+@media (max-width: 700px) {
+  .hero-req {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-req > span {
+    padding: 14px 0;
+    border-left: none;
+    border-top: 1px solid var(--line-soft);
+  }
+  .hero-req > span:first-child {
+    border-top: none;
+  }
+}
+
+@media (max-width: 980px) {
   .hero {
-    padding-top: 130px;
+    padding-top: 120px;
   }
   .hero-inner {
-    grid-template-columns: 1fr;
-    gap: 56px;
+    grid-template-columns: minmax(0, 1fr);
   }
   .hero-copy {
-    max-width: 620px;
+    padding-right: 0;
+    padding-bottom: 56px;
+  }
+  .hero-figure {
+    border-left: none;
+    border-top: 1px solid var(--line-soft);
+    padding-left: 0;
+    padding-top: 56px;
+  }
+  .hero-req {
+    margin-top: 56px;
   }
 }
 
-/* ── Recorder card (the product visual, rebuilt native) ────────────────── */
+/* ── Recorder card (the product visual) ────────────────────────────────────
+   Flat opaque surface, 1px border, square corners. Was: 26px backdrop blur,
+   translucent gradient fill, 28px radius, 70px black drop shadow. */
 
 .recorder-wrap {
   position: relative;
-  max-width: 430px;
+  max-width: 420px;
   width: 100%;
-  justify-self: end;
-  margin: 0 auto;
-}
-
-@media (max-width: 940px) {
-  .recorder-wrap {
-    justify-self: center;
-  }
 }
 
 .recorder {
   position: relative;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.055) 0%,
-    rgba(255, 255, 255, 0.025) 100%
-  );
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  -webkit-backdrop-filter: blur(26px) saturate(1.3);
-  backdrop-filter: blur(26px) saturate(1.3);
-  padding: 24px 24px 20px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.09) inset,
-    0 24px 70px rgba(0, 0, 0, 0.55);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 20px 20px 4px;
 }
 
 .recorder-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 18px;
 }
 
 .recorder-title {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.01em;
+  font-size: 15px;
+  letter-spacing: -0.03em;
   color: var(--text);
 }
 
 .recorder-format {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   color: var(--text-dim);
 }
 
@@ -411,20 +423,19 @@ a {
 
 .recorder-timer {
   font-family: var(--font-mono);
-  font-size: clamp(40px, 4.6vw, 52px);
+  font-size: clamp(38px, 4.4vw, 46px);
   font-weight: 400;
-  letter-spacing: 0.02em;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: -0.02em;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
-  margin: 26px 0 18px;
+  padding: 4px 0 18px;
 }
 
+/* Rules above and below the waveform instead of a bordered box. */
 .recorder-wave {
-  border: 1px solid var(--glass-border-soft);
-  border-radius: var(--radius-md);
-  height: 92px;
-  overflow: hidden;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  height: 96px;
 }
 
 .recorder-wave canvas {
@@ -434,33 +445,30 @@ a {
 
 .recorder-action {
   display: flex;
-  justify-content: center;
-  margin: 22px 0 24px;
+  padding: 20px 0 22px;
 }
 
-/* The record pill — lowercase label, white glyph, the accent at full volume. */
+/* The record pill — the product's own record control, so it keeps the pill
+   and the accent. Flat fill, no gradient, no glow. */
 .rec-pill {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 16.5px;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.02em;
   text-transform: lowercase;
   color: #fff;
-  background: linear-gradient(180deg, #ff4545, var(--accent) 55%, #e22e2e);
+  background: var(--accent);
   border-radius: var(--radius-pill);
-  padding: 15px 34px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.3) inset,
-    0 10px 32px rgba(242, 58, 58, 0.35);
+  padding: 14px 30px;
 }
 
 .rec-glyph {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   background: #fff;
-  border-radius: 2.5px;
 }
 
 .recorder-recent-head {
@@ -468,38 +476,39 @@ a {
   align-items: center;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: lowercase;
   color: var(--text-dim);
-  margin-bottom: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
+/* Takes are rows on a rule, not individually bordered pills. */
 .take {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--glass-border-soft);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
 }
 
-.take + .take {
-  margin-top: 8px;
+.take:last-child {
+  border-bottom: none;
 }
 
 .take-thumb {
   flex-shrink: 0;
   color: var(--text-dim);
-  opacity: 0.8;
 }
 
 .take-name {
   flex: 1;
   min-width: 0;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -507,48 +516,46 @@ a {
 
 .take-len {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 
-/* Recording badge above the card. */
+/* Recording badge above the card — square, hairline, no fill wash. */
 .rec-status {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
   text-transform: lowercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(242, 58, 58, 0.13);
-  border: 1px solid rgba(242, 58, 58, 0.36);
-  border-radius: var(--radius-pill);
-  padding: 6px 13px;
-  margin-bottom: 14px;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  margin-bottom: 16px;
 }
 
 .rec-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
   background: var(--accent);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .rec-dot {
-    animation: rec-pulse 1.6s ease-in-out infinite;
+    animation: rec-pulse 1.6s steps(1, end) infinite;
   }
 }
 
 @keyframes rec-pulse {
   0%,
-  100% {
+  50% {
     opacity: 1;
   }
-  50% {
-    opacity: 0.35;
+  50.01%,
+  100% {
+    opacity: 0.28;
   }
 }
 
@@ -556,338 +563,440 @@ a {
 
 .section {
   position: relative;
-  padding: 108px 0;
+  padding: 112px 0;
 }
 
 .section + .section {
-  border-top: 1px solid var(--hairline);
+  border-top: 1px solid var(--line-soft);
 }
 
+/* The marginal label column — eyebrow sits in the margin, the statement sits
+   in the main column. Repeated in every section, which is what makes the page
+   read as a grid rather than a stack. */
 .section-head {
-  max-width: 560px;
-  margin-bottom: 56px;
+  display: grid;
+  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  gap: var(--label-gap);
+  align-items: start;
+  margin-bottom: 80px;
+}
+
+.section-head .eyebrow {
+  padding-top: 0.7em;
 }
 
 .section-h2 {
-  font-size: clamp(32px, 4.4vw, 48px);
-  margin-top: 18px;
+  font-size: clamp(32px, 4.8vw, 56px);
+  max-width: 16ch;
 }
 
-/* ── Features ──────────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .section {
+    padding: 76px 0;
+  }
+  .section-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    margin-bottom: 48px;
+  }
+  .section-head .eyebrow {
+    padding-top: 0;
+  }
+}
+
+/* ── Features ──────────────────────────────────────────────────────────────
+   Four columns on a rule. Was: 2×2 translucent blurred cards with 20px radii
+   and a hover fill. Now the top rule and the column alignment are the card. */
 
 .feat-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 64px 32px;
 }
 
 .feat-card {
-  padding: 30px 30px 32px;
-  border-radius: var(--radius-lg);
-  transition: border-color 0.25s ease, background-color 0.25s ease;
-}
-
-.feat-card:hover {
-  border-color: var(--glass-border);
-  background: rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
 }
 
 .feat-icon {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   color: var(--metal);
-  margin-bottom: 22px;
+  margin-bottom: 28px;
 }
 
 .feat-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 19px;
-  letter-spacing: -0.015em;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+  color: var(--text);
   margin-bottom: 10px;
 }
 
 .feat-desc {
-  font-size: 15px;
-  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--text-dim);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1000px) {
   .feat-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 48px 32px;
   }
 }
 
-/* ── How it works ──────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .feat-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+}
+
+/* ── How it works ──────────────────────────────────────────────────────────
+   The step number is the visual — set large in mono, on a rule. */
 
 .steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 64px 32px;
 }
 
 .step {
-  padding: 28px 28px 30px;
-  border-radius: var(--radius-lg);
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
 }
 
 .step-num {
+  display: block;
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  color: var(--accent);
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 40px;
 }
 
 .step-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 19px;
-  letter-spacing: -0.015em;
-  margin: 14px 0 10px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 10px;
 }
 
 .step-desc {
-  font-size: 15px;
-  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  color: var(--text-dim);
+  max-width: 34ch;
 }
 
 @media (max-width: 760px) {
   .steps {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+  .step-num {
+    margin-bottom: 20px;
   }
 }
 
-/* ── Per-app teaser ────────────────────────────────────────────────────── */
+/* ── Per-app teaser ────────────────────────────────────────────────────────
+   Was: 28px-radius card, two radial gradients and a 20px backdrop blur.
+   Now a flat bordered block using the same marginal-label grid as the
+   sections, so it sits on the page rhythm instead of floating above it. */
 
 .per-app-card {
   position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--glass-border-soft);
-  background:
-    radial-gradient(60% 90% at 84% 10%, rgba(242, 58, 58, 0.08) 0%, transparent 62%),
-    radial-gradient(50% 80% at 12% 100%, rgba(33, 36, 64, 0.5) 0%, transparent 70%),
-    rgba(255, 255, 255, 0.035);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  padding: 62px 56px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 64px;
+  display: grid;
+  grid-template-columns: var(--label-col) minmax(0, 1fr);
+  gap: var(--label-gap);
+  align-items: start;
 }
 
 .badge {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: lowercase;
-  color: rgba(255, 255, 255, 0.85);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-pill);
-  padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 5px 11px;
 }
 
 .per-app-h2 {
-  font-size: clamp(30px, 4.2vw, 44px);
-  margin: 22px 0 16px;
+  font-size: clamp(28px, 4vw, 44px);
+  max-width: 15ch;
 }
 
 .per-app-desc {
-  font-size: 16px;
-  color: var(--text-soft);
-  max-width: 56ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  max-width: 52ch;
+  margin-top: 20px;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 30px;
+  gap: 8px;
+  margin-top: 32px;
 }
 
+/* Square spec tags, not pills — these are labels, not controls. */
 .chip {
-  font-size: 13.5px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.82);
-  border: 1px solid var(--glass-border-soft);
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border: 1px solid var(--line-soft);
+  padding: 7px 13px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .per-app-card {
-    padding: 44px 28px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+    padding: 40px 28px;
   }
 }
 
-/* ── Download ──────────────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .per-app-card {
+    padding: 32px 22px;
+  }
+}
 
-.dl-wrap {
-  text-align: center;
-  max-width: 620px;
-  margin: 0 auto;
+/* ── Download ──────────────────────────────────────────────────────────────
+   Was: everything centered, with the seven fine-print items in one wrapping
+   dot-separated row. Now a two-column close — statement left, the fine print
+   rebuilt as a spec table on the right where each item gets its own rule. */
+
+.dl-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+  gap: 80px;
+  align-items: start;
 }
 
 .dl-h2 {
-  font-size: clamp(36px, 5vw, 56px);
-  margin: 18px 0 18px;
+  font-size: clamp(38px, 5.6vw, 68px);
+  margin: 20px 0 24px;
 }
 
 .dl-sub {
-  font-size: 16.5px;
-  color: var(--text-soft);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  max-width: 44ch;
 }
 
 .dl-ctas {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 14px;
+  gap: 12px;
   margin-top: 36px;
 }
 
-.dl-fine {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  margin-top: 34px;
+.spec-list {
+  list-style: none;
+  border-top: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
   text-transform: lowercase;
   color: var(--text-dim);
 }
 
-.dl-fine a {
-  color: var(--text-soft);
+.spec-list li {
+  border-bottom: 1px solid var(--line-soft);
+  padding: 13px 0;
+}
+
+.spec-list a {
+  color: var(--text);
   transition: color 0.15s ease;
 }
 
-.dl-fine a:hover {
-  color: var(--text);
+.spec-list a:hover {
+  color: var(--accent);
 }
 
-.dl-fine-dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
+@media (max-width: 900px) {
+  .dl-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
 }
 
-/* ── Footer ────────────────────────────────────────────────────────────── */
+/* ── Footer ────────────────────────────────────────────────────────────────
+   Rebuilt. The old footer was a single `justify-content: space-between` flex
+   row that silently stacked at narrow widths while its right column kept
+   `text-align: right` and its language list kept `justify-content: flex-end`
+   — so the links wrapped into ragged right-aligned lines with orphans. There
+   was no breakpoint that flipped alignment on wrap.
+
+   Now: an explicit column grid, everything left-aligned at every width, and
+   the language list on its own deterministic column grid so it can never wrap
+   raggedly. Nothing is ever right-aligned, so there is no alignment to flip. */
 
 footer {
-  border-top: 1px solid var(--hairline);
-  padding: 52px 0 56px;
+  border-top: 1px solid var(--line-soft);
+  padding: 72px 0 64px;
 }
 
-.footer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 18px;
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px var(--label-gap);
+  align-items: start;
+  padding-bottom: 56px;
 }
 
+/* The brand sits on the same rule as the other columns, so one continuous
+   hairline runs the full width, broken only by the column gaps. */
 .footer-brand {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
 }
 
 .footer-brand img {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 .footer-name {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 15.5px;
+  font-size: 15px;
+  letter-spacing: -0.03em;
 }
 
 .footer-meta {
   font-family: var(--font-mono);
   font-size: 11px;
+  letter-spacing: 0.1em;
   text-transform: lowercase;
   color: var(--text-dim);
 }
 
-.footer-divider {
-  height: 1px;
-  background: var(--hairline);
-  margin: 30px 0;
+/* Each footer column is headed by a rule rather than a label — the page adds
+   no copy that was not already there. */
+.footer-col {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
 }
 
-.footer-bottom {
+.footer-links {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 26px;
-}
-
-.footer-copy {
+  gap: 9px;
   font-size: 13px;
-  color: var(--text-dim);
-}
-
-.footer-legal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  font-size: 13px;
-  color: var(--text-soft);
-}
-
-.footer-legal a:hover,
-.footer-also a:hover,
-.lang-list a:hover {
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 
-.footer-sep {
-  color: rgba(255, 255, 255, 0.25);
+.footer-links a,
+.footer-also a,
+.footer-langs a {
+  transition: color 0.15s ease;
 }
 
-.footer-br {
-  text-align: right;
+.footer-links a:hover,
+.footer-also a:hover,
+.footer-langs a:hover {
+  color: var(--accent);
 }
 
+/* No max-width: the element carries the column's rule, so capping its width
+   would shorten the rule and break the continuous hairline across the row.
+   The grid column already sets the measure. */
 .footer-also {
   font-size: 13px;
+  letter-spacing: -0.02em;
   color: var(--text-dim);
 }
 
+/* Keep the link and its arrow on one line — the arrow orphaned onto its own
+   line was one of the things that made the old footer read as debris. */
 .footer-also a {
-  color: var(--text-soft);
+  color: var(--text);
+  white-space: nowrap;
 }
 
 /* Language selector, as a static list: the prototype is a single page, so the
-   dropdown became a flat mono list linking to the live locale pages. */
-.lang-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px 14px;
-  margin-top: 16px;
+   dropdown became a flat mono list linking to the live locale pages. Laid out
+   on a fixed column grid — the items land on columns at every width instead
+   of wrapping ragged, and the count is set per breakpoint so the rows stay
+   tidy. Always left-aligned. */
+.footer-langs {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px var(--label-gap);
+  border-top: 1px solid var(--line);
+  padding: 20px 0 24px;
   font-family: var(--font-mono);
   font-size: 11.5px;
+  letter-spacing: 0.04em;
   color: var(--text-dim);
-  max-width: 340px;
 }
 
-.lang-list a[aria-current="true"] {
+.footer-langs a[aria-current="true"] {
   color: var(--text);
 }
 
-@media (max-width: 640px) {
-  .footer-br {
-    text-align: left;
+.footer-base {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+@media (max-width: 1000px) {
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 40px 32px;
   }
-  .lang-list {
-    justify-content: flex-start;
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+  .footer-langs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px 24px;
+  }
+}
+
+@media (max-width: 620px) {
+  footer {
+    padding: 56px 0 48px;
+  }
+  .footer-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+    padding-bottom: 40px;
+  }
+  .footer-langs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

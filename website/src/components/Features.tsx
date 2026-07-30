@@ -70,7 +70,7 @@ export default function Features() {
         </div>
         <div className="feat-grid">
           {FEATURES.map((feature) => (
-            <div key={feature.title} className="glass feat-card">
+            <div key={feature.title} className="feat-card">
               {feature.icon}
               <div className="feat-title">{feature.title}</div>
               <p className="feat-desc">{feature.desc}</p>

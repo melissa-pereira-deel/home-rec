@@ -30,7 +30,7 @@ export default function HowItWorks() {
         </div>
         <div className="steps">
           {STEPS.map((step) => (
-            <div key={step.num} className="glass step">
+            <div key={step.num} className="step">
               <span className="step-num" aria-hidden="true">
                 {step.num}
               </span>
