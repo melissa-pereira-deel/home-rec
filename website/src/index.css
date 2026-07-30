@@ -1000,3 +1000,67 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* --- Glass variant of the per-app section (?v=glass) ------------------
+   An exploration layered on top of the flat default, not a replacement.
+   Only this one section's surface changes — grid, type, and spacing are
+   the flat version's, untouched. Glass needs something behind it to
+   refract, so the card sits over a contained ambient wash; the wash is
+   clipped to the stage so the neighbouring sections stay flat. */
+.per-app-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.per-app-ambient {
+  position: absolute;
+  inset: -7% -5%;
+  z-index: -1;
+  pointer-events: none;
+  /* Kept off the top-left corner so the badge stays legible; the warm
+     source sits low-left, the cool one high-right, so the panel picks up
+     a gradient across its diagonal rather than a hot spot. */
+  background:
+    radial-gradient(
+      40% 58% at 16% 74%,
+      rgba(242, 58, 58, 0.17),
+      transparent 72%
+    ),
+    radial-gradient(
+      46% 64% at 84% 26%,
+      rgba(86, 116, 214, 0.15),
+      transparent 74%
+    );
+  filter: blur(46px);
+}
+
+.per-app-card--glass {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(26px) saturate(1.25);
+  backdrop-filter: blur(26px) saturate(1.25);
+}
+
+/* The specular top edge is what actually sells translucency — without it
+   a tinted panel just reads as a lighter box. */
+.per-app-card--glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.5) 24%,
+    rgba(255, 255, 255, 0.5) 76%,
+    transparent
+  );
+}
+
+/* Tags lift with the panel so they don't read as flat stickers on glass. */
+.per-app-card--glass .badge,
+.per-app-card--glass .chip {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.16);
+}
