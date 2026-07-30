@@ -15,19 +15,23 @@ export default function Footer() {
     <footer>
       <div className="wrap">
         <div className="footer-top">
-          <div className="footer-brand">
-            <img src="/favicon.svg" alt="" width={22} height={22} />
-            <span className="footer-name">Home Rec</span>
-            <span className="footer-meta">macOS app</span>
-          </div>
+          {/* Brand and its navigation stack as one identity block on the left;
+              the language control is the only thing on the right. */}
+          <div className="footer-id">
+            <div className="footer-brand">
+              <img src="/favicon.svg" alt="" width={22} height={22} />
+              <span className="footer-name">Home Rec</span>
+              <span className="footer-meta">macOS app</span>
+            </div>
 
-          <nav className="footer-links" aria-label="Site">
-            <a href={LINKS.privacy}>Privacy</a>
-            <a href={LINKS.terms}>Terms</a>
-            <a href={LINKS.github} target="_blank" rel="noopener">
-              GitHub ↗
-            </a>
-          </nav>
+            <nav className="footer-links" aria-label="Site">
+              <a href={LINKS.privacy}>Privacy</a>
+              <a href={LINKS.terms}>Terms</a>
+              <a href={LINKS.github} target="_blank" rel="noopener">
+                GitHub ↗
+              </a>
+            </nav>
+          </div>
 
           {/* `details` gives a real disclosure with keyboard support and no
               script; each entry still links to its locale page as before. */}
@@ -35,8 +39,8 @@ export default function Footer() {
             <summary>
               {CURRENT.label}
               <svg
-                width="9"
-                height="6"
+                width="8"
+                height="5"
                 viewBox="0 0 9 6"
                 fill="none"
                 stroke="currentColor"

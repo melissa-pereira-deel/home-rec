@@ -935,24 +935,38 @@ footer {
   padding: 72px 0 56px;
 }
 
-/* Brand, navigation and language on one row. */
+/* Identity block left (brand with its navigation beneath), language right. */
 .footer-top {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 20px 56px;
+  gap: 24px 56px;
   padding-bottom: 56px;
+}
+
+.footer-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  /* 6px + the links' own 14px top padding reads as ~20px of separation. */
+  gap: 6px;
 }
 
 .footer-brand {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  margin-right: auto;
 }
 
+/* Optical, not mathematical: flex centres the 22px mark on its own line box,
+   which left it sitting 2px below the centre of the wordmark beside it. The
+   nudge closes that, moving the icon rather than the wordmark so the type
+   stays on its own baseline. */
 .footer-brand img {
   align-self: center;
+  position: relative;
+  top: -2px;
 }
 
 .footer-name {
@@ -998,23 +1012,31 @@ footer {
 .lang-menu {
   position: relative;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
 .lang-menu summary {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 13px 14px;
-  margin: -13px 0;
+  gap: 6px;
+  padding: 7px 10px;
   border: 1px solid var(--line-soft);
   cursor: pointer;
   list-style: none;
   transition:
     border-color 0.15s ease,
     color 0.15s ease;
+}
+
+/* The control reads small; the tap area does not. This keeps the hit region
+   at ~44px without inflating the visible box. */
+.lang-menu summary::after {
+  content: "";
+  position: absolute;
+  inset: -9px -6px;
 }
 
 .lang-menu summary::-webkit-details-marker {
@@ -1038,18 +1060,19 @@ footer {
 .lang-menu nav {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 12px);
   z-index: 5;
   display: flex;
   flex-direction: column;
-  min-width: 148px;
-  padding: 6px 0;
+  min-width: 138px;
+  padding: 5px 0;
   background: var(--surface);
   border: 1px solid var(--line);
 }
 
+/* The menu items stay at full tap height — only the closed control shrank. */
 .lang-menu nav a {
-  padding: 13px 14px;
+  padding: 14px 12px;
   white-space: nowrap;
   transition: color 0.15s ease;
 }
@@ -1068,8 +1091,11 @@ footer {
   border-top: 1px solid var(--line-soft);
   padding-top: 28px;
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
+  /* Below the page's 12px floor on purpose: this is the fine print, and
+     dropping it a step puts real distance between it and the navigation
+     above. Tracking opens slightly to hold legibility at the smaller size. */
+  font-size: 10px;
+  letter-spacing: 0.04em;
   line-height: 1.5;
   color: var(--text-dim);
 }
@@ -1078,8 +1104,8 @@ footer {
   color: var(--text);
   white-space: nowrap;
   display: inline-block;
-  padding: 13px 0;
-  margin: -13px 0;
+  padding: 15px 0;
+  margin: -15px 0;
 }
 
 @media (max-width: 899px) {
