@@ -19,6 +19,28 @@ Native Mac app. Lossless WAV. One click. Free, forever.</p>
 ![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)
 ![Version](https://img.shields.io/badge/Version-1.0-informational.svg)
 
+## On this branch — redesign exploration
+
+`explore/concept-prototypes` carries the 2026 redesign work alongside the app.
+Nothing here ships with Home Rec; each piece runs on its own.
+
+| What | Where | Run it |
+|---|---|---|
+| Concept prototypes — four design directions, every state | `prototypes/HomeRecConcepts` | `swift run -c release --package-path prototypes/HomeRecConcepts` |
+| Design systems — GlassKit · StageKit · PocketOperatorKit | `design-system` | `swift run --package-path design-system DesignSystemGallery` |
+| Marketing site (Astro, 7 locales) | `site` | `npm install && npm run dev --prefix site` |
+
+Both Swift packages are ordinary SwiftPM executables: closing the window or the
+terminal loses nothing, and the command above rebuilds and relaunches in
+seconds. Neither writes to disk, records audio, or asks for a permission — the
+recorder faces are simulated.
+
+Reading rather than running:
+
+- [`prototypes/HomeRecConcepts/docs/glass-spec.md`](prototypes/HomeRecConcepts/docs/glass-spec.md) — the redesign spec, 26 annotated screens
+- [`design-system/docs/`](design-system/docs) — one design spec per kit
+- [`design-system/README.md`](design-system/README.md) — how to adopt a kit
+
 ## Overview
 
 Home Rec is a lightweight macOS app that captures system audio output and saves it as high-quality WAV files. Built with SwiftUI and ScreenCaptureKit, it uses Apple's native audio capture API to record any sound routed through the system audio output — useful for capturing voice memos, screen recordings, meeting audio, or any other audio playing on your Mac.
