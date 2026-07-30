@@ -19,7 +19,7 @@ export default function Footer() {
               the language control is the only thing on the right. */}
           <div className="footer-id">
             <div className="footer-brand">
-              <img src="/favicon.svg" alt="" width={22} height={22} />
+              <img src="/favicon.svg" alt="" width={24} height={24} />
               <span className="footer-name">Home Rec</span>
               <span className="footer-meta">macOS app</span>
             </div>

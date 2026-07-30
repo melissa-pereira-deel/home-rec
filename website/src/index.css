@@ -937,20 +937,24 @@ footer {
 .footer-brand img {
   align-self: center;
   position: relative;
-  top: -2px;
+  /* Retuned for the 24px mark against 18px type — the previous -2px was
+     calibrated to the old 22/15 pairing and overshot at these sizes. */
+  top: -1px;
 }
 
+/* One step up the scale (the 18px step held in reserve) so the brand outranks
+   the navigation beneath it. The mark grows with it, 22 -> 24px. */
 .footer-name {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: 15px;
-  letter-spacing: -0.02em;
+  font-size: 18px;
+  letter-spacing: -0.025em;
   line-height: 1.2;
 }
 
 .footer-meta {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.02em;
   color: var(--text-dim);
 }
