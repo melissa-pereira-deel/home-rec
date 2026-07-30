@@ -1,33 +1,27 @@
 import { LINKS, LOCALES } from "../links.ts";
 
-/* Rebuilt footer.
+/* Three bands: brand + navigation + language on one row, then the legal line
+   with the sister-product credit set to its right in the same register.
 
-   The previous one was a single flex row with `justify-content: space-between`
-   and no responsive handling. Below roughly 740px the two columns silently
-   stacked, but the right column kept `text-align: right` and the language list
-   kept `justify-content: flex-end` — so seven mono links wrapped into ragged
-   right-aligned lines with orphans, inside a block that was otherwise
-   left-stacked. There was no breakpoint that flipped alignment on wrap.
+   The previous version stacked Privacy/Terms/GitHub as a vertical column,
+   which left three short links marooned in a wide track, and laid all seven
+   locales out flat — a full row that divides into no column count without
+   orphaning one. Both are now horizontal, and the locales are a disclosure. */
 
-   The fix is structural, not a patch: an explicit column grid, everything
-   left-aligned at every width, and the language list on its own fixed column
-   grid with a per-breakpoint column count. Nothing is right-aligned anywhere,
-   so there is no alignment left to disagree with the stacking. */
+const CURRENT = LOCALES.find((locale) => "current" in locale) ?? LOCALES[0];
 
 export default function Footer() {
   return (
     <footer>
       <div className="wrap">
-        <div className="footer-grid">
+        <div className="footer-top">
           <div className="footer-brand">
             <img src="/favicon.svg" alt="" width={22} height={22} />
             <span className="footer-name">Home Rec</span>
             <span className="footer-meta">macOS app</span>
           </div>
 
-          {/* No column headings: the page adds no copy that was not already
-              here, so each column is headed by a rule instead of a label. */}
-          <nav className="footer-col footer-links" aria-label="Legal">
+          <nav className="footer-links" aria-label="Site">
             <a href={LINKS.privacy}>Privacy</a>
             <a href={LINKS.terms}>Terms</a>
             <a href={LINKS.github} target="_blank" rel="noopener">
@@ -35,32 +29,48 @@ export default function Footer() {
             </a>
           </nav>
 
-          <div className="footer-col footer-also">
+          {/* `details` gives a real disclosure with keyboard support and no
+              script; each entry still links to its locale page as before. */}
+          <details className="lang-menu">
+            <summary>
+              {CURRENT.label}
+              <svg
+                width="9"
+                height="6"
+                viewBox="0 0 9 6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M1 1.25 4.5 4.75 8 1.25" />
+              </svg>
+            </summary>
+            <nav aria-label="Language">
+              {LOCALES.map((locale) => (
+                <a
+                  key={locale.lang}
+                  href={locale.href}
+                  hrefLang={locale.lang}
+                  lang={locale.lang}
+                  aria-current={"current" in locale ? true : undefined}
+                >
+                  {locale.label}
+                </a>
+              ))}
+            </nav>
+          </details>
+        </div>
+
+        <div className="footer-base">
+          <span>© 2026 Melissa de Britto&ensp;·&ensp;Apache 2.0 License</span>
+          <span className="footer-also">
             More from The Building Blocks Co.:{" "}
             <a href={LINKS.sumsight} target="_blank" rel="noopener">
               Sumsight ↗
             </a>
-          </div>
-        </div>
-
-        {/* The live site's language dropdown, flattened to a static list —
-            each entry links to the matching locale page on homerec.app. */}
-        <nav className="footer-langs" aria-label="Language">
-          {LOCALES.map((locale) => (
-            <a
-              key={locale.lang}
-              href={locale.href}
-              hrefLang={locale.lang}
-              lang={locale.lang}
-              aria-current={"current" in locale ? true : undefined}
-            >
-              {locale.label}
-            </a>
-          ))}
-        </nav>
-
-        <div className="footer-base">
-          © 2026 Melissa de Britto&ensp;·&ensp;Apache 2.0 License
+          </span>
         </div>
       </div>
     </footer>
