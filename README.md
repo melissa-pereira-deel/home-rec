@@ -22,17 +22,32 @@ Native Mac app. Lossless WAV. One click. Free, forever.</p>
 ## On this branch — redesign exploration
 
 `explore/concept-prototypes` carries the 2026 redesign work alongside the app.
-Nothing here ships with Home Rec; each piece runs on its own.
+Nothing here ships with Home Rec; each piece is a separate package that runs on
+its own.
 
-| What | Where | Run it |
-|---|---|---|
-| Concept prototypes — four design directions, every state | `prototypes/HomeRecConcepts` | `swift run -c release --package-path prototypes/HomeRecConcepts` |
-| Design systems — GlassKit · StageKit · PocketOperatorKit | `design-system` | `swift run --package-path design-system DesignSystemGallery` |
-| Marketing site (Astro, 7 locales) | `site` | `npm install && npm run dev --prefix site` |
+Each command below `cd`s first, so it works no matter where your shell is:
 
-Both Swift packages are ordinary SwiftPM executables: closing the window or the
-terminal loses nothing, and the command above rebuilds and relaunches in
-seconds. Neither writes to disk, records audio, or asks for a permission — the
+**Concept prototypes** — four design directions, driven through every state:
+
+```bash
+cd ~/home-rec-exp/prototypes/HomeRecConcepts && swift run -c release
+```
+
+**Design systems** — GlassKit · StageKit · PocketOperatorKit, in one gallery:
+
+```bash
+cd ~/home-rec-exp/design-system && swift run DesignSystemGallery
+```
+
+**Marketing site** — Astro, 7 locales, serves on :4321:
+
+```bash
+cd ~/home-rec-exp/site && npm install && npm run dev
+```
+
+Both Swift packages are ordinary SwiftPM executables: **closing the window or
+the terminal loses nothing**, and the command rebuilds and relaunches in
+seconds. Neither writes to disk, records audio, nor asks for a permission — the
 recorder faces are simulated.
 
 Reading rather than running:
