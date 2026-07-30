@@ -1,0 +1,33 @@
+---
+// The fixed top nav, shared by the landing page and the legal pages so the
+// two can't drift apart (the Download CTA in particular is what GA4's
+// download_click event measures — hence data-ga-id="nav", unchanged).
+import { LOCALES, localeUrl } from '../i18n/config';
+import type { LocaleCode } from '../i18n/config';
+import { getStrings } from '../i18n/utils';
+import { DMG } from '../links';
+import AppleMark from './AppleMark.astro';
+
+interface Props {
+  locale: LocaleCode;
+}
+
+const { locale } = Astro.props;
+const t = getStrings(locale);
+const current = LOCALES.find((l) => l.code === locale)!;
+---
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a href={localeUrl(current.path)} class="nav-logo">
+      <img src="/favicon.svg" alt="" width="24" height="24" />
+      <span class="logo-name">Home Rec</span>
+    </a>
+    <div class="nav-actions">
+      <span class="nav-meta">{t.nav.spec}</span>
+      <a href={DMG} data-ga-id="nav" class="btn btn-red btn-sm">
+        <AppleMark size={11} />
+        {t.nav.download}
+      </a>
+    </div>
+  </div>
+</nav>

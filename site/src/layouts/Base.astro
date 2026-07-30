@@ -1,0 +1,151 @@
+---
+import { LOCALES, SITE, localeUrl } from '../i18n/config';
+import type { LocaleCode } from '../i18n/config';
+import { getStrings } from '../i18n/utils';
+import '../styles/global.css';
+
+interface Props {
+  locale: LocaleCode;
+  path: string; // URL segment for this page ('' for English root)
+  title?: string; // overrides the landing-page <title>
+  description?: string; // overrides the landing-page description + OG description
+  canonicalPath?: string; // absolute path, for pages that aren't a locale root
+  alternates?: boolean; // emit hreflang alternates (only valid if translated)
+  appJsonLd?: boolean; // emit the SoftwareApplication graph
+}
+
+const {
+  locale,
+  path,
+  title,
+  description,
+  canonicalPath,
+  // hreflang and the SoftwareApplication graph both describe the translated
+  // landing page. The legal pages are English-only documents about the site,
+  // so they opt out rather than advertise translations that would 404.
+  alternates = true,
+  appJsonLd = true,
+} = Astro.props;
+const t = getStrings(locale);
+const canonical = SITE + (canonicalPath ?? localeUrl(path));
+const pageTitle = title ?? t.meta.title;
+const pageDescription = description ?? t.meta.description;
+const ogTitle = title ?? t.meta.ogTitle;
+const ogDescription = description ?? t.meta.ogDescription;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Home Rec',
+  applicationCategory: 'MultimediaApplication',
+  operatingSystem: 'macOS 15+',
+  description: t.meta.description,
+  url: canonical,
+  downloadUrl: 'https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg',
+  softwareVersion: 'latest',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  author: { '@type': 'Person', name: 'Melissa de Britto' },
+  inLanguage: locale,
+};
+---
+<!DOCTYPE html>
+<html lang={locale}>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-56GPLH521X"></script>
+  <script is:inline>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    // Append ?debug=1 to any URL to stream this session's hits into GA4's
+    // DebugView (Admin → DebugView), so tracking can be verified without the
+    // Google Analytics Debugger extension. Anchored to a ? or & and requiring
+    // the exact value so '?nodebug=1' and '?debug=10' don't trip it. Opt-in per
+    // session: a plain visit configures gtag exactly as before.
+    if (/[?&]debug=1(?:&|$)/.test(location.search)) {
+      gtag('config', 'G-56GPLH521X', { debug_mode: true });
+    } else {
+      gtag('config', 'G-56GPLH521X');
+    }
+  </script>
+
+  <title>{pageTitle}</title>
+  <meta name="description" content={pageDescription} />
+  <meta name="theme-color" content="#0a0a0a" />
+
+  <link rel="canonical" href={canonical} />
+
+  <!-- hreflang: every locale + x-default, symmetric across all pages -->
+  {alternates && (
+    <>
+      {LOCALES.map((l) => (
+        <link rel="alternate" hreflang={l.code} href={SITE + localeUrl(l.path)} />
+      ))}
+      <link rel="alternate" hreflang="x-default" href={SITE + '/'} />
+    </>
+  )}
+
+  <!-- Favicon (matches the topnav logo mark). ?v=3 busts stale browser cache. -->
+  <link rel="icon" href="/favicon.ico?v=3" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+  <link rel="icon" type="image/png" sizes="180x180" href="/apple-touch-icon.png?v=3" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content={ogTitle} />
+  <meta property="og:description" content={ogDescription} />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={canonical} />
+  <meta property="og:locale" content={locale.replace('-', '_')} />
+
+  <!-- Fonts: Archivo (matching the app) + Inter, self-hosted from /fonts.
+       @font-face rules live at the top of global.css. Preloading the two latin
+       files because they sit behind the stylesheet in the discovery chain and
+       every page needs them immediately; latin-ext is left to unicode-range so
+       English visitors never pay for it. -->
+  <link rel="preload" href="/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+  <!-- Structured data -->
+  {appJsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+</head>
+
+<body>
+  <slot />
+
+  <!-- Google Analytics: track Download + Buy me a coffee clicks.
+       link_id comes from data-ga-id on the anchor ('nav' | 'hero' | 'footer-cta')
+       and is the parameter to segment on: it identifies which CTA was clicked and
+       survives copy changes. link_text is the visible label, which is translated
+       per locale and gets rewritten whenever the buttons are redesigned — a June
+       2026 relabel to "Download for macOS" silently broke reporting that had been
+       keyed on it. -->
+  <script is:inline>
+    document.addEventListener('click', function (e) {
+      var link = e.target.closest('a[href]');
+      if (!link) return;
+      var href = link.getAttribute('href') || '';
+      var label = (link.textContent || '').trim();
+      var id = link.getAttribute('data-ga-id') || 'untagged';
+
+      if (href.indexOf('HomeRec.dmg') !== -1 && href.indexOf('.sha256') === -1) {
+        gtag('event', 'download_click', {
+          link_id: id,
+          link_url: href,
+          link_text: label
+        });
+      } else if (href.indexOf('buymeacoffee.com') !== -1) {
+        gtag('event', 'buy_me_a_coffee_click', {
+          link_id: id,
+          link_url: href,
+          link_text: label
+        });
+      }
+    });
+  </script>
+</body>
+</html>

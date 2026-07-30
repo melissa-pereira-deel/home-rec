@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "title": "Home Rec — 錄下你正在聽到的聲音",
+    "description": "將 Mac 的音訊輸出擷取為無損 WAV。免驅動程式，免繞送設定，從選單列一鍵完成。專為音樂創作者、DJ 與製作人打造。",
+    "ogTitle": "Home Rec — 錄下你正在聽到的聲音",
+    "ogDescription": "將 Mac 的音訊輸出擷取為無損 WAV。免驅動程式，免繞送設定，從選單列一鍵完成。"
+  },
+  "nav": {
+    "download": "下載 macOS 版",
+    "spec": "wav · 48khz · 無損"
+  },
+  "hero": {
+    "eyebrow": "macOS &nbsp;·&nbsp; 開放原始碼 &nbsp;·&nbsp; 免費",
+    "h1": "錄下你<br>正在聽到的聲音。",
+    "sub": "把 Mac 正在播放的任何聲音擷取為無損 WAV。一鍵完成。免驅動程式、免繞送、免設定、免帳號。",
+    "ctaDownload": "下載 macOS 版",
+    "ctaCoffee": "請我喝杯咖啡",
+    "req1": "macOS 15+",
+    "req2": "Apple Silicon 與 Intel",
+    "req3": "免帳號"
+  },
+  "app": {
+    "recording": "錄製中",
+    "stop": "停止",
+    "reveal": "在 Finder 中顯示",
+    "windowAria": "Home Rec 應用程式正在錄製，計時器顯示 02:47，並有動態波形",
+    "timerAria": "錄製時間：2 分 47 秒",
+    "stopAria": "停止錄製",
+    "filenameAria": "輸出檔案名稱",
+    "recent": "最近",
+    "allTakes": "所有錄音",
+    "take1": "廚房廣播，早晨",
+    "take2": "副歌構想 — 第 3 次",
+    "take3": "語音備忘 14"
+  },
+  "features": {
+    "eyebrow": "功能",
+    "h2": "為你實際的<br>工作方式而打造。",
+    "card1": {
+      "title": "選單列隨時待命",
+      "desc": "Home Rec 常駐在你的選單列，即使關閉視窗也持續運作。一鍵開啟精簡的彈出視窗——波形、計時器、錄製按鈕一應俱全。不用切換焦點就能開始錄製。"
+    },
+    "card2": {
+      "title": "每次都是無損 WAV",
+      "desc": "48kHz 立體聲 PCM。沒有壓縮，沒有編碼失真。聽到什麼就錄到什麼，原汁原味——可直接用於 Ableton、Logic Pro、任何 DAW、任何音訊編輯器，毫無顧慮。"
+    },
+    "card3": {
+      "title": "即時波形回饋",
+      "desc": "即時振幅視覺化讓你確認聲音確實正在流動，而不只是一個閃爍的圓點。波形會同時顯示在彈出視窗與主視窗中，讓你隨時掌握訊號狀態。"
+    },
+    "card4": {
+      "title": "零設定，立即可用。",
+      "desc": "免虛擬音訊驅動程式，免迴路繞送，免 Audio MIDI 設定。只要授予一次「螢幕錄製」權限就好。在 Apple Silicon 與 Intel 上都能運作，無需任何設定。"
+    }
+  },
+  "how": {
+    "eyebrow": "運作方式",
+    "h2": "三個步驟。<br>就這樣。",
+    "step1": {
+      "title": "播放任何聲音",
+      "desc": "打開你正在使用的任何應用程式或網站。Home Rec 會擷取 Mac 正在播放的聲音。"
+    },
+    "step2": {
+      "title": "點一下錄製",
+      "desc": "在選單列彈出視窗或主視窗中按下紅色按鈕，錄製立即開始。即時計時器與波形會確認聲音正在流動。"
+    },
+    "step3": {
+      "title": "完成。",
+      "desc": "點一下停止，你的 WAV 檔案就會以含時間戳記的檔名存到桌面。點一下「在 Finder 中顯示」，再拖到任何你需要的地方。"
+    }
+  },
+  "perApp": {
+    "badge": "即將推出",
+    "h2": "只錄一個應用程式，<br>其餘原封不動。",
+    "desc": "依應用程式擷取音訊，專為 DJ、製作人與節奏創作者打造。只錄你正在使用的那個應用程式——沒有 Slack 提示音，沒有背景聲音溜進你的混音裡。終於做到了。",
+    "chipAny": "任何應用程式"
+  },
+  "download": {
+    "eyebrow": "準備好了嗎？",
+    "h2": "通通都是你的。",
+    "sub": "現在免費，永遠免費。由一個人打造。如果 Home Rec 值得在你的 Mac 上佔有一席之地，你可以請我喝杯咖啡——但那是禮物，不是費用。",
+    "ctaDownload": "下載 macOS 版",
+    "ctaCoffee": "請我喝杯咖啡",
+    "fine1": "macOS 15（Sequoia）或更新版本",
+    "fine2": "Apple Silicon 與 Intel",
+    "fine3": "已簽署與公證",
+    "fine4": "無遙測",
+    "releaseNotes": "版本資訊",
+    "sha256": "SHA-256",
+    "openSource": "在 GitHub 開放原始碼"
+  },
+  "footer": {
+    "license": "Apache 2.0 授權",
+    "privacy": "隱私權",
+    "terms": "條款",
+    "github": "GitHub",
+    "also": "The Building Blocks Co. 的更多作品："
+  },
+  "switcher": {
+    "label": "選擇語言"
+  }
+}

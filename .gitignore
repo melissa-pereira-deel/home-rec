@@ -92,3 +92,8 @@ notariz*.txt
 .vercel
 .env*
 *.profraw
+
+# Astro site build output
+site/dist/
+site/node_modules/
+site/.astro/

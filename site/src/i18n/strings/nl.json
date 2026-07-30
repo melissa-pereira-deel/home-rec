@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "title": "Home Rec — Neem op wat je hoort",
+    "description": "Leg de audio-uitvoer van je Mac vast als lossless WAV. Geen drivers. Geen routeringstrucs. Eén klik vanuit de menubalk. Gemaakt voor muzikanten, dj's en producers.",
+    "ogTitle": "Home Rec — Neem op wat je hoort",
+    "ogDescription": "Leg de audio-uitvoer van je Mac vast als lossless WAV. Geen drivers. Geen routeringstrucs. Eén klik vanuit de menubalk."
+  },
+  "nav": {
+    "download": "Download voor macOS",
+    "spec": "wav · 48khz · lossless"
+  },
+  "hero": {
+    "eyebrow": "macOS &nbsp;·&nbsp; Open source &nbsp;·&nbsp; Gratis",
+    "h1": "Neem op<br>wat je hoort.",
+    "sub": "Leg alles wat je Mac afspeelt vast als lossless WAV. Eén klik. Geen drivers, geen routering, geen installatie, geen account.",
+    "ctaDownload": "Download voor macOS",
+    "ctaCoffee": "Trakteer me op een koffie",
+    "req1": "macOS 15+",
+    "req2": "Apple Silicon & Intel",
+    "req3": "Geen account nodig"
+  },
+  "app": {
+    "recording": "Opnemen",
+    "stop": "Stoppen",
+    "reveal": "Toon in Finder",
+    "windowAria": "Home Rec-app met een lopende opname, timer op 02:47 en geanimeerde golfvorm",
+    "timerAria": "Opnameduur: 2 minuten en 47 seconden",
+    "stopAria": "Opname stoppen",
+    "filenameAria": "Naam van uitvoerbestand",
+    "recent": "recent",
+    "allTakes": "alle opnames",
+    "take1": "keukenradio, ochtend",
+    "take2": "refrein-idee — take 3",
+    "take3": "spraakmemo 14"
+  },
+  "features": {
+    "eyebrow": "Functies",
+    "h2": "Gemaakt voor hoe<br>jij echt werkt.",
+    "card1": {
+      "title": "Altijd in de menubalk",
+      "desc": "Home Rec leeft in je menubalk en blijft draaien als je het venster sluit. Eén klik opent een compacte popover — golfvorm, timer, opnameknop. Start een opname zonder van focus te wisselen."
+    },
+    "card2": {
+      "title": "Altijd lossless WAV",
+      "desc": "48kHz stereo-PCM. Geen compressie. Geen codec-artefacten. Wat erin gaat, komt er precies zo uit als het klonk — klaar voor Ableton, Logic Pro, elke DAW, elke audio-editor, zonder gedoe."
+    },
+    "card3": {
+      "title": "Live golfvorm",
+      "desc": "De realtime amplitudeweergave bevestigt dat er echt audio doorkomt — niet zomaar een knipperend stipje. De golfvorm verschijnt zowel in de popover als in het hoofdvenster, zodat je altijd weet dat het signaal goed is."
+    },
+    "card4": {
+      "title": "Geen installatie. Werkt meteen.",
+      "desc": "Geen virtuele audiodrivers. Geen loopback-routering. Geen Audio-MIDI-configuratie. Geef één keer toestemming voor Schermopname — en dat is het. Werkt op Apple Silicon en Intel zonder enige configuratie."
+    }
+  },
+  "how": {
+    "eyebrow": "Hoe het werkt",
+    "h2": "Drie stappen.<br>Meer niet.",
+    "step1": {
+      "title": "Speel iets af",
+      "desc": "Open een app of website waarmee je werkt. Home Rec legt de audio vast die je Mac afspeelt."
+    },
+    "step2": {
+      "title": "Klik op Opnemen",
+      "desc": "Druk op de rode knop in de popover van de menubalk of in het hoofdvenster. De opname begint meteen. De live timer en golfvorm bevestigen dat er audio doorkomt."
+    },
+    "step3": {
+      "title": "Klaar.",
+      "desc": "Klik op Stoppen. Je WAV-bestand verschijnt op het bureaublad met een naam met datum en tijd. Klik op \"Toon in Finder\" en sleep het naar waar je het nodig hebt."
+    }
+  },
+  "perApp": {
+    "badge": "Binnenkort",
+    "h2": "Neem één app op.<br>Laat de rest met rust.",
+    "desc": "Audio-opname per app, gemaakt voor dj's, producers en beatmakers. Neem alleen de app op waarin je werkt — geen Slack-meldingen, geen achtergrondgeluid dat in je mix sluipt. Eindelijk.",
+    "chipAny": "Elke app"
+  },
+  "download": {
+    "eyebrow": "Klaar om te beginnen?",
+    "h2": "Helemaal voor jou.",
+    "sub": "Nu gratis, altijd gratis. Gebouwd door één persoon. Als Home Rec een plekje op je Mac verdient, mag je me op een koffie trakteren — maar het is een cadeau, geen kosten.",
+    "ctaDownload": "Download voor macOS",
+    "ctaCoffee": "Trakteer me op een koffie",
+    "fine1": "macOS 15 (Sequoia) of nieuwer",
+    "fine2": "Apple Silicon & Intel",
+    "fine3": "Ondertekend & genotariseerd",
+    "fine4": "Geen telemetrie",
+    "releaseNotes": "Releaseopmerkingen",
+    "sha256": "SHA-256",
+    "openSource": "Open source op GitHub"
+  },
+  "footer": {
+    "license": "Apache 2.0-licentie",
+    "privacy": "Privacy",
+    "terms": "Voorwaarden",
+    "github": "GitHub",
+    "also": "Meer van The Building Blocks Co.:"
+  },
+  "switcher": {
+    "label": "Taal kiezen"
+  }
+}

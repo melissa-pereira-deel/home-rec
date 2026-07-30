@@ -1,0 +1,180 @@
+---
+// English-only legal document. Restored from the pre-Astro site (4 June 2026),
+// with section 2 rewritten: the original said the site ran no analytics and set
+// no cookies, which stopped being true on 6 June 2026 when GA4 was added.
+import Base from '../layouts/Base.astro';
+import SiteNav from '../components/SiteNav.astro';
+import LegalFooter from '../components/LegalFooter.astro';
+import { DEFAULT_LOCALE } from '../i18n/config';
+import { REPO, COFFEE, CONTACT } from '../links';
+
+const title = 'Privacy Policy — Home Rec';
+const description =
+  'Privacy Policy for Home Rec — a macOS app published under The Building Blocks Co.';
+---
+<Base
+  locale={DEFAULT_LOCALE}
+  path=""
+  title={title}
+  description={description}
+  canonicalPath="/privacy"
+  alternates={false}
+  appJsonLd={false}
+>
+  <SiteNav locale={DEFAULT_LOCALE} />
+
+  <main class="legal">
+    <div class="legal-inner">
+      <a href="/" class="legal-back">← Back to Home Rec</a>
+
+      <h1>Privacy Policy</h1>
+      <p class="legal-meta">Last updated: 26 July 2026</p>
+
+      <div class="legal-note">
+        <p>
+          <strong>Change notice (26 July 2026).</strong> This site now uses Google Analytics,
+          which sets cookies in your browser. An earlier version of this policy said the site
+          ran no analytics and set no cookies. Section 2 below has been rewritten to describe
+          what is actually collected.
+        </p>
+      </div>
+
+      <div class="legal-note">
+        <p>
+          <strong>The short version:</strong> the Home Rec app runs entirely on your Mac. It
+          makes no network calls, sends no telemetry, and has no analytics. Your recordings
+          stay on your device and we never see them. This website is separate: it uses Google
+          Analytics to count visits and Download clicks, which does set cookies. We mention
+          every third party we rely on below — there are only a few.
+        </p>
+      </div>
+
+      <h2>1. The Home Rec app</h2>
+      <p>
+        Home Rec captures audio playing through your Mac's system output and writes it to a
+        local WAV file on your computer. The app uses Apple's <strong>ScreenCaptureKit</strong>
+        framework, gated by the macOS Screen Recording permission you grant in
+        <em class="ui">System Settings → Privacy &amp; Security</em>.
+      </p>
+      <ul>
+        <li>The app makes <strong>no network connections</strong> of any kind.</li>
+        <li>It sends <strong>no telemetry, analytics, crash reports, or usage data</strong> to us or anyone else.</li>
+        <li>Recordings are written only to the local folder you choose. We never see them.</li>
+        <li>The app does not include any third-party SDKs that collect data.</li>
+      </ul>
+      <p>
+        You can verify all of the above by reading the source code at
+        <a href={REPO} target="_blank" rel="noopener">github.com/melissa-pereira-deel/home-rec</a>.
+      </p>
+
+      <h2>2. This website</h2>
+      <p>
+        This website is served as static HTML by our hosting provider, Vercel. Standard server
+        logs (your IP address, user agent string, request time and path) may be kept by the host
+        for operational purposes — see
+        <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel's privacy policy</a>
+        for retention details.
+      </p>
+      <p>
+        <strong>Google Analytics.</strong> This site loads Google Analytics 4 (measurement ID
+        <em class="ui">G-56GPLH521X</em>) on every page, so we can see how many people visit and
+        how many go on to download the app. It runs as soon as a page loads. Through it, Google
+        processes on our behalf:
+      </p>
+      <ul>
+        <li>which pages you view, when, and which site or search referred you;</li>
+        <li>an <strong>approximate</strong> location (typically country, region and city) derived from your IP address — Google uses the IP address for this and does not log or store it in Analytics;</li>
+        <li>technical details of your device: browser, operating system, screen size, and language;</li>
+        <li>two interaction events we defined ourselves — <em class="ui">download_click</em> when a Download button is used, and <em class="ui">buy_me_a_coffee_click</em> when the support link is used. Each records only the link's URL and its visible label.</li>
+      </ul>
+      <p>
+        <strong>Cookies.</strong> Google Analytics sets first-party cookies in your browser —
+        <em class="ui">_ga</em> and <em class="ui">_ga_&lt;id&gt;</em> — which hold a randomly
+        generated identifier used to tell a returning visitor from a new one. They are not used
+        to identify you by name, and we do not combine them with any other data.
+      </p>
+      <p>
+        <strong>How long it is kept.</strong> Our Analytics property is set to retain event-level
+        and user-level data for <strong>14 months</strong>, after which Google deletes it. Because
+        we also have Google's "reset on new activity" option enabled, that 14 months is counted
+        from your most recent visit rather than your first — so if you keep coming back, the window
+        keeps moving. One caveat we would rather state plainly: this window covers the detailed
+        underlying data, not the aggregate totals Google derives from it. Summary statistics, such
+        as how many visits a month saw, are not deleted on that schedule.
+      </p>
+      <p>
+        <strong>How to opt out.</strong> You can block this entirely: use a content blocker, turn
+        off JavaScript for this site, or install Google's
+        <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">Analytics opt-out browser add-on</a>.
+        Nothing on this site stops working if you do — the site is plain static HTML. Google's own
+        terms for this data are in the
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>
+        and
+        <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">How Google uses data when you use our partners' sites</a>.
+      </p>
+      <p>
+        We do not run A/B testing, advertising pixels, session recording, or heat mapping on this
+        site, and we do not sell or share this data with anyone.
+      </p>
+
+      <h2>3. Donations (Buy Me a Coffee)</h2>
+      <p>
+        If you support the project at
+        <a href={COFFEE} target="_blank" rel="noopener">buymeacoffee.com/melissadebritto</a>,
+        your payment is processed entirely by Buy Me a Coffee under their own privacy policy:
+        <a href="https://www.buymeacoffee.com/privacy-policy" target="_blank" rel="noopener">buymeacoffee.com/privacy-policy</a>.
+        We only see what they share with us — typically your display name (if you provided one)
+        and any message you chose to attach. We do not receive payment-card or banking information.
+      </p>
+
+      <h2>4. GitHub</h2>
+      <p>
+        Issues, pull requests, discussions, and other interactions on our repository at
+        <a href={REPO} target="_blank" rel="noopener">github.com/melissa-pereira-deel/home-rec</a>
+        are governed by
+        <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub's Privacy Statement</a>
+        and are public by default. We see whatever GitHub shows project maintainers (username,
+        profile information you make public, contents of your contributions).
+      </p>
+
+      <h2>5. Your rights (LGPD / GDPR)</h2>
+      <p>
+        The app collects nothing, so there is nothing held about you there. For this website, the
+        analytics data described in section 2 is pseudonymous — it is tied to a random cookie
+        identifier, not to your name or email — which means we usually cannot connect it to you
+        even if you ask us to. The most reliable way to remove it is to clear this site's cookies
+        in your browser and opt out using one of the methods above.
+      </p>
+      <p>
+        For data held by our processors (Google, Buy Me a Coffee, GitHub, Vercel), please also
+        contact them directly using the links above — they are best positioned to act on requests
+        concerning data they hold about you.
+      </p>
+      <p>
+        If you believe we hold information about you, or you have any other privacy question,
+        email us at <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. We aim to respond within 30 days.
+      </p>
+
+      <h2>6. Who we are</h2>
+      <p>
+        Home Rec is an open-source project by <strong>Melissa de Britto</strong>, an individual
+        developer, published under The Building Blocks Co. brand. "The Building Blocks Co." is the
+        name used for projects published by Melissa de Britto; it is not a separate legal entity.
+      </p>
+      <p>
+        Data controller for the purposes of LGPD (Brazil) and GDPR (EU):
+        <strong>Melissa de Britto</strong>. Contact:
+        <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+      </p>
+
+      <h2>7. Changes to this policy</h2>
+      <p>
+        We may update this policy from time to time. The current version is always at this URL,
+        with the "Last updated" date above. Material changes will be highlighted at the top of
+        this page for at least 30 days.
+      </p>
+    </div>
+  </main>
+
+  <LegalFooter sibling="terms" />
+</Base>

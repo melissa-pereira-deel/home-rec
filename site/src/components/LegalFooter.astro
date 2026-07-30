@@ -1,0 +1,37 @@
+---
+// Compact footer for the legal pages. Reuses the landing page's footer classes
+// so the two read as one site, minus the language switcher — these documents
+// are English-only, so offering a locale switch here would lead nowhere.
+import { REPO } from '../links';
+
+interface Props {
+  /** The sibling legal page to cross-link to. */
+  sibling: 'privacy' | 'terms';
+}
+
+const { sibling } = Astro.props;
+const siblingLabel = sibling === 'privacy' ? 'Privacy Policy' : 'Terms of Use';
+---
+<footer>
+  <div class="wrap">
+    <div class="footer-top">
+      <div class="footer-id">
+        <div class="footer-brand">
+          <img src="/favicon.svg" alt="" width="24" height="24" />
+          <span class="footer-name">Home Rec</span>
+          <span class="footer-meta">macOS app</span>
+        </div>
+
+        <nav class="footer-links" aria-label="Home Rec">
+          <a href="/">Home</a>
+          <a href={`/${sibling}`}>{siblingLabel}</a>
+          <a href={REPO} target="_blank" rel="noopener">GitHub ↗</a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="footer-base">
+      <span>© 2026 Melissa de Britto&ensp;·&ensp;published under The Building Blocks Co. brand</span>
+    </div>
+  </div>
+</footer>

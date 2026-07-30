@@ -1,0 +1,93 @@
+---
+// English-only legal document, restored verbatim from the pre-Astro site
+// (4 June 2026). Only change: the sibling link was a relative 'privacy.html',
+// which no longer resolves now that the pages are routes rather than files.
+import Base from '../layouts/Base.astro';
+import SiteNav from '../components/SiteNav.astro';
+import LegalFooter from '../components/LegalFooter.astro';
+import { DEFAULT_LOCALE } from '../i18n/config';
+import { LICENSE, CONTACT } from '../links';
+
+const title = 'Terms of Use — Home Rec';
+const description =
+  'Terms of Use for the Home Rec website — a macOS app published under The Building Blocks Co.';
+---
+<Base
+  locale={DEFAULT_LOCALE}
+  path=""
+  title={title}
+  description={description}
+  canonicalPath="/terms"
+  alternates={false}
+  appJsonLd={false}
+>
+  <SiteNav locale={DEFAULT_LOCALE} />
+
+  <main class="legal">
+    <div class="legal-inner">
+      <a href="/" class="legal-back">← Back to Home Rec</a>
+
+      <h1>Terms of Use</h1>
+      <p class="legal-meta">Last updated: 4 June 2026</p>
+
+      <p>By using this website, you agree to the following terms. They are short on purpose.</p>
+
+      <ol>
+        <li>
+          <strong>About this site.</strong> This website provides information about
+          <strong>Home Rec</strong>, an open-source macOS application by Melissa de Britto,
+          published under The Building Blocks Co. brand.
+        </li>
+        <li>
+          <strong>The app is free, open source, and provided "as is".</strong> Home Rec is
+          distributed under the
+          <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">Apache License 2.0</a>.
+          The license governs your use of the app and includes — among other things — a disclaimer
+          of warranties and a limitation of liability (sections 7 and 8). The full text is in the
+          <a href={LICENSE} target="_blank" rel="noopener">LICENSE</a>
+          file of the project repository.
+        </li>
+        <li>
+          <strong>You are responsible for legal use.</strong> Home Rec is a general-purpose audio
+          capture tool. Recording audio of conversations, calls, broadcasts, or copyrighted
+          material may be restricted by the laws of your jurisdiction — for example, "all-party
+          consent" rules in several U.S. states, German and most EU privacy laws, and similar
+          rules elsewhere. You are solely responsible for ensuring that your use of the app
+          complies with the laws of your location and the rights of any person whose audio you
+          capture.
+        </li>
+        <li>
+          <strong>No commercial relationship.</strong> Visiting this site, downloading the app, or
+          using it does not create any commercial, agency, employment, or partnership relationship
+          between you and us.
+        </li>
+        <li>
+          <strong>Third-party links.</strong> This site links to third-party services such as
+          GitHub, Apple, and Buy Me a Coffee. We are not responsible for the content or practices
+          of those services. See our <a href="/privacy">Privacy Policy</a> for what each third
+          party processes on our behalf.
+        </li>
+        <li>
+          <strong>Changes to these terms.</strong> We may update these terms from time to time.
+          The current version is always at this URL, with the "Last updated" date above. Material
+          changes will be highlighted at the top of this page for at least 30 days.
+        </li>
+        <li>
+          <strong>Contact.</strong> For any question about these terms, email
+          <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+        </li>
+      </ol>
+
+      <div class="legal-note">
+        <p>
+          <strong>About the app itself:</strong> the Apache 2.0 license is your agreement for using
+          the <em class="ui">Home Rec</em> app. These Terms of Use cover only the
+          <em class="ui">website</em>. We have intentionally not written a separate EULA on top of
+          Apache 2.0 — the license is the agreement.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <LegalFooter sibling="privacy" />
+</Base>

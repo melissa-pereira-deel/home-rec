@@ -1,0 +1,18 @@
+# build output
+dist/
+# dependencies
+node_modules/
+# astro
+.astro/
+# environment
+.env
+.env.production
+# macOS
+.DS_Store
+# logs
+npm-debug.log*
+# Stray root index.html. This is an Astro project: the homepage is generated
+# from src/pages/index.astro into dist/. A file here is never served, so a copy
+# at the root is a trap — it looks like the live homepage and silently isn't.
+# Root-anchored so it can't shadow dist/index.html or a future public/index.html.
+/index.html

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Home Rec favicon — rounded square + red record dot (matches the app logo mark).
+
+  Visibility fix: the square now has an always-visible medium-grey border so the
+  icon reads on BOTH light and dark browser tab bars, and a prefers-color-scheme
+  rule lightens the square further in dark mode. The red record dot is enlarged
+  slightly for presence at 16px.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 32 32"
+     width="32" height="32"
+     shape-rendering="geometricPrecision">
+
+  <style>
+    .sq  { fill: #0D0D0D; stroke: #5a5a5a; }
+    .dot { fill: #FF3E3E; stroke: #4a4a4a; }
+    @media (prefers-color-scheme: dark) {
+      .sq { fill: #2a2a2a; stroke: #808080; }
+    }
+  </style>
+
+  <!-- Rounded square. 1.5px stroke kept fully inside the 32×32 box. -->
+  <rect class="sq" x="0.75" y="0.75" width="30.5" height="30.5" rx="7" ry="7" stroke-width="1.5"/>
+
+  <!-- Centered red record dot. -->
+  <circle class="dot" cx="16" cy="16" r="6.5" stroke-width="1"/>
+</svg>

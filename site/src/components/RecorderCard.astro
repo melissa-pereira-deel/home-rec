@@ -1,0 +1,220 @@
+---
+// The product visual: the Glass recorder face rebuilt in HTML/CSS so it is
+// native to the page rather than a screenshot.
+//
+// The waveform accumulates — one bar committed every 90ms, bar height a pure
+// function of its absolute index, so a bar never changes once written. It
+// fills left to right, then scrolls past a head pinned at the right edge.
+// A single clock drives both the timecode and the strip, so they cannot
+// disagree; an earlier build ran the strip on its own 9s modulo loop against
+// real elapsed time, which read as the animation running backwards.
+import type { LocaleCode } from '../i18n/config';
+import { getStrings } from '../i18n/utils';
+
+interface Props {
+  locale: LocaleCode;
+}
+
+const { locale } = Astro.props;
+const t = getStrings(locale);
+
+const takes = [
+  { name: t.app.take1, len: '2:34', seed: 1 },
+  { name: t.app.take2, len: '0:41', seed: 2 },
+  { name: t.app.take3, len: '0:19', seed: 3 },
+];
+
+// Deterministic bar heights, mirrored from the prototype's hashNoise so the
+// thumbnails render identically on server and client.
+function noise(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+function thumbBars(seed: number) {
+  return Array.from({ length: 26 }, (_, i) => {
+    const h = 2 + noise(seed * 100 + i) * 9;
+    return { x: i * 2.6, y: 7 - h / 2, h };
+  });
+}
+---
+<div class="recorder-wrap">
+  <div class="rec-status">
+    <span class="rec-dot" aria-hidden="true"></span>
+    {t.app.recording}
+  </div>
+
+  <div class="recorder" role="img" aria-label={t.app.windowAria}>
+    <div class="recorder-head">
+      <span class="recorder-title">home rec</span>
+      <span class="recorder-format">
+        wav · 48kHz
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 15 15"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M1.5 4h12M1.5 11h12" />
+          <circle cx="5.5" cy="4" r="1.7" fill="var(--card)" />
+          <circle cx="9.5" cy="11" r="1.7" fill="var(--card)" />
+        </svg>
+      </span>
+    </div>
+
+    <div class="recorder-timer"><span data-rec-timer>0:00.0</span></div>
+
+    <div class="recorder-wave">
+      <canvas data-rec-canvas aria-hidden="true"></canvas>
+    </div>
+
+    <div class="recorder-action">
+      <span class="rec-pill">
+        <span class="rec-glyph" aria-hidden="true"></span>
+        {t.app.stop}
+      </span>
+    </div>
+
+    <div class="recorder-recent-head">
+      <span>{t.app.recent}</span>
+      <span>{t.app.allTakes} →</span>
+    </div>
+
+    {
+      takes.map((take) => (
+        <div class="take">
+          <svg class="take-thumb" width="68" height="14" viewBox="0 0 68 14" aria-hidden="true">
+            {thumbBars(take.seed).map((b) => (
+              <rect x={b.x} y={b.y} width="1.3" height={b.h} rx="0.65" fill="currentColor" />
+            ))}
+          </svg>
+          <span class="take-name">{take.name}</span>
+          <span class="take-len">{take.len}</span>
+        </div>
+      ))
+    }
+  </div>
+</div>
+
+<script is:inline>
+  (function () {
+    var canvas = document.querySelector('[data-rec-canvas]');
+    var timer = document.querySelector('[data-rec-timer]');
+    if (!canvas || !timer) return;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    var STEP_MS = 90; // one committed bar
+    var PITCH = 4; // px between bars
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var FROZEN = 5.4; // 60 bars — history behind the head in the still frame
+
+    function noise(n) {
+      var x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    }
+
+    // Height is a pure function of absolute bar index: written once, never
+    // recomputed differently, which is what makes the strip read as history.
+    function amp(i) {
+      var swell = Math.min(1, 0.25 + (i % 45) / 45);
+      var base = 0.35 + 0.65 * noise(i * 1.7);
+      return 0.18 + swell * base * 0.82;
+    }
+
+    function fmt(s) {
+      var m = Math.floor(s / 60);
+      var r = s - m * 60;
+      var whole = Math.floor(r);
+      return m + ':' + String(whole).padStart(2, '0') + '.' + Math.floor((r - whole) * 10);
+    }
+
+    var start = null;
+    var raf = 0;
+    var visible = true;
+
+    function draw(elapsed) {
+      var w = canvas.clientWidth;
+      var h = canvas.clientHeight;
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      var mid = h / 2;
+      var capacity = Math.floor((w - 8) / PITCH);
+      var committed = Math.floor((elapsed * 1000) / STEP_MS);
+      var first = Math.max(0, committed - capacity + 1);
+
+      // Un-recorded tape ahead of the head.
+      if (committed < capacity - 1) {
+        ctx.fillStyle = 'rgba(242, 58, 58, 0.16)';
+        var from = 4 + (committed + 1) * PITCH;
+        ctx.fillRect(from, mid - 0.5, w - 4 - from, 1);
+      }
+
+      for (var i = first; i <= committed; i++) {
+        var x = committed < capacity ? 4 + i * PITCH : 4 + (i - first) * PITCH;
+        var a = amp(i) * (h * 0.42);
+        ctx.fillStyle = i === committed ? 'rgba(242, 58, 58, 0.55)' : 'rgba(242, 58, 58, 0.9)';
+        ctx.fillRect(x, mid - a, 2, a * 2);
+      }
+
+      // The write head: a rule the bars are cut against.
+      var headX = committed < capacity ? 4 + (committed + 1) * PITCH : 4 + capacity * PITCH;
+      ctx.fillStyle = 'rgba(242, 58, 58, 1)';
+      ctx.fillRect(Math.min(headX, w - 1), mid - h * 0.46, 1, h * 0.92);
+    }
+
+    function frame(now) {
+      if (start === null) start = now;
+      var elapsed = (now - start) / 1000;
+      timer.textContent = fmt(elapsed);
+      draw(elapsed);
+      raf = requestAnimationFrame(frame);
+    }
+
+    function stop() {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+    function play() {
+      if (raf || reduced || !visible) return;
+      raf = requestAnimationFrame(frame);
+    }
+
+    if (reduced) {
+      timer.textContent = fmt(FROZEN);
+      draw(FROZEN);
+    } else {
+      timer.textContent = fmt(0);
+      draw(0);
+    }
+
+    // Off-screen work is wasted work, and a canvas running behind the fold is
+    // the kind of thing that shows up as battery drain rather than as a bug.
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) {
+        visible = entries[entries.length - 1].isIntersecting;
+        if (visible) {
+          if (start !== null) start = performance.now() - (start ? 0 : 0);
+          play();
+        } else {
+          stop();
+        }
+      }).observe(canvas);
+    }
+
+    window.addEventListener('resize', function () {
+      draw(reduced ? FROZEN : start === null ? 0 : (performance.now() - start) / 1000);
+    });
+
+    play();
+  })();
+</script>

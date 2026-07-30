@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "title": "Home Rec — Graba lo que estás escuchando",
+    "description": "Captura el audio de tu Mac en WAV sin pérdidas. Sin controladores. Sin trucos de enrutamiento. Un clic desde la barra de menús. Hecho para músicos, DJ y productores.",
+    "ogTitle": "Home Rec — Graba lo que estás escuchando",
+    "ogDescription": "Captura el audio de tu Mac en WAV sin pérdidas. Sin controladores. Sin trucos de enrutamiento. Un clic desde la barra de menús."
+  },
+  "nav": {
+    "download": "Descargar para macOS",
+    "spec": "wav · 48khz · sin pérdida"
+  },
+  "hero": {
+    "eyebrow": "macOS &nbsp;·&nbsp; Código abierto &nbsp;·&nbsp; Gratis",
+    "h1": "Graba lo que<br>estás escuchando.",
+    "sub": "Captura lo que sea que tu Mac esté reproduciendo en WAV sin pérdidas. Un clic. Sin controladores, sin enrutamiento, sin configuración, sin cuenta.",
+    "ctaDownload": "Descargar para macOS",
+    "ctaCoffee": "Invítame un café",
+    "req1": "macOS 15+",
+    "req2": "Apple Silicon & Intel",
+    "req3": "No requiere cuenta"
+  },
+  "app": {
+    "recording": "Grabando",
+    "stop": "Detener",
+    "reveal": "Mostrar en Finder",
+    "windowAria": "App Home Rec mostrando una grabación en curso con el cronómetro en 02:47 y forma de onda animada",
+    "timerAria": "Duración de la grabación: 2 minutos y 47 segundos",
+    "stopAria": "Detener grabación",
+    "filenameAria": "Nombre del archivo de salida",
+    "recent": "recientes",
+    "allTakes": "todas las tomas",
+    "take1": "radio de la cocina, mañana",
+    "take2": "idea de estribillo — toma 3",
+    "take3": "nota de voz 14"
+  },
+  "features": {
+    "eyebrow": "Características",
+    "h2": "Hecho para cómo<br>realmente trabajas.",
+    "card1": {
+      "title": "Siempre en la barra de menús",
+      "desc": "Home Rec vive en tu barra de menús y sigue funcionando aunque cierres la ventana. Un clic abre un popover compacto: forma de onda, cronómetro y botón de grabar. Inicia una grabación sin cambiar de foco."
+    },
+    "card2": {
+      "title": "WAV sin pérdidas, siempre",
+      "desc": "PCM estéreo de 48 kHz. Sin compresión. Sin artefactos de códec. Lo que entra sale exactamente como sonaba, listo para Ableton, Logic Pro, cualquier DAW, cualquier editor de audio, sin complicaciones."
+    },
+    "card3": {
+      "title": "Forma de onda en vivo",
+      "desc": "La visualización de amplitud en tiempo real confirma que el audio realmente está fluyendo, no es solo un punto parpadeante. La forma de onda aparece tanto en el popover como en la ventana principal, así siempre sabes que la señal está bien."
+    },
+    "card4": {
+      "title": "Cero configuración. Funciona al instante.",
+      "desc": "Sin controladores de audio virtuales. Sin enrutamiento loopback. Sin Configuración de Audio MIDI. Concede el permiso de Grabación de Pantalla una vez, y listo. Funciona en Apple Silicon e Intel sin ninguna configuración."
+    }
+  },
+  "how": {
+    "eyebrow": "Cómo funciona",
+    "h2": "Tres pasos.<br>Eso es todo.",
+    "step1": {
+      "title": "Reproduce algo",
+      "desc": "Abre cualquier app o sitio web con el que estés trabajando. Home Rec captura el audio que tu Mac está reproduciendo."
+    },
+    "step2": {
+      "title": "Haz clic en Grabar",
+      "desc": "Pulsa el botón rojo en el popover de la barra de menús o en la ventana principal. La grabación empieza de inmediato. El cronómetro y la forma de onda en vivo confirman que el audio está fluyendo."
+    },
+    "step3": {
+      "title": "Listo.",
+      "desc": "Haz clic en Detener. Tu archivo WAV aparece en el Escritorio con un nombre con fecha y hora. Haz clic en \"Mostrar en Finder\" y arrástralo a donde lo necesites."
+    }
+  },
+  "perApp": {
+    "badge": "Próximamente",
+    "h2": "Graba una app.<br>Deja el resto en paz.",
+    "desc": "Captura de audio por aplicación, hecha para DJ, productores y beatmakers. Graba solo la app en la que estás trabajando: sin notificaciones de Slack, sin audio de fondo colándose en tu mezcla. Por fin.",
+    "chipAny": "Cualquier app"
+  },
+  "download": {
+    "eyebrow": "¿Listo para empezar?",
+    "h2": "Es todo tuyo.",
+    "sub": "Gratis ahora, gratis siempre. Hecho por una sola persona. Si Home Rec se gana un lugar en tu Mac, puedes invitarme un café, pero es un regalo, no una tarifa.",
+    "ctaDownload": "Descargar para macOS",
+    "ctaCoffee": "Invítame un café",
+    "fine1": "macOS 15 (Sequoia) o posterior",
+    "fine2": "Apple Silicon & Intel",
+    "fine3": "Firmado y notarizado",
+    "fine4": "Sin telemetría",
+    "releaseNotes": "Notas de la versión",
+    "sha256": "SHA-256",
+    "openSource": "Código abierto en GitHub"
+  },
+  "footer": {
+    "license": "Licencia Apache 2.0",
+    "privacy": "Privacidad",
+    "terms": "Términos",
+    "github": "GitHub",
+    "also": "Más de The Building Blocks Co.:"
+  },
+  "switcher": {
+    "label": "Elegir idioma"
+  }
+}

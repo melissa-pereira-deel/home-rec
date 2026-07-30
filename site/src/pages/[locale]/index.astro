@@ -1,0 +1,19 @@
+---
+import Base from '../../layouts/Base.astro';
+import Landing from '../../components/Landing.astro';
+import { NON_DEFAULT_LOCALES } from '../../i18n/config';
+import type { LocaleCode } from '../../i18n/config';
+
+export function getStaticPaths() {
+  return NON_DEFAULT_LOCALES.map((l) => ({
+    params: { locale: l.path },
+    props: { code: l.code },
+  }));
+}
+
+const { code } = Astro.props as { code: LocaleCode };
+const { locale } = Astro.params;
+---
+<Base locale={code} path={locale!}>
+  <Landing locale={code} />
+</Base>

@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "title": "Home Rec — Record what you're hearing",
+    "description": "Capture your Mac's audio output as lossless WAV. No drivers. No routing tricks. One click from the menu bar. Built for music makers, DJs, and producers.",
+    "ogTitle": "Home Rec — Record what you're hearing",
+    "ogDescription": "Capture your Mac's audio output as lossless WAV. No drivers. No routing tricks. One click from the menu bar."
+  },
+  "nav": {
+    "download": "Download for macOS",
+    "spec": "wav · 48khz · lossless"
+  },
+  "hero": {
+    "eyebrow": "macOS &nbsp;·&nbsp; Open Source &nbsp;·&nbsp; Free",
+    "h1": "Record what<br>you're hearing.",
+    "sub": "Capture whatever your Mac is playing as a lossless WAV. One click. No drivers, no routing, no setup, no account.",
+    "ctaDownload": "Download for macOS",
+    "ctaCoffee": "Buy me a coffee",
+    "req1": "macOS 15+",
+    "req2": "Apple Silicon & Intel",
+    "req3": "No account required"
+  },
+  "app": {
+    "recording": "Recording",
+    "stop": "Stop",
+    "reveal": "Reveal in Finder",
+    "windowAria": "Home Rec app showing a recording in progress with timer at 02:47 and animated waveform",
+    "timerAria": "Recording duration: 2 minutes 47 seconds",
+    "stopAria": "Stop recording",
+    "filenameAria": "Output file name",
+    "recent": "recent",
+    "allTakes": "all takes",
+    "take1": "kitchen radio, morning",
+    "take2": "chorus idea — take 3",
+    "take3": "voice memo 14"
+  },
+  "features": {
+    "eyebrow": "Features",
+    "h2": "Built for how you<br>actually work.",
+    "card1": {
+      "title": "Menu bar, always there",
+      "desc": "Home Rec lives in your menu bar and stays running when you close the window. One click opens a compact popover — waveform, timer, record button. Trigger a recording without switching focus."
+    },
+    "card2": {
+      "title": "Lossless WAV, every time",
+      "desc": "48kHz stereo PCM. No compression. No codec artifacts. Whatever goes in comes out exactly as it sounded — ready for Ableton, Logic Pro, any DAW, any audio editor, no questions asked."
+    },
+    "card3": {
+      "title": "Live waveform feedback",
+      "desc": "Real-time amplitude visualization confirms audio is actually flowing — not just a blinking dot. The waveform appears in both the popover and the main window so you always know signal is good."
+    },
+    "card4": {
+      "title": "Zero setup. Works immediately.",
+      "desc": "No virtual audio drivers. No loopback routing. No Audio MIDI Setup. Grant the Screen Recording permission once — and that's it. Works on Apple Silicon and Intel without any configuration."
+    }
+  },
+  "how": {
+    "eyebrow": "How it works",
+    "h2": "Three steps.<br>That's it.",
+    "step1": {
+      "title": "Play something",
+      "desc": "Open any app or website you're working with. Home Rec captures the audio your Mac is playing."
+    },
+    "step2": {
+      "title": "Click Record",
+      "desc": "Hit the red button in the menu bar popover or the main window. Recording starts immediately. The live timer and waveform confirm audio is flowing."
+    },
+    "step3": {
+      "title": "Done.",
+      "desc": "Click Stop. Your WAV file lands on the Desktop with a timestamp filename. Click \"Reveal in Finder\" and drag it wherever you need it."
+    }
+  },
+  "perApp": {
+    "badge": "Coming soon",
+    "h2": "Record one app.<br>Leave the rest alone.",
+    "desc": "Per-application audio capture built for DJs, producers, and beatmakers. Record just the app you're working in — no Slack pings, no background audio creeping into your mix. Finally.",
+    "chipAny": "Any app"
+  },
+  "download": {
+    "eyebrow": "Ready to start?",
+    "h2": "It's all yours.",
+    "sub": "Free now, free always. Built by one person. If Home Rec earns a spot on your Mac, you can buy me a coffee — but it's a gift, not a fee.",
+    "ctaDownload": "Download for macOS",
+    "ctaCoffee": "Buy me a coffee",
+    "fine1": "macOS 15 (Sequoia) or later",
+    "fine2": "Apple Silicon & Intel",
+    "fine3": "Signed & notarized",
+    "fine4": "No telemetry",
+    "releaseNotes": "Release notes",
+    "sha256": "SHA-256",
+    "openSource": "Open source on GitHub"
+  },
+  "footer": {
+    "license": "Apache 2.0 License",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "github": "GitHub",
+    "also": "More from The Building Blocks Co.:"
+  },
+  "switcher": {
+    "label": "Choose language"
+  }
+}
