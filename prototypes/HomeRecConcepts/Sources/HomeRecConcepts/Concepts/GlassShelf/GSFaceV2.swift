@@ -13,6 +13,9 @@ struct GSFaceV2: View {
             GSTheme.backdrop
             panel
                 .padding(22)
+                // Sheet behavior: soften the face while onboarding is up so
+                // its controls don't ghost through the card's glass.
+                .blur(radius: store.showOnboarding ? 12 : 0)
             if store.showOnboarding {
                 GSOnboarding()
                     .transition(.opacity)

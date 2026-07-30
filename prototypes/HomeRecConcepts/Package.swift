@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "HomeRecConcepts",
             path: "Sources/HomeRecConcepts",
-            resources: [.copy("Resources/Fonts")],
+            resources: [.copy("Resources/Fonts"), .copy("Resources/Brand")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

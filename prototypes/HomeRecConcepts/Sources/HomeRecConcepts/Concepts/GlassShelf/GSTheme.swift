@@ -13,6 +13,8 @@ enum GSTheme {
     static let textDim = Color(red: 0.557, green: 0.557, blue: 0.576)     // #8E8E93
     /// Warning tone (long-recording notice) — amber, distinct from the error red.
     static let warnAmber = Color(red: 0.92, green: 0.66, blue: 0.18)
+    /// Confirmation tone (permission granted) — systemGreen's dark-mode value.
+    static let okGreen = Color(red: 0.188, green: 0.820, blue: 0.345)      // #30D158
 
     /// The backdrop the glass has something to blur: a quiet deep-blue mesh.
     @ViewBuilder

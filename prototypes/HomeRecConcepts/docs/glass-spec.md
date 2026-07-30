@@ -71,12 +71,12 @@ Timecode format is pinned per recording (`0:07.4` / `2:34` / `1:12:03`) so the c
 
 Context menu: Reveal in Finder / Rename / Delete / Copy path. Rename is an inline TextField (return commits, esc cancels); delete is an inline row morph (`delete "…"? · delete / keep`) — no system alert. Shipping has only reveal-in-Finder; rename/delete are new scope for product to weigh.
 
-### 1.12 Onboarding, reskinned
+### 1.12 Onboarding, revised *(proposed copy)*
 | needs permission | ready |
 |---|---|
 | ![](img/spec-12a-onboarding-nd.png) | ![](img/spec-12b-onboarding-granted.png) |
 
-See §4 — flow, logic, and strings are untouched.
+See §4 — flow and logic are untouched; the copy is **revised** (product direction 2026-07-29): ~60% fewer words, the macOS settings-list gotcha now appears only in the not-granted state as a caption under the settings action, and the icon is the real brand mark from homerec.app. The conditional slot has a fixed height in both states so the live grant flip never moves the primary CTA.
 
 ---
 
@@ -114,19 +114,22 @@ Rules the table encodes:
 
 ---
 
-## 4. Onboarding mapping — cosmetic only
+## 4. Onboarding mapping — same flow, revised copy
 
-Contract: **zero copy changes, zero flow changes, zero logic changes.** The conditional CTA slot keys off `permissionStatus == .granted` exactly as `OnboardingView.swift` does; a grant landing mid-sheet flips it live via the existing `@Published` chain.
+Contract: **zero flow changes, zero logic changes; copy is revised** (product direction 2026-07-29 — the verbatim card read as a text wall). Element order is preserved: icon → title → supporting copy → permission info → conditional slot → primary CTA. The conditional slot keys off `permissionStatus == .granted` exactly as `OnboardingView.swift` does; a grant landing mid-sheet flips it live via the existing `@Published` chain, and the slot's **fixed 76pt height** keeps the CTA from moving when it does.
 
-| Shipping element (OnboardingView.swift) | Glass treatment |
+| Shipping element (OnboardingView.swift) | Glass treatment *(proposed)* |
 |---|---|
-| `.sheet` 420×440 over RecorderView | glass card 420×440 over the face (prototype uses an in-window overlay for capture; **shipping keeps `.sheet`**) |
-| 72pt `NSApp.applicationIconImage` | 72pt icon, same slot (prototype substitutes a placeholder glyph — real app keeps the app icon) |
-| "Welcome to Home Rec" — Archivo 22 semibold | same string, same font, white |
-| Blurb — Inter-Regular 13 secondary | same string, Inter 13, white 60% |
-| 3 bullets (`lock.shield`/`eye.slash`/`list.bullet`) | same strings incl. curly-quoted navigation hint, same symbols, dimmed glass register |
-| Slot A: green "You're ready to record" / "Open System Settings" button | same branch; settings button = neutral glass pill, **disabled "opening settings…" while `isOpeningSystemSettings`** (⚠ behavior improvement: shipping publishes this but no view binds it) |
-| "Get started"/"Done", `.keyboardShortcut(.defaultAction)` | brand-red flat pill, same labels, same shortcut, same `completeOnboarding()` persistence |
+| `.sheet` 420×440 over RecorderView | glass card 420×430, blurred face behind (prototype uses an in-window overlay for capture; **shipping keeps `.sheet`**) |
+| 72pt `NSApp.applicationIconImage` | 64pt real brand mark (homerec.app icon), soft drop shadow, no border |
+| "Welcome to Home Rec" | `home rec` wordmark, Archivo 26 semibold — the greeting is filler the icon + wordmark already perform |
+| 22-word blurb | `Records what your Mac is playing. Lossless WAV.` — Inter 13, white 65% |
+| 3 bullets (~40 words) | one inset permission row: `Needs Screen Recording permission` + `Audio only — your screen is never recorded.` (`lock.shield`, white 6% fill container) |
+| — (gotcha bullet was always visible) | macOS list gotcha (`Look under "Screen & System Audio Recording" — not the audio-only list.`) shown **only in the not-granted state**, as an 11pt caption under the settings action; vanishes on grant |
+| Slot A: green "You're ready to record" / "Open System Settings" button | `Ready to record` (small, systemGreen) / `open System Settings` neutral pill, **disabled `opening…` while `isOpeningSystemSettings`** (⚠ behavior improvement: shipping publishes this but no view binds it) |
+| "Get started"/"Done", `.keyboardShortcut(.defaultAction)` | `get started`/`done` — lowercase control register, brand-red 44pt pill, same shortcut, same `completeOnboarding()` persistence |
+
+Word count: granted card 67 → 26; not-granted 65 → 35 (the overage is the contextual settings hint, which now appears only when it earns its place).
 
 Known shipping quirk preserved (not fixed here): a translocated first run still presents onboarding over the blocked window, and its "Open System Settings" routes to the install notice (does nothing visible). Flagged for product; fixing it is a flow change.
 
@@ -153,7 +156,7 @@ Known shipping quirk preserved (not fixed here): a translocated first run still 
 | **P0** | Record pill state machine (starting/stopping/saved truthfulness) | Fixes shipping's contradictory button; small, high-trust |
 | **P0** | Notice rows for errors/warnings on both surfaces | Retires window-only alerts; verbatim copy exists |
 | **P0** | Permission states on the primary control + opening-settings disable | Binds existing unread `isOpeningSystemSettings` |
-| **P0** | Onboarding reskin | Cosmetic only, §4 contract |
+| **P0** | Onboarding reskin | Same flow/logic, revised copy — §4 contract |
 | **P1** | Library (rows, player, filters, empty states) | The new surface; scaffold spec'd in §1.8–1.10 |
 | **P1** | RecordingBar + policy C (chip, explainer, exclusion test) | §3 prerequisites |
 | **P1** | Settings popover (format lock + save location) | Replaces the two shelf menus |
