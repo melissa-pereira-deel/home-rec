@@ -20,8 +20,6 @@ public protocol GlassTakeRepresentable: Identifiable {
     /// Downsampled amplitudes, 0…1. The take's identity: keep it stable, or
     /// rows stop being recognisable between launches.
     var waveform: [Float] { get }
-    /// Number of versions in this take's stack. `1` hides the badge.
-    var versionCount: Int { get }
 }
 
 /// A ready-made value type conforming to `GlassTakeRepresentable`.
@@ -32,7 +30,6 @@ public struct GlassTakeSummary: GlassTakeRepresentable, Identifiable, Hashable {
     public var duration: TimeInterval
     public var timestamp: String
     public var waveform: [Float]
-    public var versionCount: Int
 
     public init(
         id: String,
@@ -40,8 +37,7 @@ public struct GlassTakeSummary: GlassTakeRepresentable, Identifiable, Hashable {
         metadata: String,
         duration: TimeInterval,
         timestamp: String,
-        waveform: [Float],
-        versionCount: Int = 1
+        waveform: [Float]
     ) {
         self.id = id
         self.title = title
@@ -49,7 +45,6 @@ public struct GlassTakeSummary: GlassTakeRepresentable, Identifiable, Hashable {
         self.duration = duration
         self.timestamp = timestamp
         self.waveform = waveform
-        self.versionCount = versionCount
     }
 }
 
@@ -220,9 +215,6 @@ public struct GlassTakeRow<Take: GlassTakeRepresentable>: View {
                     Text(take.title)
                         .glassText(.body, color: .textPrimary)
                         .lineLimit(1)
-                    if take.versionCount > 1 {
-                        GlassBadge("v\(take.versionCount)")
-                    }
                     if mode == .playing {
                         GlassBadge("playing", tint: .textAccent)
                     }
@@ -319,7 +311,6 @@ public struct GlassTakeRow<Take: GlassTakeRepresentable>: View {
 
     private var accessibilityLabel: String {
         var parts = [take.title, GlassTimecode.spoken(take.duration), take.metadata, take.timestamp]
-        if take.versionCount > 1 { parts.append("\(take.versionCount) versions") }
         if mode == .playing { parts.append("playing") }
         return parts.joined(separator: ", ")
     }

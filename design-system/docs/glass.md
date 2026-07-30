@@ -81,10 +81,10 @@ Roles are named for the job the colour does, never for the colour it is. `accent
 | `accent` | `#F23A3A` | Record/stop fill, playhead, live waveform. **Fills only** | 4.4:1 |
 | `accentStrong` | `#C72121` | Pressed accent; accent fill under increased contrast | — |
 | `accentMuted` | `#F23A3A` @ 45% | Accent fill inside a disabled control | — |
-| `statusDanger` | `#F23A3A` | Error notices | 4.4:1 |
-| `statusWarning` | `#EBA82E` | Long-recording warning | **8.3:1** |
+| `statusDanger` | `#F23A3A` | Error notice glyph | 4.4:1 |
+| `statusWarning` | `#EBA82E` | Warning notice glyph | **8.3:1** |
 | `statusSuccess` | `#30D158` | Permission granted / ready | **8.4:1** |
-| `statusNeutral` | white 25% | Secondary notice actions, terminal blocks | — |
+| `statusNeutral` | white 25% | Terminal blocks | — |
 
 Ratios are measured against `surfaceCard` (`#1C1C1E`), which is the most common text background and the more conservative of the two. On the lighter panel surface (≈ `#26282E`) every ratio drops about 12%: `textTertiary` becomes 4.5:1, still AA.
 
@@ -225,7 +225,6 @@ Depth is carried by three cues *at once* — shadow, edge-light opacity, and mat
 | `.inner` | A card inside a card |
 | `.inset` | Carved into the panel rather than stacked on it |
 | `.live` | The capture card: top-lit gradient stroke, no shadow |
-| `.notice(tint:)` | A notice, tinted by severity |
 | `.popover` | Settings popovers |
 
 **Why the panel tint sits under the material, not over it.** Over, the tint flattens the blur into a solid colour and the glass stops sampling the ground. Under, the material still blurs the mesh and the tint gives the glass a body. Bare `.ultraThinMaterial` over a dark ground reads as washed-out grey.
@@ -368,10 +367,10 @@ GlassPillButton(_ title: String,
 .buttonStyle(.glassPill(.neutral, size: .mini))
 ```
 
-Variants: `.solid` (accent), `.solidTinted(Color)` (status), `.neutral` (card fill), `.ghost` (outline).
+Variants: `.solid` (accent), `.solidTinted(Color)` (status), `.neutral` (card fill), `.neutralProminent` (near-white fill, dark text), `.ghost` (outline).
 Sizes: `.large` 44 · `.medium` 36 · `.small` 32 · `.compact` 30 · `.mini` 26.
 
-**Use** `.solid` for the one primary control on screen. **Don't** put two solid pills on one surface — the second one steals the first one's meaning. **Don't** use `.solid` for a blocked or waiting state: a pill that can't record must not look like the pill that can. **Don't** hand-roll a capsule button; the hover/press vocabulary and the hit-target growth are in the style.
+**Use** `.solid` for the one primary control on screen. **Don't** put two solid pills on one surface — the second one steals the first one's meaning. **Use** `.neutralProminent` for a default action *inside* a container that already sits under the accent — a notice's recovery action, for instance — where the action must clearly lead but a second red would compete with the record pill; it is achromatic, so it never does. **Don't** use `.neutral` as a primary on a `.card` surface: its fill *is* the card colour, so the button disappears and the secondary beside it reads as the primary. **Don't** use `.solid` for a blocked or waiting state: a pill that can't record must not look like the pill that can. **Don't** hand-roll a capsule button; the hover/press vocabulary and the hit-target growth are in the style.
 
 The pill applies a **1pt optical offset** to its label at `.large` when Inter is the resolved face — Inter's cap height sits low in a capsule of that proportion, so a mathematically centred label reads 1pt low. The offset is skipped for the SF fallback, which is centred correctly and would be pushed *off* centre by it.
 
@@ -580,6 +579,12 @@ GlassNoticeSlot(notices: [GlassNotice], onDismiss: …) { defaultContent }
 ```
 
 **Rows on the surface, never alerts.** Alerts are modal, they can only appear on a window, and a menu-bar-only user never sees them — which is exactly why the shipping app's disk-full and permission errors were invisible in the popover. A row renders anywhere the kit renders.
+
+**Neutral surface, severity in a glyph.** The card is `.card` — the same surface as every other container — and the only coloured thing in a notice is a 13pt icon: a red circle, an amber triangle, a grey hand, a grey `i`.
+
+Severity used to run the border and the primary action too. That made a notice the loudest object on a panel whose entire language is hairlines and one accent: a red-bordered box beside the red record pill put two competing reds on screen, and made a recoverable error read as a failure state. Confining severity to the glyph keeps notices stackable and inline-able without restyling their surroundings, and **shape** differs per kind as well as colour — so the meaning survives greyscale and red/green deficiency.
+
+**Emphasis is weight, not hue.** The recovery action is `.neutralProminent` (near-white fill, dark text); secondaries and `dismiss` are `.ghost`. `GlassNoticeRow` orders them itself — primary first, then secondaries, then dismiss — rather than trusting the caller, because a notice that ordered its buttons differently per error would move the target under a user mid-reach.
 
 `blocked` notices are never dismissible: dismissing a terminal condition leaves a permanently broken app looking fine.
 

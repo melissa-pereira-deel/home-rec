@@ -21,13 +21,36 @@ public enum GlassNoticeKind: Int, CaseIterable, Comparable, Hashable, Sendable {
         lhs.rawValue < rhs.rawValue
     }
 
-    /// The colour role that tints the notice's border and primary action.
-    public var tintRole: GlassColorRole {
+    /// The colour role for the severity **icon** — the only coloured element
+    /// in a notice.
+    ///
+    /// Colour used to run the border and the primary action too. That made a
+    /// notice the loudest object on a panel whose whole language is hairlines
+    /// and one accent: a red-bordered box beside the red record pill put two
+    /// competing reds on screen and made a recoverable error look like a
+    /// failure state. Confining severity to a 13pt glyph keeps the surface
+    /// identical to every other card, so notices stack and sit inline without
+    /// restyling their surroundings — and the glyph still carries the meaning,
+    /// because shape differs per kind as well as colour.
+    public var iconRole: GlassColorRole {
         switch self {
         case .error: .statusDanger
         case .warning: .statusWarning
-        case .blocked: .statusNeutral
-        case .info: .statusNeutral
+        // Blocked and info are not failures of the recording — they are
+        // conditions. Grey is the honest colour for both.
+        case .blocked, .info: .textTertiary
+        }
+    }
+
+    /// The severity glyph. Shape carries the meaning as much as colour does,
+    /// which is what keeps the notice readable in greyscale and for the ~8%
+    /// of men with a red/green deficiency.
+    public var iconName: String {
+        switch self {
+        case .error: "exclamationmark.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .blocked: "hand.raised.fill"
+        case .info: "info.circle"
         }
     }
 
@@ -113,42 +136,74 @@ public struct GlassNoticeRow: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: GlassSpacing.s) {
-            Text(notice.message)
-                .glassText(.captionSmall, color: .textPrimary)
-                // Notice copy is the one text in the kit allowed to wrap; it
-                // must never truncate, because the truncated half is always
-                // the part that says what to do.
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !notice.actions.isEmpty || notice.isDismissible {
-                HStack(spacing: GlassSpacing.s) {
-                    ForEach(notice.actions) { action in
-                        GlassPillButton(
-                            action.title,
-                            variant: action.emphasis == .primary
-                                ? .solidTinted(theme.colors[notice.kind.tintRole])
-                                : .neutral,
-                            size: .mini,
-                            action: action.action
-                        )
-                    }
-                    if notice.isDismissible {
-                        GlassPillButton(dismissTitle, variant: .neutral, size: .mini, action: onDismiss)
-                    }
-                    Spacer(minLength: 0)
+        HStack(alignment: .top, spacing: GlassSpacing.s) {
+            icon
+            VStack(alignment: .leading, spacing: GlassSpacing.s) {
+                message
+                if !notice.actions.isEmpty || notice.isDismissible {
+                    actionRow
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(GlassSpacing.md)
-        .glassSurface(.notice(tint: theme.colors[notice.kind.tintRole]))
+        // The same neutral card every other container uses. A notice is a
+        // message, not a different material.
+        .glassSurface(.card)
         // `.contain` rather than `.combine`: the actions must stay individually
         // reachable, but the container carries the severity so a VoiceOver user
         // hears "Problem" before the sentence.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(notice.kind.accessibilityPrefix)
         .accessibilityValue(notice.message)
+    }
+
+    private var icon: some View {
+        Image(systemName: notice.kind.iconName)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(theme.colors[notice.kind.iconRole])
+            // Nudged onto the first line's cap height. The glyph's own box is
+            // taller than the 12pt caption beside it, so centring it on the
+            // line box would leave it visibly low.
+            .padding(.top, 1)
+            .accessibilityHidden(true)
+    }
+
+    private var message: some View {
+        Text(notice.message)
+            .glassText(.captionSmall, color: .textPrimary)
+            // Notice copy is the one text in the kit allowed to wrap; it must
+            // never truncate, because the truncated half is always the part
+            // that says what to do.
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Emphasis is weight, not hue: the recovery action is a near-white fill,
+    /// everything else an outline.
+    private var actionRow: some View {
+        HStack(spacing: GlassSpacing.s) {
+            ForEach(orderedActions) { action in
+                GlassPillButton(
+                    action.title,
+                    variant: action.emphasis == .primary ? .neutralProminent : .ghost,
+                    size: .mini,
+                    action: action.action
+                )
+            }
+            if notice.isDismissible {
+                GlassPillButton(dismissTitle, variant: .ghost, size: .mini, action: onDismiss)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Primary first, then secondaries in the order given; `dismiss` renders
+    /// after both. Ordered here rather than trusting the caller, so the button
+    /// to press is always leftmost — a notice that ordered them differently
+    /// per error would move the target under a user mid-reach.
+    private var orderedActions: [GlassNoticeAction] {
+        notice.actions.filter { $0.emphasis == .primary }
+            + notice.actions.filter { $0.emphasis == .secondary }
     }
 }
 

@@ -14,7 +14,6 @@ struct FakeRecording: Identifiable {
     var bitDepth: String        // "16-bit"
     var fileSize: String        // "18.2MB"
     var samples: [Float]        // identity waveform, WaveformFactory.barCount bars
-    var versionCount: Int       // 1 = no stack
 
     /// SF Mono metadata line: "48kHz · 16-bit · wav · 18.2MB"
     var specLine: String {
@@ -47,7 +46,7 @@ enum FakeLibrary {
     private static func make(
         _ name: String, daysAgo: Double, duration: TimeInterval,
         format: FakeFormat, bitDepth: String, size: String,
-        seed: UInt64, versions: Int = 1, now: Date
+        seed: UInt64, now: Date
     ) -> FakeRecording {
         let date = now.addingTimeInterval(-daysAgo * 86_400)
         return FakeRecording(
@@ -60,8 +59,7 @@ enum FakeLibrary {
             sampleRate: "48kHz",
             bitDepth: bitDepth,
             fileSize: size,
-            samples: WaveformFactory.identity(seed: seed),
-            versionCount: versions
+            samples: WaveformFactory.identity(seed: seed)
         )
     }
 
@@ -69,11 +67,11 @@ enum FakeLibrary {
     private static func cannedEight(now: Date) -> [FakeRecording] {
         [
             make("kitchen radio, morning", daysAgo: 0.12, duration: 154, format: .wav, bitDepth: "16-bit", size: "26.4MB", seed: 11, now: now),
-            make("chorus idea — take 3", daysAgo: 0.9, duration: 41, format: .flac, bitDepth: "24-bit", size: "9.8MB", seed: 23, versions: 3, now: now),
+            make("chorus idea — take 3", daysAgo: 0.9, duration: 41, format: .flac, bitDepth: "24-bit", size: "9.8MB", seed: 23, now: now),
             make("voice memo 14", daysAgo: 1.4, duration: 19, format: .m4a, bitDepth: "16-bit", size: "0.7MB", seed: 37, now: now),
             make("rain on the skylight", daysAgo: 3.2, duration: 612, format: .wav, bitDepth: "16-bit", size: "105MB", seed: 41, now: now),
             make("untitled", daysAgo: 5.8, duration: 8, format: .m4a, bitDepth: "16-bit", size: "0.3MB", seed: 53, now: now),
-            make("band practice (rough)", daysAgo: 9.1, duration: 4_323, format: .flac, bitDepth: "24-bit", size: "612MB", seed: 67, versions: 2, now: now),
+            make("band practice (rough)", daysAgo: 9.1, duration: 4_323, format: .flac, bitDepth: "24-bit", size: "612MB", seed: 67, now: now),
             make("dad's records, side b", daysAgo: 14.6, duration: 1_260, format: .wav, bitDepth: "16-bit", size: "216MB", seed: 71, now: now),
             make("synth drone experiment", daysAgo: 20.3, duration: 347, format: .flac, bitDepth: "24-bit", size: "49.1MB", seed: 89, now: now),
         ]
@@ -103,7 +101,6 @@ enum FakeLibrary {
                     ? String(format: "%.0fKB", megabytes * 1024)
                     : String(format: "%.1fMB", megabytes),
                 seed: seed,
-                versions: i % 11 == 4 ? 4 + i % 3 : 1,   // a few deep stacks
                 now: now
             )
         }

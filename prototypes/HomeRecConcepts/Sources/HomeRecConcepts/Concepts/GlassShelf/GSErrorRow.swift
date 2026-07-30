@@ -4,6 +4,12 @@ import SwiftUI
 /// shelf yields its slot to this row — errors, the long-recording warning,
 /// or the translocation block. All copy is VERBATIM from shipping.
 /// Priority: error > long-recording > translocation.
+///
+/// Neutral by construction: the card is the same surface as every other card
+/// and severity is carried by a small icon. A coloured border here put a
+/// second red on a panel that already has the record pill, and made a
+/// recoverable error read as a failure state. The primary action is a
+/// near-white fill and always leads — never the dismiss.
 struct GSErrorRow: View {
     @EnvironmentObject private var store: PrototypeStateStore
 
@@ -30,16 +36,16 @@ struct GSErrorRow: View {
     // MARK: - Error + recovery
 
     private func errorContent(_ error: FakeRecorderError) -> some View {
-        noticeCard(tint: GSTheme.accent) {
+        noticeCard(icon: "exclamationmark.circle.fill", iconColor: GSTheme.accent) {
             VStack(alignment: .leading, spacing: 8) {
                 messageText(error.message)
                 HStack(spacing: 8) {
                     if let recovery = error.recoveryLabel {
-                        miniPill(recovery, tint: GSTheme.accent) {
+                        miniPill(recovery, prominent: true) {
                             store.performRecovery()
                         }
                     }
-                    miniPill("dismiss", tint: .white.opacity(0.25)) {
+                    miniPill("dismiss", prominent: false) {
                         store.dismissError()
                     }
                     Spacer()
@@ -54,16 +60,17 @@ struct GSErrorRow: View {
     // MARK: - Long-recording warning (shipping "Still recording" alert)
 
     private var longRecordingContent: some View {
-        noticeCard(tint: GSTheme.warnAmber) {
+        noticeCard(icon: "exclamationmark.triangle.fill", iconColor: GSTheme.warnAmber) {
             VStack(alignment: .leading, spacing: 8) {
                 messageText("You've been recording for a while. Long recordings use a lot of disk space — about 10 MB per minute.")
                 HStack(spacing: 8) {
-                    miniPill("Keep recording", tint: .white.opacity(0.25)) {
-                        store.dismissLongRecordingWarning()
-                    }
-                    miniPill("Stop", tint: GSTheme.warnAmber) {
+                    // Stop is the recommended action, so it leads.
+                    miniPill("Stop", prominent: true) {
                         store.dismissLongRecordingWarning()
                         store.stop()
+                    }
+                    miniPill("Keep recording", prominent: false) {
+                        store.dismissLongRecordingWarning()
                     }
                     Spacer()
                 }
@@ -74,22 +81,35 @@ struct GSErrorRow: View {
     // MARK: - Translocation block (terminal, no dismiss)
 
     private var translocationContent: some View {
-        noticeCard(tint: .white.opacity(0.3)) {
+        noticeCard(icon: "hand.raised.fill", iconColor: GSTheme.textDim) {
             messageText("Home Rec can't record from the disk image. Quit, drag it to your Applications folder, and open it from there.")
         }
     }
 
     // MARK: - Chrome
 
-    private func noticeCard(tint: Color, @ViewBuilder content: () -> some View) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(GSTheme.card.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(tint.opacity(0.5), lineWidth: 1)
-            )
+    private func noticeCard(
+        icon: String,
+        iconColor: Color,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(iconColor)
+                // Onto the first line's cap height; the glyph box is taller
+                // than the 11pt caption beside it.
+                .padding(.top, 1)
+                .accessibilityHidden(true)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(GSTheme.card.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(.white.opacity(0.10), lineWidth: 1)
+        )
     }
 
     private func messageText(_ text: String) -> some View {
@@ -99,15 +119,29 @@ struct GSErrorRow: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func miniPill(_ label: String, tint: Color, action: @escaping () -> Void) -> some View {
+    /// Emphasis is weight, not hue: the action to take is a near-white fill,
+    /// everything else an outline.
+    private func miniPill(
+        _ label: String,
+        prominent: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
         FlatPillButton(action: action) {
             Text(label)
                 .font(.custom("Inter", size: 11, relativeTo: .caption))
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
+                .foregroundStyle(prominent ? Color.black.opacity(0.88) : .white.opacity(0.9))
                 .padding(.horizontal, 12)
                 .frame(height: 26)
-                .background(tint, in: Capsule())
+                .background(
+                    prominent ? Color.white.opacity(0.92) : Color.white.opacity(0.07),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule().strokeBorder(
+                        prominent ? .clear : .white.opacity(0.18), lineWidth: 1
+                    )
+                )
                 .contentShape(Capsule())
         }
     }

@@ -57,8 +57,7 @@ enum GlassSampleTakes {
             metadata: "48kHz · 24-bit · flac · 9.8MB",
             duration: 41,
             timestamp: "21h",
-            waveform: GlassSampleWaveforms.identity(seed: 41),
-            versionCount: 3
+            waveform: GlassSampleWaveforms.identity(seed: 41)
         ),
         GlassTakeSummary(
             id: "3",
@@ -74,8 +73,7 @@ enum GlassSampleTakes {
             metadata: "48kHz · 24-bit · flac · 612MB",
             duration: 4323,
             timestamp: "1w",
-            waveform: GlassSampleWaveforms.identity(seed: 91),
-            versionCount: 2
+            waveform: GlassSampleWaveforms.identity(seed: 91)
         ),
         GlassTakeSummary(
             id: "5",

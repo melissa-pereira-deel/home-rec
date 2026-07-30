@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The shared library structure every concept skins: rows with identity
 /// waveforms and monospace metadata, an expanded inline player (waveform,
-/// timecode chip, tick-ruler scrub, version stack), chip filters, and the
+/// timecode chip, tick-ruler scrub), chip filters, and the
 /// lowercase empty state. The untitled.stream DNA, as shared code.
 struct LibraryScaffold<Header: View>: View {
     @EnvironmentObject private var store: PrototypeStateStore
@@ -104,12 +104,6 @@ struct LibraryScaffold<Header: View>: View {
                         } else {
                             style.titleText(store.displayName(for: recording))
                                 .lineLimit(1)
-                        }
-                        if recording.versionCount > 1 {
-                            style.metaText("v\(recording.versionCount)", size: 9)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .overlay(Capsule().strokeBorder(style.meta.opacity(0.5), lineWidth: 1))
                         }
                     }
                     style.metaText(recording.specLine)
@@ -290,10 +284,6 @@ struct LibraryScaffold<Header: View>: View {
                 .padding(.vertical, 7)
                 .background(style.rowFill.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
             }
-
-            if recording.versionCount > 1 {
-                versionStack(recording)
-            }
         }
         .padding(14)
         .background(style.rowFill, in: RoundedRectangle(cornerRadius: style.cornerRadius + 2))
@@ -302,65 +292,6 @@ struct LibraryScaffold<Header: View>: View {
                 .strokeBorder(style.accent.opacity(0.45), lineWidth: 1)
         )
         .shadow(color: style.rowShadow, radius: 6, y: 3)
-    }
-
-    /// Older takes stacked under the active one, untitled-style. Capped at
-    /// the 3 newest; deeper stacks expand on demand.
-    @State private var expandedVersions = false
-
-    private func versionStack(_ recording: FakeRecording) -> some View {
-        let versions = Array((1...recording.versionCount).reversed())
-        let shown = expandedVersions ? versions : Array(versions.prefix(3))
-        return VStack(alignment: .leading, spacing: 6) {
-            style.metaText("versions", size: 9)
-                .opacity(0.7)
-            ForEach(shown, id: \.self) { version in
-                HStack(spacing: 8) {
-                    Rectangle()
-                        .fill(style.meta.opacity(0.35))
-                        .frame(width: 10, height: 1)
-                    style.metaText("v\(version)")
-                    style.metaText(
-                        Formatters.timecode(fakeVersionDuration(recording, version: version))
-                    )
-                    .opacity(0.7)
-                    if version == recording.versionCount {
-                        // Built directly: metaText's inner foregroundStyle
-                        // would silently win over an outer accent modifier.
-                        Text("active")
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(style.accent)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .overlay(Capsule().strokeBorder(style.accent.opacity(0.6), lineWidth: 1))
-                    }
-                    Spacer()
-                }
-                .padding(.leading, 4)
-            }
-            if versions.count > 3, !expandedVersions {
-                Button {
-                    withAnimation(.easeOut(duration: 0.15)) { expandedVersions = true }
-                } label: {
-                    style.metaText("show all \(versions.count) versions", size: 9)
-                        .underline()
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.leading, 22)
-            }
-        }
-        .padding(.top, 2)
-        .onChange(of: store.selectedRecordingID) { _, _ in
-            expandedVersions = false
-        }
-    }
-
-    /// Deterministic fake durations for older versions.
-    private func fakeVersionDuration(_ recording: FakeRecording, version: Int) -> TimeInterval {
-        guard version < recording.versionCount else { return recording.duration }
-        let wobble = LevelSynth.rand(UInt64(recording.name.count &+ version &* 37))
-        return max(5, recording.duration * (0.7 + 0.5 * wobble))
     }
 
     // MARK: - Empty state

@@ -434,8 +434,7 @@ final class PrototypeStateStore: ObservableObject {
             fileSize: megabytes < 1
                 ? String(format: "%.0fKB", megabytes * 1024)
                 : String(format: "%.1fMB", megabytes),
-            samples: samples,
-            versionCount: 1
+            samples: samples
         )
         resetLiveData()
         return recording

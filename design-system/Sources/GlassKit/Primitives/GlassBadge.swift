@@ -102,7 +102,7 @@ public struct GlassPulseDot: View {
 #Preview("Badges") {
     GlassPreviewStage {
         HStack(spacing: GlassSpacing.m) {
-            GlassBadge("v4")
+            GlassBadge("wav")
             GlassBadge("active", tint: .textAccent)
             GlassBadge("monitoring · not recorded", tint: .textTertiary, textRole: .metaSmall)
             GlassBadge("new", style: .filled, tint: .accent)

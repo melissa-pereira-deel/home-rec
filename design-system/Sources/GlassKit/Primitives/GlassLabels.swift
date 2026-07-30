@@ -32,7 +32,7 @@ public struct GlassMetaLabel: View {
     }
 }
 
-/// A section label: `recent`, `format`, `versions`.
+/// A section label: `recent`, `format`, `all takes`.
 ///
 /// Lowercase mono, not uppercase. Uppercase eyebrows shout, and this panel
 /// spends its only shout on the record button. The label is

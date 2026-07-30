@@ -15,11 +15,17 @@ import SwiftUI
 /// - `neutral` — a filled but unaccented control: the same shape, none of the
 ///   urgency. Blocked states use it, which is the point: a pill that can't
 ///   record must not look like the pill that can.
+/// - `neutralProminent` — a near-white fill with dark text. The default
+///   action where the accent must not be spent: a notice's recovery action is
+///   the thing to press, but a red pill there would put a second record-red on
+///   the panel and make a recoverable error look like a failure. Achromatic,
+///   and unmistakably the primary of its group.
 /// - `ghost` — outline only. Secondary, reversible, safe.
 public enum GlassPillVariant: Equatable {
     case solid
     case solidTinted(Color)
     case neutral
+    case neutralProminent
     case ghost
 }
 
@@ -207,6 +213,10 @@ private struct GlassPillBody: View {
             return isEnabled ? tint : tint.opacity(0.45)
         case .neutral:
             return theme.colors.surfaceCard.opacity(isEnabled ? 1 : 0.7)
+        case .neutralProminent:
+            // Deliberately near-white rather than pure: pure white against the
+            // near-black ground haloes at small sizes.
+            return theme.colors.textPrimary.opacity(isEnabled ? 0.92 : 0.4)
         case .ghost:
             return theme.colors.surfaceInset
         }
@@ -219,6 +229,9 @@ private struct GlassPillBody: View {
             // still has to be readable enough to tell you *what* is disabled —
             // hence 75% rather than a token dim.
             theme.colors.textOnAccent.opacity(isEnabled ? 1 : 0.75)
+        case .neutralProminent:
+            // Dark-on-light: 14:1 against the 92% fill.
+            theme.colors.ground.opacity(isEnabled ? 1 : 0.55)
         case .neutral, .ghost:
             isEnabled ? theme.colors.textPrimary : theme.colors.textSecondary
         }

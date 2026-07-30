@@ -40,15 +40,15 @@ The pill carries the corrective action: `allow audio capture` (nd) / `grant perm
 |---|---|---|---|
 | ![](img/spec-06a-err-startfailed.png) | ![](img/spec-06b-err-diskfull.png) | ![](img/spec-06c-err-savefallback.png) | ![](img/spec-06d-err-streamfailed.png) |
 
-The notice row takes the shelf's slot (priority: error > long-recording > translocation); messages and recovery labels are **verbatim** `RecorderError` copy (`Try again` / `Open settings` / `Choose folder…`). Key mirrored behaviors: disk-full is a **refusal on press** (never a broken start); save-location fallback is **non-blocking — the recording continues** while the notice shows. Unlike shipping's window-only alerts, these rows render on the panel itself, so a menu-bar-only user finally sees them (see §5).
+The notice row takes the shelf's slot (priority: error > long-recording > translocation). Severity is carried by a small glyph — red circle, amber triangle, grey hand — on an otherwise neutral card; the recovery action is a near-white fill and always leads, dismiss never does. Messages and recovery labels are **verbatim** `RecorderError` copy (`Try again` / `Open settings` / `Choose folder…`). Key mirrored behaviors: disk-full is a **refusal on press** (never a broken start); save-location fallback is **non-blocking — the recording continues** while the notice shows. Unlike shipping's window-only alerts, these rows render on the panel itself, so a menu-bar-only user finally sees them (see §5).
 
 ### 1.7 Long recording
 ![longrec](img/spec-07-longrec.png)
-Timer at `1:12:03` proves the hour layout. The shipping "Still recording" alert becomes an amber notice row: same copy, same `Keep recording` / `Stop` choices, same once-per-recording latch. (Prototype threshold compressed to 20s for demoability; shipping is 30 min.)
+Timer at `1:12:03` proves the hour layout. The shipping "Still recording" alert becomes a neutral notice row with an amber warning glyph: same copy, same `Keep recording` / `Stop` choices, same once-per-recording latch. `Stop` is the recommended action so it leads; the notice card itself is the same surface as every other card, because a coloured border here would put a second red beside the record pill. (Prototype threshold compressed to 20s for demoability; shipping is 30 min.)
 
 ### 1.8 Library at scale
 ![50 items](img/spec-08-library-50-scrolled.png)
-50 takes, scrolled mid-list: durations to hours (`2:08:09`), deep version stacks (`v4`), spec lines truncate rather than wrap. Scroll stays smooth (LazyVStack; no hitches observed at full-speed scroll in release).
+50 takes, scrolled mid-list: durations to hours (`2:08:09`), spec lines truncate rather than wrap. Scroll stays smooth (LazyVStack; no hitches observed at full-speed scroll in release).
 
 ### 1.9 Empty vs filter-empty
 | true empty | filter empty |
