@@ -1,0 +1,893 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Home Rec — "Glass" design language, translated from the app.
+
+   Sources: GSTheme.swift (prototypes/HomeRecConcepts) + the Glass concept
+   screenshots. Near-black ground, translucent glass panels with 1px ~15%
+   white borders and generous radius, a single red accent reserved for the
+   record state, Archivo display + Inter body + monospace metadata.
+
+   Deliberately single-theme dark: the near-black ground IS the brand, the
+   same way the app has no light mode. Not a missing feature.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* GSTheme.accent — #F23A3A, the only accent on the page. */
+  --accent: #f23a3a;
+  /* GSTheme.accentDeep — pressed / gradient partner for large fills. */
+  --accent-deep: #c72121;
+  /* GSTheme.card — warm charcoal. */
+  --card: #1c1c1e;
+  /* GSTheme.metalBase — icon + hardware grey. */
+  --metal: #8e9298;
+  /* GSTheme.textDim */
+  --text-dim: #8e8e93;
+  --text: rgba(255, 255, 255, 0.92);
+  --text-soft: rgba(255, 255, 255, 0.66);
+
+  /* Near-black ground. */
+  --ground: #08080a;
+
+  /* Glass recipe: translucent fill, 1px white ~15% border, generous radius. */
+  --glass-fill: rgba(255, 255, 255, 0.045);
+  --glass-fill-strong: rgba(28, 28, 30, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-border-soft: rgba(255, 255, 255, 0.08);
+  --hairline: rgba(255, 255, 255, 0.08);
+
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 9px;
+  --radius-pill: 999px;
+
+  --font-display: "Archivo", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas,
+    monospace;
+
+  --wrap: 1128px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(242, 58, 58, 0.35);
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ── Type roles ────────────────────────────────────────────────────────── */
+
+/* Lowercase control voice: eyebrows and control labels render lowercase in
+   mono — via text-transform, so the markup keeps the site copy verbatim. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+.h-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  color: var(--text);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  padding: 15px 26px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+/* The record red — the one place the accent is allowed to be loud. */
+.btn-red {
+  background: linear-gradient(180deg, var(--accent), #e02f2f);
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 8px 24px rgba(242, 58, 58, 0.28);
+}
+
+.btn-red:hover {
+  background: linear-gradient(180deg, #ff4747, var(--accent));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 10px 30px rgba(242, 58, 58, 0.38);
+}
+
+/* Glass ghost button. */
+.btn-ghost {
+  background: var(--glass-fill);
+  border-color: var(--glass-border);
+  color: var(--text);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.btn-sm {
+  font-size: 13px;
+  padding: 10px 18px;
+}
+
+/* ── Glass panels ──────────────────────────────────────────────────────── */
+
+.glass {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-lg);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+/* ── Nav ───────────────────────────────────────────────────────────────── */
+
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: rgba(8, 8, 10, 0.62);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.nav-logo img {
+  width: 27px;
+  height: 27px;
+}
+
+.logo-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16.5px;
+  letter-spacing: -0.01em;
+}
+
+.nav-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+@media (max-width: 640px) {
+  .nav-meta {
+    display: none;
+  }
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 156px 0 110px;
+}
+
+/* GSTheme.backdrop translated: the quiet deep-blue mesh the glass blurs.
+   Radial stops approximate the 3×3 MeshGradient control points. */
+.hero-mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(52% 44% at 55% 45%, rgba(33, 36, 64, 0.85) 0%, transparent 70%),
+    radial-gradient(40% 36% at 12% 18%, rgba(26, 31, 56, 0.7) 0%, transparent 72%),
+    radial-gradient(46% 40% at 88% 24%, rgba(20, 26, 48, 0.6) 0%, transparent 70%),
+    radial-gradient(50% 44% at 20% 88%, rgba(18, 20, 38, 0.55) 0%, transparent 72%),
+    var(--ground);
+}
+
+/* A whisper of the accent behind the recorder card — the record state
+   bleeding through the glass. */
+.hero-mesh::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    34% 30% at 72% 52%,
+    rgba(242, 58, 58, 0.09) 0%,
+    transparent 70%
+  );
+}
+
+.hero-inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+  align-items: center;
+  gap: 64px;
+}
+
+.hero-copy {
+  max-width: 520px;
+}
+
+.hero-h1 {
+  font-size: clamp(46px, 6.6vw, 78px);
+  margin: 20px 0 22px;
+}
+
+.hero-sub {
+  font-size: 17.5px;
+  color: var(--text-soft);
+  max-width: 44ch;
+}
+
+.hero-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.hero-req {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+.req-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 940px) {
+  .hero {
+    padding-top: 130px;
+  }
+  .hero-inner {
+    grid-template-columns: 1fr;
+    gap: 56px;
+  }
+  .hero-copy {
+    max-width: 620px;
+  }
+}
+
+/* ── Recorder card (the product visual, rebuilt native) ────────────────── */
+
+.recorder-wrap {
+  position: relative;
+  max-width: 430px;
+  width: 100%;
+  justify-self: end;
+  margin: 0 auto;
+}
+
+@media (max-width: 940px) {
+  .recorder-wrap {
+    justify-self: center;
+  }
+}
+
+.recorder {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055) 0%,
+    rgba(255, 255, 255, 0.025) 100%
+  );
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  -webkit-backdrop-filter: blur(26px) saturate(1.3);
+  backdrop-filter: blur(26px) saturate(1.3);
+  padding: 24px 24px 20px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.09) inset,
+    0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.recorder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.recorder-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.recorder-format {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.recorder-format svg {
+  color: var(--metal);
+}
+
+.recorder-timer {
+  font-family: var(--font-mono);
+  font-size: clamp(40px, 4.6vw, 52px);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.88);
+  font-variant-numeric: tabular-nums;
+  margin: 26px 0 18px;
+}
+
+.recorder-wave {
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-md);
+  height: 92px;
+  overflow: hidden;
+}
+
+.recorder-wave canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.recorder-action {
+  display: flex;
+  justify-content: center;
+  margin: 22px 0 24px;
+}
+
+/* The record pill — lowercase label, white glyph, the accent at full volume. */
+.rec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 16.5px;
+  text-transform: lowercase;
+  color: #fff;
+  background: linear-gradient(180deg, #ff4545, var(--accent) 55%, #e22e2e);
+  border-radius: var(--radius-pill);
+  padding: 15px 34px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.3) inset,
+    0 10px 32px rgba(242, 58, 58, 0.35);
+}
+
+.rec-glyph {
+  width: 11px;
+  height: 11px;
+  background: #fff;
+  border-radius: 2.5px;
+}
+
+.recorder-recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-transform: lowercase;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.take {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+}
+
+.take + .take {
+  margin-top: 8px;
+}
+
+.take-thumb {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  opacity: 0.8;
+}
+
+.take-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.take-len {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recording badge above the card. */
+.rec-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(242, 58, 58, 0.13);
+  border: 1px solid rgba(242, 58, 58, 0.36);
+  border-radius: var(--radius-pill);
+  padding: 6px 13px;
+  margin-bottom: 14px;
+}
+
+.rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rec-dot {
+    animation: rec-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+
+.section {
+  position: relative;
+  padding: 108px 0;
+}
+
+.section + .section {
+  border-top: 1px solid var(--hairline);
+}
+
+.section-head {
+  max-width: 560px;
+  margin-bottom: 56px;
+}
+
+.section-h2 {
+  font-size: clamp(32px, 4.4vw, 48px);
+  margin-top: 18px;
+}
+
+/* ── Features ──────────────────────────────────────────────────────────── */
+
+.feat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.feat-card {
+  padding: 30px 30px 32px;
+  border-radius: var(--radius-lg);
+  transition: border-color 0.25s ease, background-color 0.25s ease;
+}
+
+.feat-card:hover {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.feat-icon {
+  width: 34px;
+  height: 34px;
+  color: var(--metal);
+  margin-bottom: 22px;
+}
+
+.feat-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: -0.015em;
+  margin-bottom: 10px;
+}
+
+.feat-desc {
+  font-size: 15px;
+  color: var(--text-soft);
+}
+
+@media (max-width: 760px) {
+  .feat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── How it works ──────────────────────────────────────────────────────── */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.step {
+  padding: 28px 28px 30px;
+  border-radius: var(--radius-lg);
+}
+
+.step-num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+
+.step-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: -0.015em;
+  margin: 14px 0 10px;
+}
+
+.step-desc {
+  font-size: 15px;
+  color: var(--text-soft);
+}
+
+@media (max-width: 760px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Per-app teaser ────────────────────────────────────────────────────── */
+
+.per-app-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border-soft);
+  background:
+    radial-gradient(60% 90% at 84% 10%, rgba(242, 58, 58, 0.08) 0%, transparent 62%),
+    radial-gradient(50% 80% at 12% 100%, rgba(33, 36, 64, 0.5) 0%, transparent 70%),
+    rgba(255, 255, 255, 0.035);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  padding: 62px 56px;
+}
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: lowercase;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.per-app-h2 {
+  font-size: clamp(30px, 4.2vw, 44px);
+  margin: 22px 0 16px;
+}
+
+.per-app-desc {
+  font-size: 16px;
+  color: var(--text-soft);
+  max-width: 56ch;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.chip {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 16px;
+}
+
+@media (max-width: 640px) {
+  .per-app-card {
+    padding: 44px 28px;
+  }
+}
+
+/* ── Download ──────────────────────────────────────────────────────────── */
+
+.dl-wrap {
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.dl-h2 {
+  font-size: clamp(36px, 5vw, 56px);
+  margin: 18px 0 18px;
+}
+
+.dl-sub {
+  font-size: 16.5px;
+  color: var(--text-soft);
+}
+
+.dl-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 36px;
+}
+
+.dl-fine {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 34px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+.dl-fine a {
+  color: var(--text-soft);
+  transition: color 0.15s ease;
+}
+
+.dl-fine a:hover {
+  color: var(--text);
+}
+
+.dl-fine-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+footer {
+  border-top: 1px solid var(--hairline);
+  padding: 52px 0 56px;
+}
+
+.footer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.footer-brand img {
+  width: 24px;
+  height: 24px;
+}
+
+.footer-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15.5px;
+}
+
+.footer-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+.footer-divider {
+  height: 1px;
+  background: var(--hairline);
+  margin: 30px 0;
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 26px;
+}
+
+.footer-copy {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.footer-legal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.footer-legal a:hover,
+.footer-also a:hover,
+.lang-list a:hover {
+  color: var(--text);
+}
+
+.footer-sep {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.footer-br {
+  text-align: right;
+}
+
+.footer-also {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.footer-also a {
+  color: var(--text-soft);
+}
+
+/* Language selector, as a static list: the prototype is a single page, so the
+   dropdown became a flat mono list linking to the live locale pages. */
+.lang-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 14px;
+  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  max-width: 340px;
+}
+
+.lang-list a[aria-current="true"] {
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .footer-br {
+    text-align: left;
+  }
+  .lang-list {
+    justify-content: flex-start;
+  }
+}
