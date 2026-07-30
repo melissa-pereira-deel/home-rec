@@ -40,6 +40,8 @@ struct StageView: View {
         case (.glassShelf, .recorder):
             // V2: flat record pill. Original GSFace preserved — swap back here.
             GSFaceV2()
+        case (.glassLCD, .recorder):
+            GLFace()
         case (.pocketOperator, .library):
             POLibrary()
         case (.dictaphone, .library):
@@ -47,6 +49,11 @@ struct StageView: View {
         case (.braun, .library):
             BRLibrary()
         case (.glassShelf, .library):
+            GSLibrary()
+        case (.glassLCD, .library):
+            // Deliberately the same view, not a copy: Glass v2 changes the
+            // live capture treatment only. An expanded take keeps its bar
+            // waveform and player exactly as Glass has them.
             GSLibrary()
         }
     }
@@ -123,7 +130,7 @@ struct StageView: View {
                     store.useRealisticNames.toggle()
                 }
                 Spacer()
-                Text("1–4 · tab · space · ⌘r")
+                Text("1–5 · tab · space · ⌘r")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
@@ -200,7 +207,7 @@ struct StageView: View {
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
         switch press.key {
-        case "1", "2", "3", "4":
+        case "1", "2", "3", "4", "5":
             if let n = Int(press.key.character.description),
                let concept = ConceptID(rawValue: n) {
                 store.concept = concept

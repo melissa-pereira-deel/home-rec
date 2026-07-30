@@ -22,14 +22,14 @@ shipping app's window width) with neutral chrome:
 
 - **Top bar** — concept switcher + screen toggle
 - **Bottom bar** — state scrubber: `DISARM · IDLE · REC · SAVE`
-- **Keyboard** — `1–4` switch concept · `Tab` recorder/library ·
+- **Keyboard** — `1–5` switch concept · `Tab` recorder/library ·
   `Space` record/stop · `S` replay the saved beat
 
-The four concepts share **one live state store**: start recording in one
+The five concepts share **one live state store**: start recording in one
 concept and switch to another — the take keeps running. Recordings you make
 land at the top of every concept's library with the waveform you watched.
 
-## The four directions
+## The directions
 
 | # | Direction | One-liner |
 |---|-----------|-----------|
@@ -37,6 +37,7 @@ land at the top of every concept's library with the waveform you watched.
 | 2 | **Dictaphone Deck** | Recording is tape: reels spin and *hold their angle* across takes, breathing red lamp, ballistic VU needle, amber counter. Saved beat: rewind clunk + paper slip. |
 | 3 | **Braun Utility** | Rams pocket appliance: dot-grid grille, one rotary dial, two lamps, ink polyline. Nothing pulses at idle. Saved beat: green double-blink + index card. |
 | 4 | **Glass Shelf, Metal Heart** | Frosted glass over a mesh backdrop; recordings are charcoal cards; one physical brand-red key set in brushed metal. Saved beat: the take materializes as a card. |
+| 5 | **Glass v2** | Glass, foundation untouched, with the live capture moved onto the Pocket Operator's LCD: same recessed bed and phosphor green, but the waveform quantised onto a nine-cell segment grid instead of status text. Brand mark beside the wordmark. Stored takes keep Glass's bar waveform. |
 
 Cross-cutting (especially the library): the **untitled.stream** language —
 lowercase voice, waveform-as-identity thumbnails, monospace spec lines,

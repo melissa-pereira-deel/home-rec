@@ -6,6 +6,7 @@ enum ConceptID: Int, CaseIterable, Identifiable {
     case dictaphone
     case braun
     case glassShelf
+    case glassLCD
 
     var id: Int { rawValue }
 
@@ -16,6 +17,7 @@ enum ConceptID: Int, CaseIterable, Identifiable {
         case .dictaphone: "2 DICTAPHONE"
         case .braun: "3 BRAUN"
         case .glassShelf: "4 GLASS"
+        case .glassLCD: "5 GLASS V2"
         }
     }
 }

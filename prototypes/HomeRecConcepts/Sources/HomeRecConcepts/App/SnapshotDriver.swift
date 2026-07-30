@@ -78,6 +78,24 @@ enum SnapshotDriver {
                                     store.scrub(to: 0.42)
                                 }))
         }
+        // Glass v2 shares Glass's notice slot and onboarding sheet, but its
+        // LCD is taller than the waveform card — capture both so the fixed
+        // 450pt face is proven not to overflow.
+        all.append(Scenario(name: "5-gl-rec-notice", settleMilliseconds: 400,
+                            apply: { store in
+                                store.concept = .glassLCD
+                                store.screen = .recorder
+                                store.forceState(.idle)
+                                store.activeError = .startFailed
+                            }))
+        all.append(Scenario(name: "5-gl-rec-onboarding", settleMilliseconds: 500,
+                            apply: { store in
+                                store.concept = .glassLCD
+                                store.screen = .recorder
+                                store.dismissError()
+                                store.forceState(.idle)
+                                store.showOnboarding = true
+                            }))
         // Policy C / RecordingBar: recording continues into the library, and
         // playback during a capture shows the monitoring guarantee.
         all.append(Scenario(name: "spec-03-recbar-library", settleMilliseconds: 1200,
@@ -297,6 +315,7 @@ enum SnapshotDriver {
         case .dictaphone: "2-dt"
         case .braun: "3-br"
         case .glassShelf: "4-gs"
+        case .glassLCD: "5-gl"
         }
     }
 
