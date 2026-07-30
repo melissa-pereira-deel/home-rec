@@ -5,9 +5,9 @@ export default function DownloadSection() {
   return (
     <section className="section" id="download">
       <div className="wrap">
-        {/* The fine print used to run as one wrapping, centered, dot-separated
-            row. Rebuilt as a spec column; the release-notes and checksum links
-            moved to the footer, where the rest of the site's links live. */}
+        {/* The fine print that used to sit here has been distributed to where
+            each part belongs: the hardware and privacy facts to the hero spec
+            strip, the links to the footer nav. The close is just the offer. */}
         <div className="dl-grid">
           <div>
             <div className="eyebrow">Ready to start?</div>
@@ -32,18 +32,6 @@ export default function DownloadSection() {
               </a>
             </div>
           </div>
-
-          <ul className="spec-list">
-            <li>macOS 15 (Sequoia) or later</li>
-            <li>Apple Silicon &amp; Intel</li>
-            <li>Signed &amp; notarized</li>
-            <li>No telemetry</li>
-            <li>
-              <a href={LINKS.github} target="_blank" rel="noopener">
-                Open source on GitHub ↗
-              </a>
-            </li>
-          </ul>
         </div>
       </div>
     </section>

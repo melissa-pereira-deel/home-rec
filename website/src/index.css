@@ -21,7 +21,7 @@
    shared left edge group. Where a rule came out, the space around the block
    opened and the space inside it tightened — that ratio is what now carries
    the boundary. Kept: nav edge, the hero's vertical hairline, the hero spec
-   rule, the four feature column heads, take rows, the spec-list head, the
+   rule, the four feature column heads, take rows, the
    section seams, the footer edge and its locale rule.
 
    Single-theme dark: the near-black ground IS the brand, the same way the app
@@ -863,11 +863,11 @@ a {
    dot-separated row. Now a two-column close — statement left, the fine print
    rebuilt as a spec table on the right where each item gets its own rule. */
 
+/* Single column: the spec list that used to sit opposite has been
+   distributed — the hardware and privacy facts to the hero strip, the links
+   to the footer nav — so the close is just the offer and its two controls. */
 .dl-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
-  gap: 80px;
-  align-items: start;
+  max-width: 640px;
 }
 
 .dl-h2 {
@@ -888,45 +888,6 @@ a {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 36px;
-}
-
-.spec-list {
-  list-style: none;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  line-height: 1.35;
-  color: var(--text-dim);
-}
-
-/* No per-row rules: eight hairlines in a 400×340 block, opposite the largest
-   headline on the page, was the densest ruling on the site. The list already
-   splits into two registers by color — dimmed spec lines, white links. */
-.spec-list li {
-  padding: 0 0 18px;
-}
-
-.spec-list li:last-child {
-  padding-bottom: 0;
-}
-
-.spec-list a {
-  color: var(--text);
-  display: inline-block;
-  padding: 14px 0;
-  margin: -14px 0;
-  transition: color 0.15s ease;
-}
-
-.spec-list a:hover {
-  color: var(--accent);
-}
-
-@media (max-width: 900px) {
-  .dl-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
-  }
 }
 
 /* ── Footer ────────────────────────────────────────────────────────────────
