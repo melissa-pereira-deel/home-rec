@@ -7,12 +7,22 @@
 
      · zero backdrop-filter, zero glow — measured on untitled.stream, which
        runs 0 blurred elements and 0 real box-shadows on the whole page
-     · a closed 4-step type scale, two weights, one uniform -0.03em tracking
      · two text colors (white / grey) — hierarchy from size + color, never depth
      · binary radius: 0 everywhere, pill for interactive buttons only
-     · structure carried entirely by hairline rules, column alignment, and
-       generous fixed gutters
      · red reserved for the record signal and the primary action
+
+   Polished from a typographic + rule audit. Fourteen font sizes closed to an
+   eight-step scale on a 1.2 ratio (12/13/15 · 31/37/45/54/78) with 65 and the
+   18-26 band held in reserve; eleven letter-spacing values to seven, ramped by
+   size rather than uniform, because this scale spans 6.5× and one value cannot
+   fit both ends; one display weight.
+
+   Rules went 35 → 17 (the footer 6 → 2). A rule separates; proximity and a
+   shared left edge group. Where a rule came out, the space around the block
+   opened and the space inside it tightened — that ratio is what now carries
+   the boundary. Kept: nav edge, the hero's vertical hairline, the hero spec
+   rule, the four feature column heads, take rows, the spec-list head, the
+   section seams, the footer edge and its locale rule.
 
    Single-theme dark: the near-black ground IS the brand, the same way the app
    has no light mode. Not a missing feature.
@@ -58,6 +68,8 @@
      content sits in the main column. Repeated in every section for rhythm. */
   --label-col: 180px;
   --label-gap: 40px;
+
+  --section-pad: 112px;
 }
 
 * {
@@ -82,9 +94,15 @@ body {
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.5;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  /* Explicit rather than text-rendering: optimizeLegibility, which enables
+     these as a side effect, is inconsistently implemented, and causes layout
+     jank on font swap. */
+  font-kerning: normal;
+  font-feature-settings:
+    "kern" 1,
+    "liga" 1;
 }
 
 img,
@@ -111,17 +129,33 @@ a {
   padding: 0 var(--gutter);
 }
 
-@media (max-width: 1000px) {
+/* Three breakpoints, not seven. The previous set (1000/980/900/760/700/620/560)
+   had a dead 20px band where the gutter had narrowed but the hero had not
+   stacked, and it flipped the feature grid to four columns 315px before the
+   measure could support it. These three are set by where the CONTENT breaks:
+   1280 is where four feature columns reach a readable measure, 900 is where
+   the marginal label column stops paying for itself, 700 is single column. */
+@media (max-width: 1279px) {
   :root {
     --gutter: 40px;
     --label-col: 140px;
-    --label-gap: 28px;
+    --label-gap: 32px;
+    --section-pad: 100px;
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 899px) {
+  :root {
+    --label-gap: 24px;
+    --section-pad: 88px;
+  }
+}
+
+@media (max-width: 699px) {
   :root {
     --gutter: 24px;
+    --label-gap: 20px;
+    --section-pad: 72px;
   }
 }
 
@@ -129,25 +163,34 @@ a {
    A closed scale. Uniform -0.03em tracking on the sans, positive tracking on
    the mono. Weight does almost no work — size and color carry hierarchy. */
 
-/* Lowercase control voice: eyebrows and control labels render lowercase in
-   mono — via text-transform, so the markup keeps the site copy verbatim. */
+/* No text-transform. It was claimed to keep the copy verbatim; it did the
+   opposite — running authored copy through `lowercase` rendered macOS as
+   "macos", GitHub as "github", SHA-256 as "sha-256" and the author's own name
+   in lower case. The lowercase voice survives exactly where it is authentic:
+   the product-UI strings, which are authored lowercase.
+
+   Tracking: +0.14em was borrowed from the small-caps rule, which is about
+   UPPERCASE set as a standalone string. These labels are lowercase mono,
+   which already carries generous sidebearings — at 12px that much tracking
+   disintegrated a word into separate letters. */
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 400;
-  letter-spacing: 0.14em;
-  line-height: 1.4;
-  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
   color: var(--text-dim);
 }
 
+/* One display weight. On a near-black ground, irradiation makes type read
+   about half a weight heavier than it measures, so 500 here sits where 600
+   would on white. */
 .h-display {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 0.99;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
   color: var(--text);
-  text-wrap: balance;
 }
 
 .mono {
@@ -167,7 +210,7 @@ a {
   font-family: var(--font-body);
   font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   line-height: 1;
   padding: 15px 26px;
   border-radius: var(--radius-pill);
@@ -202,7 +245,8 @@ a {
 
 .btn-sm {
   font-size: 13px;
-  padding: 10px 18px;
+  letter-spacing: -0.01em;
+  padding: 14px 18px;
 }
 
 /* ── Nav ───────────────────────────────────────────────────────────────── */
@@ -228,6 +272,8 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 10px 0;
+  margin: -10px 0;
 }
 
 .nav-logo img {
@@ -237,16 +283,16 @@ a {
 
 .logo-name {
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 16px;
-  letter-spacing: -0.03em;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .nav-meta {
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.12em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
@@ -290,13 +336,15 @@ a {
 }
 
 .hero-h1 {
-  font-size: clamp(44px, 7.4vw, 92px);
-  margin: 22px 0 28px;
+  font-size: clamp(37px, 5.4vw, 78px);
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+  margin: 20px 0 32px;
 }
 
 .hero-sub {
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--text-dim);
   max-width: 42ch;
 }
@@ -321,39 +369,31 @@ a {
   border-top: 1px solid var(--line);
   margin-top: 72px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.08em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
+/* The three items sit on hard grid columns, aligned to the feature columns
+   below. Column position separates them; the vertical hairlines that used to
+   did it turned a clean spec line into a table. */
 .hero-req > span {
-  padding: 18px 0 18px 24px;
-  border-left: 1px solid var(--line-soft);
-}
-
-.hero-req > span:first-child {
-  padding-left: 0;
-  border-left: none;
+  padding: 18px 32px 18px 0;
 }
 
 /* Below the point where three mono columns still fit, each requirement takes
-   its own full-width row on a rule and aligns to the page gutter. */
-@media (max-width: 700px) {
+   its own full-width row and aligns to the page gutter. No rules: at one
+   column they would stack into a ladder. */
+@media (max-width: 699px) {
   .hero-req {
     grid-template-columns: minmax(0, 1fr);
   }
   .hero-req > span {
-    padding: 14px 0;
-    border-left: none;
-    border-top: 1px solid var(--line-soft);
-  }
-  .hero-req > span:first-child {
-    border-top: none;
+    padding: 11px 0;
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1279px) {
   .hero {
     padding-top: 120px;
   }
@@ -364,11 +404,12 @@ a {
     padding-right: 0;
     padding-bottom: 56px;
   }
+  /* No border-top here: a full-width rule over a 420px card left up to 480px
+     of hairline hanging into empty space. Space does the separating. */
   .hero-figure {
     border-left: none;
-    border-top: 1px solid var(--line-soft);
     padding-left: 0;
-    padding-top: 56px;
+    padding-top: 72px;
   }
   .hero-req {
     margin-top: 56px;
@@ -394,16 +435,17 @@ a {
 
 .recorder-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   padding-bottom: 18px;
 }
 
 .recorder-title {
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--text);
 }
 
@@ -412,8 +454,8 @@ a {
   align-items: center;
   gap: 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
@@ -423,18 +465,20 @@ a {
 
 .recorder-timer {
   font-family: var(--font-mono);
-  font-size: clamp(38px, 4.4vw, 46px);
+  font-size: 45px;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1;
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  padding: 4px 0 18px;
+  padding: 4px 0 20px;
 }
 
-/* Rules above and below the waveform instead of a bordered box. */
+/* One rule above the waveform, not two around it — the bottom edge is already
+   defined by air and then the solid red pill, the highest-contrast object on
+   the card. */
 .recorder-wave {
   border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
   height: 96px;
 }
 
@@ -445,7 +489,7 @@ a {
 
 .recorder-action {
   display: flex;
-  padding: 20px 0 22px;
+  padding: 28px 0 22px;
 }
 
 /* The record pill — the product's own record control, so it keeps the pill
@@ -457,12 +501,12 @@ a {
   font-family: var(--font-body);
   font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.02em;
-  text-transform: lowercase;
+  letter-spacing: -0.015em;
+  line-height: 1;
   color: #fff;
   background: var(--accent);
   border-radius: var(--radius-pill);
-  padding: 14px 30px;
+  padding: 16px 30px;
 }
 
 .rec-glyph {
@@ -476,18 +520,16 @@ a {
   align-items: center;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line-soft);
+  padding-bottom: 16px;
 }
 
 /* Takes are rows on a rule, not individually bordered pills. */
 .take {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 14px;
   padding: 11px 0;
   border-bottom: 1px solid var(--line-soft);
@@ -499,6 +541,7 @@ a {
 
 .take-thumb {
   flex-shrink: 0;
+  align-self: center;
   color: var(--text-dim);
 }
 
@@ -507,7 +550,8 @@ a {
   min-width: 0;
   font-size: 13px;
   font-weight: 400;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -516,7 +560,8 @@ a {
 
 .take-len {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
@@ -527,18 +572,22 @@ a {
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: lowercase;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text);
   border: 1px solid var(--line);
   padding: 6px 12px;
   margin-bottom: 16px;
 }
 
+/* 6px matches the mono x-height at 12px, and the lift puts it on the
+   x-height band rather than the line-box centre — the label is lowercase. */
 .rec-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
+  align-self: center;
+  position: relative;
+  top: -0.5px;
   background: var(--accent);
 }
 
@@ -563,7 +612,7 @@ a {
 
 .section {
   position: relative;
-  padding: 112px 0;
+  padding: var(--section-pad) 0;
 }
 
 .section + .section {
@@ -573,27 +622,23 @@ a {
 /* The marginal label column — eyebrow sits in the margin, the statement sits
    in the main column. Repeated in every section, which is what makes the page
    read as a grid rather than a stack. */
+/* Baseline alignment, not a magic padding: the previous 0.7em was measured
+   against the label, so it could not track the headline clamp — the eyebrow
+   sat ~25px high at desktop and drifted with viewport width. */
 .section-head {
   display: grid;
   grid-template-columns: var(--label-col) minmax(0, 1fr);
   gap: var(--label-gap);
-  align-items: start;
-  margin-bottom: 80px;
-}
-
-.section-head .eyebrow {
-  padding-top: 0.7em;
+  align-items: baseline;
+  margin-bottom: 72px;
 }
 
 .section-h2 {
-  font-size: clamp(32px, 4.8vw, 56px);
-  max-width: 16ch;
+  font-size: clamp(31px, 3.8vw, 54px);
+  max-width: 18ch;
 }
 
-@media (max-width: 760px) {
-  .section {
-    padding: 76px 0;
-  }
+@media (max-width: 899px) {
   .section-head {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
@@ -623,37 +668,45 @@ a {
   width: 26px;
   height: 26px;
   color: var(--metal);
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 
 .feat-title {
   font-family: var(--font-body);
   font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.015em;
   line-height: 1.3;
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .feat-desc {
   font-size: 13px;
   line-height: 1.5;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--text-dim);
 }
 
-@media (max-width: 1000px) {
+/* Four columns only where the measure supports them: at 1001–1279px the old
+   4-up rendered feature copy at 26–35 characters per line over 6–7 lines. */
+@media (max-width: 1279px) {
   .feat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 48px 32px;
   }
 }
 
-@media (max-width: 560px) {
+/* At one column the four top rules stacked into a ladder of full-width lines
+   rather than heading columns — the icon becomes the entry marker instead. */
+@media (max-width: 699px) {
   .feat-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 36px;
+    gap: 48px;
+  }
+  .feat-card {
+    border-top: none;
+    padding-top: 0;
   }
 }
 
@@ -666,44 +719,59 @@ a {
   gap: 64px 32px;
 }
 
+/* No rule: the 37px mono numeral is the most conspicuous entry marker on the
+   page, and a hairline above it was belt-and-braces. */
 .step {
-  border-top: 1px solid var(--line);
-  padding-top: 24px;
+  padding-top: 0;
 }
 
 .step-num {
   display: block;
   font-family: var(--font-mono);
-  font-size: 40px;
+  font-size: 37px;
   font-weight: 400;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .step-title {
   font-family: var(--font-body);
   font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
   color: var(--text);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .step-desc {
   font-size: 13px;
   line-height: 1.5;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--text-dim);
-  max-width: 34ch;
 }
 
-@media (max-width: 760px) {
+/* One measure lock for both body columns, in px rather than ch. The rule (or
+   the column) spans the grid track; the text sits in its own measure — which
+   is the Swiss composition, not a gap to be filled.
+
+   340px measures ~44 characters per line at 13px Inter (the theoretical
+   6.06px advance under-counts real word-broken lines by a third). The four
+   feature columns are narrower than this at every width, so the cap binds
+   only the three-up steps; the features run at caption measure by column,
+   which is the register they are — a caption under a title, not body copy. */
+.feat-desc,
+.step-desc {
+  max-width: 340px;
+}
+
+@media (max-width: 1279px) {
   .steps {
     grid-template-columns: minmax(0, 1fr);
-    gap: 36px;
+    gap: 56px;
   }
   .step-num {
     margin-bottom: 20px;
@@ -715,9 +783,11 @@ a {
    Now a flat bordered block using the same marginal-label grid as the
    sections, so it sits on the page rhythm instead of floating above it. */
 
+/* The --surface fill already lifts this block off the ground; a full-strength
+   border on top of a fill is one device too many. */
 .per-app-card {
   position: relative;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-soft);
   background: var(--surface);
   padding: 64px;
   display: grid;
@@ -729,24 +799,23 @@ a {
 .badge {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text);
   border: 1px solid var(--line);
   padding: 5px 11px;
 }
 
 .per-app-h2 {
-  font-size: clamp(28px, 4vw, 44px);
-  max-width: 15ch;
+  font-size: clamp(31px, 3.8vw, 54px);
+  max-width: 20ch;
 }
 
 .per-app-desc {
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--text-dim);
-  max-width: 52ch;
+  max-width: 46ch;
   margin-top: 20px;
 }
 
@@ -757,17 +826,19 @@ a {
   margin-top: 32px;
 }
 
-/* Square spec tags, not pills — these are labels, not controls. */
+/* Square spec tags, not pills — these are labels, not controls. Bordered
+   boxes inside a bordered block inside a bordered section was three levels of
+   enclosure; a flat fill carries them with none. */
 .chip {
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
-  border: 1px solid var(--line-soft);
-  padding: 7px 13px;
+  background: var(--surface-2);
+  padding: 8px 14px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
   .per-app-card {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
@@ -775,7 +846,7 @@ a {
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 699px) {
   .per-app-card {
     padding: 32px 22px;
   }
@@ -794,13 +865,14 @@ a {
 }
 
 .dl-h2 {
-  font-size: clamp(38px, 5.6vw, 68px);
-  margin: 20px 0 24px;
+  font-size: clamp(31px, 3.8vw, 54px);
+  max-width: none;
+  margin: 20px 0 32px;
 }
 
 .dl-sub {
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--text-dim);
   max-width: 44ch;
 }
@@ -816,19 +888,28 @@ a {
   list-style: none;
   border-top: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
   color: var(--text-dim);
 }
 
+/* No per-row rules: eight hairlines in a 400×340 block, opposite the largest
+   headline on the page, was the densest ruling on the site. The list already
+   splits into two registers by color — dimmed spec lines, white links. */
 .spec-list li {
-  border-bottom: 1px solid var(--line-soft);
-  padding: 13px 0;
+  padding: 0 0 18px;
+}
+
+.spec-list li:last-child {
+  padding-bottom: 0;
 }
 
 .spec-list a {
   color: var(--text);
+  display: inline-block;
+  padding: 14px 0;
+  margin: -14px 0;
   transition: color 0.15s ease;
 }
 
@@ -863,18 +944,18 @@ footer {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 40px var(--label-gap);
-  align-items: start;
-  padding-bottom: 56px;
+  align-items: baseline;
+  padding: 8px 0 48px;
 }
 
-/* The brand sits on the same rule as the other columns, so one continuous
-   hairline runs the full width, broken only by the column gaps. */
 .footer-brand {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
-  border-top: 1px solid var(--line);
-  padding-top: 18px;
+}
+
+.footer-brand img {
+  align-self: center;
 }
 
 .footer-brand img {
@@ -884,34 +965,41 @@ footer {
 
 .footer-name {
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 15px;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .footer-meta {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
-/* Each footer column is headed by a rule rather than a label — the page adds
-   no copy that was not already there. */
+/* No column rules. The previous three read as one dashed line broken by two
+   40px gaps, and a rule is not a label — the grid already columns these. */
 .footer-col {
-  border-top: 1px solid var(--line);
-  padding-top: 18px;
+  padding-top: 0;
 }
 
 .footer-links {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 9px;
+  gap: 0;
   font-size: 13px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
   color: var(--text);
+}
+
+/* Padding rather than gap: it gives these 13px links a 44px touch target
+   without opening the visual rhythm of the list. */
+.footer-links a {
+  display: inline-block;
+  padding: 14px 0;
 }
 
 .footer-links a,
@@ -931,7 +1019,8 @@ footer {
    The grid column already sets the measure. */
 .footer-also {
   font-size: 13px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
   color: var(--text-dim);
 }
 
@@ -940,6 +1029,9 @@ footer {
 .footer-also a {
   color: var(--text);
   white-space: nowrap;
+  display: inline-block;
+  padding: 14px 0;
+  margin: -14px 0;
 }
 
 /* Language selector, as a static list: the prototype is a single page, so the
@@ -950,30 +1042,35 @@ footer {
 .footer-langs {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 14px var(--label-gap);
-  border-top: 1px solid var(--line);
-  padding: 20px 0 24px;
+  gap: 0 var(--label-gap);
+  border-top: 1px solid var(--line-soft);
+  padding: 12px 0 16px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
+}
+
+.footer-langs a {
+  display: inline-block;
+  padding: 14px 0;
 }
 
 .footer-langs a[aria-current="true"] {
   color: var(--text);
 }
 
+/* No rule: this is already the smallest, dimmest type in the document and the
+   last line on the page. Space is enough. */
 .footer-base {
-  border-top: 1px solid var(--line-soft);
-  padding-top: 24px;
+  padding-top: 32px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-dim);
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 899px) {
   .footer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 40px 32px;
@@ -981,23 +1078,23 @@ footer {
   .footer-brand {
     grid-column: 1 / -1;
   }
+  /* Seven items divide by no useful column count — 4-up leaves a 3-item last
+     row, 2-up orphans one. Flowing them lets the row fill to its own width. */
   .footer-langs {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 14px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 28px;
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 699px) {
   footer {
     padding: 56px 0 48px;
   }
   .footer-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 36px;
+    gap: 28px;
     padding-bottom: 40px;
-  }
-  .footer-langs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
