@@ -5,9 +5,9 @@ export default function DownloadSection() {
   return (
     <section className="section" id="download">
       <div className="wrap">
-        {/* The seven fine-print items used to run as one wrapping, centered,
-            dot-separated row. Same items, same order, same links — rebuilt as
-            a spec table where each one gets its own rule. */}
+        {/* The fine print used to run as one wrapping, centered, dot-separated
+            row. Rebuilt as a spec column; the release-notes and checksum links
+            moved to the footer, where the rest of the site's links live. */}
         <div className="dl-grid">
           <div>
             <div className="eyebrow">Ready to start?</div>
@@ -38,16 +38,6 @@ export default function DownloadSection() {
             <li>Apple Silicon &amp; Intel</li>
             <li>Signed &amp; notarized</li>
             <li>No telemetry</li>
-            <li>
-              <a href={LINKS.releaseNotes} target="_blank" rel="noopener">
-                Release notes ↗
-              </a>
-            </li>
-            <li>
-              <a href={LINKS.sha256} target="_blank" rel="noopener">
-                SHA-256 ↗
-              </a>
-            </li>
             <li>
               <a href={LINKS.github} target="_blank" rel="noopener">
                 Open source on GitHub ↗

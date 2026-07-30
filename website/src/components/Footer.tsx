@@ -24,11 +24,20 @@ export default function Footer() {
               <span className="footer-meta">macOS app</span>
             </div>
 
+            {/* Release notes and the checksum moved here from the download
+                section's spec column — they are links, and this is where the
+                site's links live. */}
             <nav className="footer-links" aria-label="Site">
               <a href={LINKS.privacy}>Privacy</a>
               <a href={LINKS.terms}>Terms</a>
               <a href={LINKS.github} target="_blank" rel="noopener">
                 GitHub ↗
+              </a>
+              <a href={LINKS.releaseNotes} target="_blank" rel="noopener">
+                Release notes ↗
+              </a>
+              <a href={LINKS.sha256} target="_blank" rel="noopener">
+                SHA-256 ↗
               </a>
             </nav>
           </div>

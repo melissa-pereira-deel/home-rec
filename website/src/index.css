@@ -365,7 +365,7 @@ a {
    an explicit column count per breakpoint there is no ragged wrap to handle. */
 .hero-req {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border-top: 1px solid var(--line);
   margin-top: 72px;
   font-family: var(--font-mono);
@@ -378,7 +378,15 @@ a {
    below. Column position separates them; the vertical hairlines that used to
    did it turned a clean spec line into a table. */
 .hero-req > span {
-  padding: 18px 32px 18px 0;
+  padding: 18px 24px 18px 0;
+}
+
+/* Five short mono items no longer fit across; two columns keeps every item on
+   a column rather than letting a flex row wrap ragged. */
+@media (max-width: 1099px) {
+  .hero-req {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Below the point where three mono columns still fit, each requirement takes
@@ -664,7 +672,9 @@ a {
   width: 26px;
   height: 26px;
   color: var(--metal);
-  margin-bottom: 32px;
+  /* Tight to its title: the icon belongs to the card's heading, not to the
+     rule above it. 32px let it float between the two. */
+  margin-bottom: 12px;
 }
 
 .feat-title {
@@ -1151,7 +1161,10 @@ footer {
 
 .per-app-ambient {
   position: absolute;
-  inset: -7% -5%;
+  /* Horizontal bleed stays inside the gutter: at the 1440 cap the wrap fills
+     the viewport edge to edge, so anything wider than the 64px gutter puts a
+     scrollbar on the page. 4% of the stage is ~52px — under it. */
+  inset: -7% -4%;
   z-index: -1;
   pointer-events: none;
   /* Kept off the top-left corner so the badge stays legible; the warm

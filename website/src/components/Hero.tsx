@@ -48,6 +48,8 @@ export default function Hero() {
         <div className="hero-req">
           <span>macOS 15+</span>
           <span>Apple Silicon &amp; Intel</span>
+          <span>Signed &amp; notarized</span>
+          <span>No telemetry</span>
           <span>No account required</span>
         </div>
       </div>
