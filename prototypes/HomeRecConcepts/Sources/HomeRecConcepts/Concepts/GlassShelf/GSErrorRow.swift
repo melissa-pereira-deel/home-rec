@@ -119,8 +119,14 @@ struct GSErrorRow: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Emphasis is weight, not hue: the action to take is a near-white fill,
-    /// everything else an outline.
+    /// Emphasis is fill luminance — not hue, and not an outline.
+    ///
+    /// Neither pill is stroked. A 1px border is the first thing lost to a dim
+    /// monitor, greyscale or a resized screenshot, and outline-vs-fill reads
+    /// as two *kinds* of object rather than two ranks of one. Both are light
+    /// greys; the recommended action is simply the brighter of the two, which
+    /// survives all of the above. See `GlassButtonEmphasis` in GlassKit — this
+    /// is the same rule, hand-rolled for the prototype.
     private func miniPill(
         _ label: String,
         prominent: Bool,
@@ -130,17 +136,15 @@ struct GSErrorRow: View {
             Text(label)
                 .font(.custom("Inter", size: 11, relativeTo: .caption))
                 .fontWeight(.semibold)
-                .foregroundStyle(prominent ? Color.black.opacity(0.88) : .white.opacity(0.9))
+                // Dark ink on both: 17:1 on the near-white, 13:1 on the grey.
+                .foregroundStyle(Color(red: 0.051, green: 0.051, blue: 0.059))
                 .padding(.horizontal, 12)
                 .frame(height: 26)
                 .background(
-                    prominent ? Color.white.opacity(0.92) : Color.white.opacity(0.07),
+                    prominent
+                        ? Color(red: 0.949, green: 0.949, blue: 0.961)   // #F2F2F5
+                        : Color(red: 0.761, green: 0.761, blue: 0.792),  // #C2C2CA
                     in: Capsule()
-                )
-                .overlay(
-                    Capsule().strokeBorder(
-                        prominent ? .clear : .white.opacity(0.18), lineWidth: 1
-                    )
                 )
                 .contentShape(Capsule())
         }

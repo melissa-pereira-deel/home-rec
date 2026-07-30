@@ -40,6 +40,11 @@ public enum GlassColorRole: String, CaseIterable, Hashable, Sendable {
     case statusWarning
     case statusSuccess
     case statusNeutral
+
+    // Control fills — emphasis carried by luminance, not by an outline.
+    case controlPrimaryNeutral
+    case controlSecondary
+    case textOnNeutralControl
 }
 
 // MARK: - Palette
@@ -95,6 +100,26 @@ public struct GlassColors {
     public var statusSuccess: Color
     public var statusNeutral: Color
 
+    // Control fills
+    //
+    // Emphasis in this kit is *luminance*, never an outline. A resting control
+    // is a filled shape; the only stroke a button ever draws is its focus
+    // ring, which is a different thing with a different job (WCAG 2.4.11).
+    // Three fills, in descending weight:
+
+    /// Near-white. The default action of a group where the accent is spent or
+    /// reserved — a notice's recovery action, for instance. Not pure white:
+    /// #FFF against this ground haloes at mini sizes.
+    public var controlPrimaryNeutral: Color
+    /// Light grey, one clear luminance step below the primary. The companion
+    /// action. Its job is to be obviously pressable and obviously *not* the
+    /// one being recommended, and it does that by being dimmer — which
+    /// survives greyscale, low vision and a bad monitor, where a 1px outline
+    /// does not.
+    public var controlSecondary: Color
+    /// Ink for both light fills above.
+    public var textOnNeutralControl: Color
+
     public init(
         ground: Color,
         groundRaised: Color,
@@ -115,7 +140,10 @@ public struct GlassColors {
         statusDanger: Color,
         statusWarning: Color,
         statusSuccess: Color,
-        statusNeutral: Color
+        statusNeutral: Color,
+        controlPrimaryNeutral: Color = Color(glassHex: 0xF2F2F5),
+        controlSecondary: Color = Color(glassHex: 0xC2C2CA),
+        textOnNeutralControl: Color = Color(glassHex: 0x0D0D0F)
     ) {
         self.ground = ground
         self.groundRaised = groundRaised
@@ -137,6 +165,9 @@ public struct GlassColors {
         self.statusWarning = statusWarning
         self.statusSuccess = statusSuccess
         self.statusNeutral = statusNeutral
+        self.controlPrimaryNeutral = controlPrimaryNeutral
+        self.controlSecondary = controlSecondary
+        self.textOnNeutralControl = textOnNeutralControl
     }
 
     /// Role lookup. Lets generic code (the gallery, a token inspector) walk
@@ -163,6 +194,9 @@ public struct GlassColors {
         case .statusWarning: statusWarning
         case .statusSuccess: statusSuccess
         case .statusNeutral: statusNeutral
+        case .controlPrimaryNeutral: controlPrimaryNeutral
+        case .controlSecondary: controlSecondary
+        case .textOnNeutralControl: textOnNeutralControl
         }
     }
 }

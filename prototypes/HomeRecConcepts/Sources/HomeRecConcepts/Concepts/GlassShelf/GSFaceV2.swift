@@ -53,8 +53,7 @@ struct GSFaceV2: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("home rec")
-                .font(.custom("Inter", size: 13, relativeTo: .body).weight(.bold))
+            GSBrand.wordmark(size: 13)
                 .foregroundStyle(.white.opacity(0.95))
             Spacer()
             GSTheme.mono(store.selectedFormat.rawValue + " · 48kHz")

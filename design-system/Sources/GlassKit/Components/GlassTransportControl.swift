@@ -43,12 +43,15 @@ public struct GlassTransportControl: View {
         GlassPillButton(
             presentation.label,
             systemImage: presentation.symbolName,
-            variant: presentation.isAccented ? .solid : .neutral,
-            size: size
+            emphasis: presentation.isAccented ? .primary : .blocked,
+            size: size,
+            isLoading: presentation.isBusy
         ) {
             action(presentation.intent)
         }
-        .disabled(!presentation.isEnabled)
+        // A busy control is *not* disabled: "arming…" is the app working, not
+        // the app refusing. Only genuinely unavailable states disable.
+        .disabled(!presentation.isEnabled && !presentation.isBusy)
         // The label changes identity between states, so SwiftUI would
         // cross-fade a "record" → "stop" swap as two unrelated views. Keying
         // on the label makes the change a single, deliberate transition.

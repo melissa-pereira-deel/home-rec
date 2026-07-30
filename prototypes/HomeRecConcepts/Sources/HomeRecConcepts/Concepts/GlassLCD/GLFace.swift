@@ -5,7 +5,7 @@ import SwiftUI
 /// on the recorder screen:
 ///
 /// 1. The waveform card is replaced by the Pocket Operator's LCD panel,
-///    showing the same capture quantised onto a segment grid (`GLWaveLCD`).
+///    showing the same capture on the PO's phosphor bed (`GLWaveLCD`).
 /// 2. The brand mark sits beside the wordmark in the header.
 ///
 /// The library is untouched — `GLLibrary` is `GSLibrary`, so an expanded take
@@ -57,10 +57,10 @@ struct GLFace: View {
     // MARK: - Header: mark + wordmark
 
     private var header: some View {
+        // 8pt gap = the site's 10/24 lockup ratio at a 20pt mark.
         HStack(spacing: 8) {
             brandMark
-            Text("home rec")
-                .font(.custom("Inter", size: 13, relativeTo: .body).weight(.bold))
+            GSBrand.wordmark(size: 13)
                 .foregroundStyle(.white.opacity(0.95))
             Spacer()
             GSTheme.mono(store.selectedFormat.rawValue + " · 48kHz")
@@ -68,25 +68,10 @@ struct GLFace: View {
         }
     }
 
-    /// The real homerec.app mark. Its source is a 180pt touch icon whose art
-    /// is inset in a white square, so it is oversized ~5% and re-clipped to
-    /// the same continuous curve — otherwise the white canvas frames it and
-    /// the mark reads smaller than the wordmark it sits beside.
-    @ViewBuilder
+    /// The site's mark, drawn. 20pt against the 13pt wordmark holds the
+    /// lockup ratio homerec.app uses in its nav (24 / 15).
     private var brandMark: some View {
-        if let icon = BrandAssets.appIcon {
-            Image(nsImage: icon)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 18.9, height: 18.9)
-                .frame(width: 18, height: 18)
-                .clipShape(RoundedRectangle(cornerRadius: 4.1, style: .continuous))
-        } else {
-            Circle()
-                .fill(GSTheme.accent)
-                .frame(width: 10, height: 10)
-                .frame(width: 18, height: 18)
-        }
+        GSBrandMark(size: 20)
     }
 
     // MARK: - Settings

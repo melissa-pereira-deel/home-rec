@@ -85,12 +85,17 @@ Roles are named for the job the colour does, never for the colour it is. `accent
 | `statusWarning` | `#EBA82E` | Warning notice glyph | **8.3:1** |
 | `statusSuccess` | `#30D158` | Permission granted / ready | **8.4:1** |
 | `statusNeutral` | white 25% | Terminal blocks | — |
+| `controlPrimaryNeutral` | `#F2F2F5` | Primary button fill where the accent is spent | 17:1 (as ground for its ink) |
+| `controlSecondary` | `#C2C2CA` | Secondary button fill | 13:1 (as ground for its ink) |
+| `textOnNeutralControl` | `#0D0D0F` | Ink on both light fills above | — |
 
 Ratios are measured against `surfaceCard` (`#1C1C1E`), which is the most common text background and the more conservative of the two. On the lighter panel surface (≈ `#26282E`) every ratio drops about 12%: `textTertiary` becomes 4.5:1, still AA.
 
 ### Decisions worth explaining
 
 **Why `accent` is `#F23A3A` and not the wordmark's `#FF3E3E`.** Large solid fills read hotter than thin strokes. At 44 × 130pt the wordmark red vibrates against a dark panel; pulled ~5% darker it sits at the same *perceived* intensity as the logo does at its size. If you ever put the accent on a thin stroke at small size, the wordmark red is the correct value — but the kit has no such use, so it is not a token.
+
+**Why the two light control fills are a fixed step apart.** `controlPrimaryNeutral` and `controlSecondary` are 14 points of L\* apart — enough that the rank is legible at a glance and in greyscale, close enough that they still read as the same family of object. They replace what used to be a fill-vs-outline distinction, which encoded rank in the one channel most likely to disappear (see *Buttons*, §9). Neither is pure white: `#FFF` against this ground haloes at mini sizes.
 
 **Why `textAccent` exists.** `#F23A3A` reaches only 4.4:1 on the card, which fails WCAG AA for body text. Rather than let accent-coloured words ship at a failing ratio, the system defines a lighter tint for type (`#FF6B6B`, 6.1:1) and reserves `accent` itself for fills, strokes and indicators — which need 3:1, not 4.5:1. **If you are colouring text with `accent`, you want `textAccent`.**
 
@@ -358,21 +363,160 @@ func glassSurface(_ style: GlassSurfaceStyle) -> some View
 ```swift
 GlassPillButton(_ title: String,
                 systemImage: String? = nil,
-                variant: GlassPillVariant = .solid,
+                emphasis: GlassButtonEmphasis = .primary,
                 size: GlassPillSize = .large,
                 isFullWidth: Bool = false,
+                isLoading: Bool = false,
                 action: @escaping () -> Void)
 
 // or on any Button:
-.buttonStyle(.glassPill(.neutral, size: .mini))
+.buttonStyle(.glassPill(.secondary, size: .mini))
 ```
 
-Variants: `.solid` (accent), `.solidTinted(Color)` (status), `.neutral` (card fill), `.neutralProminent` (near-white fill, dark text), `.ghost` (outline).
-Sizes: `.large` 44 · `.medium` 36 · `.small` 32 · `.compact` 30 · `.mini` 26.
+Sizes: `.large` 44 · `.medium` 36 · `.small` 32 · `.compact` 30 · `.mini` 26 visual / 28 hit.
 
-**Use** `.solid` for the one primary control on screen. **Don't** put two solid pills on one surface — the second one steals the first one's meaning. **Use** `.neutralProminent` for a default action *inside* a container that already sits under the accent — a notice's recovery action, for instance — where the action must clearly lead but a second red would compete with the record pill; it is achromatic, so it never does. **Don't** use `.neutral` as a primary on a `.card` surface: its fill *is* the card colour, so the button disappears and the secondary beside it reads as the primary. **Don't** use `.solid` for a blocked or waiting state: a pill that can't record must not look like the pill that can. **Don't** hand-roll a capsule button; the hover/press vocabulary and the hit-target growth are in the style.
+#### Emphasis is fill luminance. Nothing at rest is stroked.
 
-The pill applies a **1pt optical offset** to its label at `.large` when Inter is the resolved face — Inter's cap height sits low in a capsule of that proportion, so a mathematically centred label reads 1pt low. The offset is skipped for the SF fallback, which is centred correctly and would be pushed *off* centre by it.
+The kit has three ranks, and a control declares its rank by how bright it is —
+never by whether it has an outline. This is a hard rule, and it is the reason
+the focus ring means something:
+
+- A 1px border is the first thing lost to a dim monitor, a low-vision user,
+  greyscale, or a screenshot resized into a slide. A luminance step survives
+  all four.
+- Outline-vs-fill reads as **two different kinds of object**, not two ranks of
+  one. Users end up hunting for the difference instead of seeing it.
+- It leaves the stroke free for the one job a stroke is genuinely better at:
+  the focus indicator (WCAG 2.4.11). If resting states were also stroked, a
+  focus ring would be one more border among several.
+
+#### The map
+
+Every button in the kit, and its rank:
+
+| Rank | Emphasis | Fill | Ink | Where it is used |
+|---|---|---|---|---|
+| **Primary** | `.primary` | `accent` #F23A3A | white | The transport control — record / stop. The onboarding CTA. |
+| **Primary** | `.primaryTinted(_)` | a status colour | white | `delete` in the take row's confirm. Consequential, but must not borrow the record red. |
+| **Primary** | `.primaryNeutral` | `controlPrimaryNeutral` #F2F2F5 | #0D0D0F | The default action of a group where the accent is spent or would misread — a notice's recovery action. |
+| **Secondary** | `.secondary` | `controlSecondary` #C2C2CA | #0D0D0F | The real alternative: `keep`, `keep recording`, a notice's non-recommended action. |
+| **Tertiary** | `.tertiary` | none (plate on hover) | `textPrimary` | Escapes, not choices: `dismiss`. |
+| **Primary, unavailable** | `.blocked` | `surfaceCard` | `textPrimary` | The transport control when it *can't* record — permission denied, install blocked. Not a fourth rank; the primary in a state where pressing it would do nothing. |
+
+Non-pill controls, for completeness:
+
+| Component | Rank | Notes |
+|---|---|---|
+| `GlassIconButton` | Tertiary | 12pt glyph, 28pt target. Hover plate, no resting fill. `accessibilityLabel` is a required init argument. |
+| `GlassNavLink` | Tertiary | Interactive text. 24pt plate, 28pt target, pointing-hand cursor. |
+| `GlassChip` | Toggle, not a button | Selection state, not emphasis. Filled when selected. |
+
+**Use** `.primary` for the one action the screen is recommending; at most one per
+view. **Don't** put two primaries on one surface — the second steals the first
+one's meaning. **Use** `.primaryNeutral` where the accent is already spent: a red
+pill inside an error notice makes a *recoverable* problem look like a failure.
+**Don't** reach for `.blocked` as a general "quiet button" — it is the card
+colour, so on a `.card` surface it vanishes and the secondary beside it reads as
+the primary. **Don't** hand-roll a capsule; the state vocabulary and the
+hit-target growth live in the style.
+
+#### Interaction states
+
+All five, on every emphasis:
+
+| State | Treatment | Why |
+|---|---|---|
+| **initial** | fill by rank | — |
+| **hover** | +3% scale, pointing-hand cursor; tertiary gains its plate | Pointer-only affordance; never the sole carrier of meaning. |
+| **focus** | 2pt `accent` ring, 2pt outside the capsule | WCAG 2.4.11. Drawn outside so it never eats the fill or shifts the label. The system ring is disabled so the two can't double. Only focusable when actionable. |
+| **pressed** | −3% scale, −6% brightness; `.primary` deepens to `accentStrong` | Confirms the press landed even if the action is slow. |
+| **disabled** | dimmed, no hover, no cursor change, **not focusable** | Disabled text is exempt from 1.4.3, but stays readable enough to say *what* is unavailable — 75% rather than a token dim. |
+| **loading** | spinner beside the label, input blocked, announced busy | See below. |
+
+Hover and focus are **independent**: a pill can be keyboard-focused while the
+pointer is elsewhere, and both indicators must be visible at once.
+
+Under **Reduce Motion** the hover and press scales are skipped entirely and the
+spinner freezes to a static ring — a spinner is precisely the thing a user with
+that setting asked not to see.
+
+#### Loading is not disabled
+
+`isLoading` is a separate state on purpose. "Working on it" and "not available"
+are different facts, and a screen reader must not deliver one as the other. A
+loading pill:
+
+- keeps its label — the spinner takes the *symbol's* slot, not the label's, so
+  the control still says `saving…` rather than becoming an anonymous spinner;
+- blocks hit-testing without setting `disabled`, so VoiceOver announces it as
+  busy rather than dimmed-out;
+- stays the same height, so nothing under the pointer moves mid-press.
+
+The transport control drives this from state rather than from a caller: the
+three waiting states — `arming…`, `saving…`, `opening settings…` — set
+`GlassTransportPresentation.isBusy`, and each is a wait the user is meant to sit
+through, not a door that is closed.
+
+The pill applies a **1pt optical offset** to its label at `.large` when Inter is
+the resolved face — Inter's cap height sits low in a capsule of that proportion,
+so a mathematically centred label reads 1pt low. The offset is skipped for the
+SF fallback, which is centred correctly and would be pushed *off* centre by it.
+
+### `GlassBrandMark` / `GlassBrandLockup` / `GlassBrand`
+
+```swift
+GlassBrandMark(size: CGFloat = 24)
+GlassBrandLockup(size: .regular | .compact, showsMark: Bool = true)
+
+GlassBrand.name        // "Home Rec"
+GlassBrand.markSquare  // #2A2A2A
+GlassBrand.markEdge    // #808080
+GlassBrand.markDot     // #FF3E3E
+```
+
+Ported from **homerec.app**, which is the brand's published form — the app
+matches the site rather than the other way round, and the two stop drifting the
+moment either is edited.
+
+**The mark** is `favicon.svg`, drawn. Every proportion is the SVG's own number
+over its 32-unit viewBox, so it is exact at any point size:
+
+| SVG | Ratio | At 24pt |
+|---|---|---|
+| `rx="7"` | 0.219 | 5.25 |
+| dot `r="6.5"` | 0.203 | 4.88 |
+| square `stroke-width="1.5"` | 0.047 | 1.13 |
+| inset `x="0.75"` | 0.023 | 0.56 |
+
+Drawn rather than shipped as an image: the source is a 180pt touch icon whose
+art sits inside a white canvas, so at 18–20pt it has to be oversized and
+re-clipped to look right — a fudge that lands within half a pixel instead of on
+it. The site's square carries a stroke because a favicon must survive both a
+light and a dark browser chrome; GlassKit is dark-only, so the mark ships the
+site's `prefers-color-scheme: dark` values.
+
+**The wordmark** is `Home Rec` in Archivo medium at −0.02em — the site's
+`.logo-name` rule exactly. Both wordmark roles (`.wordmark` 26pt, `.appTitle`
+13pt) resolve that tracking per size (−0.52 and −0.26).
+
+> **The name is capitalised. Always.** The lowercase register everywhere else in
+> this kit — `record`, `all takes`, `dismiss` — is the *interface voice*. A
+> product name is not a UI label, and `home rec` in a header was the interface
+> voice leaking onto the brand.
+
+**Lockup sizes** hold the site's nav ratios (gap = 0.417 × mark,
+type = 0.625 × mark): `.regular` is 24 / 10 / 15 — the site's own lockup —
+and `.compact` is 20 / 8 / 13 for the app's panel header, where the lockup
+shares a row with metadata and must not outweigh it. The lockup is one
+accessibility element labelled `Home Rec`, so VoiceOver says the product once
+rather than "image, Home Rec".
+
+`GlassBrand` sits **outside `GlassColors` on purpose**. A palette role is
+something a theme may re-skin; the record dot is #FF3E3E because that is what
+the logo *is*. Re-theming the kit must not be able to alter the brand. Note the
+two reds are different and both are correct: #FF3E3E is the logo, `accent`
+#F23A3A is the interface red, pulled 5% darker because large flat fills read
+hotter than a small dot.
 
 ### `GlassChip`
 
@@ -584,7 +728,7 @@ GlassNoticeSlot(notices: [GlassNotice], onDismiss: …) { defaultContent }
 
 Severity used to run the border and the primary action too. That made a notice the loudest object on a panel whose entire language is hairlines and one accent: a red-bordered box beside the red record pill put two competing reds on screen, and made a recoverable error read as a failure state. Confining severity to the glyph keeps notices stackable and inline-able without restyling their surroundings, and **shape** differs per kind as well as colour — so the meaning survives greyscale and red/green deficiency.
 
-**Emphasis is weight, not hue.** The recovery action is `.neutralProminent` (near-white fill, dark text); secondaries and `dismiss` are `.ghost`. `GlassNoticeRow` orders them itself — primary first, then secondaries, then dismiss — rather than trusting the caller, because a notice that ordered its buttons differently per error would move the target under a user mid-reach.
+**Emphasis is fill luminance, not hue and not an outline.** The recovery action is `.primaryNeutral` (near-white); its alternative is `.secondary` (light grey); `dismiss` is `.tertiary` and carries no resting fill at all, because it is an escape rather than a choice. Nothing in the row is stroked. `GlassNoticeRow` orders them itself — primary first, then secondaries, then dismiss — rather than trusting the caller, because a notice that ordered its buttons differently per error would move the target under a user mid-reach.
 
 `blocked` notices are never dismissible: dismissing a terminal condition leaves a permanently broken app looking fine.
 
@@ -801,7 +945,8 @@ The library screen is the same panel with `.glassRecordingVisible(…)` applied,
 - [ ] `GlassBackdrop` (or `GlassFlatGround`) behind a `GlassPanel`
 - [ ] `.glassThemeAdaptingToContrast()` once at the root
 - [ ] `.glassRecordingVisible(…)` on any screen that isn't the recorder face
-- [ ] At most one `.solid` pill on screen
+- [ ] At most one primary pill on screen
+- [ ] No resting button draws a border; focus rings are the only stroke
 - [ ] Notices go through `GlassNoticeSlot`, not into a new row of their own
 - [ ] Metadata in mono via `GlassMetaLabel`; names in Inter via `.glassText(.body)`
 - [ ] No literal hex, font size, radius or duration anywhere in the file

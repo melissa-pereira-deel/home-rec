@@ -23,9 +23,9 @@ import AppKit
 ///   "this is data", and it also keeps columns from dancing as values change.
 /// - **Display (Archivo)** — the wordmark, and only the wordmark.
 public enum GlassTextRole: String, CaseIterable, Hashable, Sendable {
-    /// Archivo 26 semibold. The brand wordmark on the onboarding card.
+    /// Archivo 26 medium, −0.02em. The brand wordmark on the onboarding card.
     case wordmark
-    /// Inter 13 bold. The panel's own header wordmark ("home rec").
+    /// Archivo 13 medium, −0.02em. The panel's own header lockup ("Home Rec").
     case appTitle
     /// SF Mono 30 light. The hero timecode.
     case timer
@@ -136,12 +136,16 @@ public struct GlassTypography {
     /// The role table.
     public func style(_ role: GlassTextRole) -> GlassTextStyle {
         switch role {
+        // Both wordmark roles are the homerec.app lockup, to the letter:
+        // Archivo at weight 500 with −0.02em tracking. The site is the brand's
+        // published form, so the app matches the site rather than the other
+        // way round — and the two stop drifting the moment either is edited.
+        // −0.02em is a *ratio*, so it resolves per size: −0.52 at 26, −0.26
+        // at 13.
         case .wordmark:
-            // Slight negative tracking: Archivo semibold at display size sets
-            // loose for a two-word lockup.
-            GlassTextStyle(family: displayFamily, size: 26, weight: .semibold, tracking: -0.3)
+            GlassTextStyle(family: displayFamily, size: 26, weight: .medium, tracking: -0.52)
         case .appTitle:
-            GlassTextStyle(family: uiFamily, size: 13, weight: .bold)
+            GlassTextStyle(family: displayFamily, size: 13, weight: .medium, tracking: -0.26)
         case .timer:
             // Light weight at 30pt: the number is already enormous: weight on
             // top of size would make the panel shout its own chrome.
@@ -195,6 +199,16 @@ public struct GlassTypography {
     public var usesCustomUIFamily: Bool {
         guard let name = uiFamily.name else { return false }
         return GlassFontRegistry.isAvailable(name)
+    }
+
+    /// The resolved `Font` for an arbitrary style. Used by the brand lockup,
+    /// which sets the wordmark at the site's 15pt — a brand measurement rather
+    /// than a UI role, so it does not belong in the closed role table.
+    public func font(_ style: GlassTextStyle) -> Font {
+        if let name = style.family.name, GlassFontRegistry.isAvailable(name) {
+            return .custom(name, fixedSize: style.size).weight(style.weight)
+        }
+        return .system(size: style.size, weight: style.weight, design: style.family.design)
     }
 
     /// The resolved `Font` for a role.

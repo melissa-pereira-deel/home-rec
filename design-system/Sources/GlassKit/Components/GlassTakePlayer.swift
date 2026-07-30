@@ -100,7 +100,7 @@ public struct GlassTakePlayer<Take: GlassTakeRepresentable>: View {
             GlassPillButton(
                 isPlaying ? "pause" : "play",
                 systemImage: isPlaying ? "pause.fill" : "play.fill",
-                variant: .solid,
+                emphasis: .primary,
                 size: .small,
                 isFullWidth: true,
                 action: onPlayPause

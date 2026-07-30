@@ -35,9 +35,7 @@ struct GSOnboarding: View {
             gap(14)
 
             // Wordmark, not a greeting — the card opens into the app it names.
-            Text("home rec")
-                .font(.custom("Archivo", size: 26, relativeTo: .title))
-                .fontWeight(.semibold)
+            GSBrand.wordmark(size: 26)
                 .foregroundStyle(.white.opacity(0.95))
             gap(8)
 

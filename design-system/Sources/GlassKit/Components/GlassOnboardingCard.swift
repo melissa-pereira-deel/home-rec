@@ -22,7 +22,7 @@ public struct GlassOnboardingCopy {
     public var primaryTitleUngranted: String
 
     public init(
-        title: String = "home rec",
+        title: String = GlassBrand.name,
         subtitle: String = "Records what your Mac is playing. Lossless WAV.",
         permissionTitle: String = "Needs Screen Recording permission",
         permissionDetail: String = "Audio only — your screen is never recorded.",
@@ -192,7 +192,7 @@ public struct GlassOnboardingCard<Icon: View>: View {
                 VStack(spacing: GlassSpacing.s) {
                     GlassPillButton(
                         isOpening ? copy.settingsActionInProgress : copy.settingsAction,
-                        variant: .ghost,
+                        emphasis: .secondary,
                         size: .medium,
                         action: onOpenSettings
                     )
@@ -215,7 +215,7 @@ public struct GlassOnboardingCard<Icon: View>: View {
     private var primaryButton: some View {
         GlassPillButton(
             state.isGranted ? copy.primaryTitleGranted : copy.primaryTitleUngranted,
-            variant: .solid,
+            emphasis: .primary,
             size: .large,
             action: onPrimary
         )

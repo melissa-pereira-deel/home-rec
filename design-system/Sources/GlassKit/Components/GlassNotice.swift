@@ -178,20 +178,22 @@ public struct GlassNoticeRow: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Emphasis is weight, not hue: the recovery action is a near-white fill,
-    /// everything else an outline.
+    /// Emphasis is weight, not hue and not an outline: the recovery action is
+    /// a near-white fill, its alternative a light grey one, and `dismiss` —
+    /// which is an escape rather than a choice — carries no resting fill at
+    /// all. Nothing here is stroked.
     private var actionRow: some View {
         HStack(spacing: GlassSpacing.s) {
             ForEach(orderedActions) { action in
                 GlassPillButton(
                     action.title,
-                    variant: action.emphasis == .primary ? .neutralProminent : .ghost,
+                    emphasis: action.emphasis == .primary ? .primaryNeutral : .secondary,
                     size: .mini,
                     action: action.action
                 )
             }
             if notice.isDismissible {
-                GlassPillButton(dismissTitle, variant: .ghost, size: .mini, action: onDismiss)
+                GlassPillButton(dismissTitle, emphasis: .tertiary, size: .mini, action: onDismiss)
             }
             Spacer(minLength: 0)
         }

@@ -283,8 +283,8 @@ public struct GlassTakeRow<Take: GlassTakeRepresentable>: View {
                 .glassText(.body, color: .textPrimary)
                 .lineLimit(1)
             Spacer(minLength: GlassSpacing.s)
-            GlassPillButton("delete", variant: .solid, size: .mini, action: actions.onDeleteConfirm)
-            GlassPillButton("keep", variant: .neutral, size: .mini, action: actions.onDeleteCancel)
+            GlassPillButton("delete", emphasis: .primaryTinted(theme.colors.statusDanger), size: .mini, action: actions.onDeleteConfirm)
+            GlassPillButton("keep", emphasis: .secondary, size: .mini, action: actions.onDeleteCancel)
         }
         .padding(.horizontal, GlassSpacing.md)
         .padding(.vertical, GlassSpacing.md)

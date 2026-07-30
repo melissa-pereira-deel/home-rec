@@ -24,6 +24,8 @@ public struct GlassKitGallery: View {
                     GallerySpaceSection()
                     GalleryElevationSection()
                     GalleryMotionSection()
+                    GalleryBrandSection()
+                    GalleryButtonSection()
                     GalleryPrimitivesSection()
                     GalleryTransportSection()
                     GalleryTimecodeSection()
@@ -175,7 +177,7 @@ struct GalleryTypeSection: View {
 
     private func sample(for role: GlassTextRole) -> String {
         switch role {
-        case .wordmark, .appTitle: "home rec"
+        case .wordmark, .appTitle: GlassBrand.name
         case .timer: "1:12:03"
         case .timerCompact: "0:08.7"
         case .meta, .metaSmall: "48kHz · 16-bit · wav · 26.4MB"
@@ -248,7 +250,7 @@ struct GallerySpaceSection: View {
                 GallerySpecimen(label: "hit targets", note: "28pt minimum, grown invisibly under smaller visuals") {
                     HStack(spacing: GlassSpacing.m) {
                         GlassMetaLabel("mini pill 26pt visual / 28pt target", role: .metaSmall)
-                        GlassPillButton("keep", variant: .neutral, size: .mini) {}
+                        GlassPillButton("keep", emphasis: .secondary, size: .mini) {}
                         GlassIconButton(systemImage: "xmark", accessibilityLabel: "dismiss") {}
                     }
                 }
@@ -322,7 +324,7 @@ struct GalleryMotionSection: View {
                         GlassMetaLabel(describe(token), role: .metaSmall).opacity(0.7)
                     }
                 }
-                GlassPillButton("play motion", variant: .neutral, size: .mini) { isToggled.toggle() }
+                GlassPillButton("play motion", emphasis: .secondary, size: .mini) { isToggled.toggle() }
                 GlassDivider()
                 GallerySpecimen(label: "transport timings", note: "state durations, not curves") {
                     VStack(alignment: .leading, spacing: GlassSpacing.xxs) {
@@ -363,12 +365,14 @@ struct GalleryPrimitivesSection: View {
                 ForEach(GlassPillSize.allCases, id: \.self) { size in
                     GallerySpecimen(label: "pill · \(size.rawValue)") {
                         HStack(spacing: GlassSpacing.m) {
-                            GlassPillButton("record", systemImage: "circle.fill", variant: .solid, size: size) {}
-                            GlassPillButton("neutral", variant: .neutral, size: size) {}
-                            GlassPillButton("ghost", variant: .ghost, size: size) {}
-                            GlassPillButton("warn", variant: .solidTinted(GlassColors.standard.statusWarning), size: size) {}
-                            GlassPillButton("disabled", variant: .solid, size: size) {}.disabled(true)
-                            GlassPillButton("disabled", variant: .neutral, size: size) {}.disabled(true)
+                            GlassPillButton("record", systemImage: "circle.fill", emphasis: .primary, size: size) {}
+                            GlassPillButton("choose…", emphasis: .primaryNeutral, size: size) {}
+                            GlassPillButton("keep", emphasis: .secondary, size: size) {}
+                            GlassPillButton("dismiss", emphasis: .tertiary, size: size) {}
+                            GlassPillButton("blocked", emphasis: .blocked, size: size) {}
+                            GlassPillButton("warn", emphasis: .primaryTinted(GlassColors.standard.statusWarning), size: size) {}
+                            GlassPillButton("saving…", emphasis: .primary, size: size, isLoading: true) {}
+                            GlassPillButton("disabled", emphasis: .primary, size: size) {}.disabled(true)
                         }
                     }
                 }
@@ -867,4 +871,156 @@ struct GalleryPatternSection: View {
 #Preview("GlassKit gallery") {
     GlassKitGallery()
         .frame(width: 860, height: 900)
+}
+
+
+// MARK: - Brand
+
+/// The mark and the lockup, ported from homerec.app.
+///
+/// In the gallery because brand drift is silent: nobody notices the app's
+/// wordmark is a different weight from the site's until they are side by side,
+/// and by then both have shipped.
+struct GalleryBrandSection: View {
+    var body: some View {
+        GalleryChapter(
+            title: "Brand",
+            note: "Ported from homerec.app — favicon.svg for the mark, .logo-name for the wordmark. The site is the published form; the app matches it."
+        ) {
+            VStack(alignment: .leading, spacing: GlassSpacing.l) {
+                HStack(spacing: GlassSpacing.xxl) {
+                    specimen("lockup · regular") { GlassBrandLockup(size: .regular) }
+                    specimen("lockup · compact") { GlassBrandLockup(size: .compact) }
+                }
+
+                specimen("mark · 16 / 24 / 32 / 64") {
+                    HStack(alignment: .bottom, spacing: GlassSpacing.l) {
+                        ForEach([16, 24, 32, 64], id: \.self) { size in
+                            GlassBrandMark(size: CGFloat(size))
+                        }
+                    }
+                }
+
+                specimen("wordmark alone") {
+                    GlassBrandLockup(size: .compact, showsMark: false)
+                }
+
+                GlassDivider()
+
+                VStack(alignment: .leading, spacing: GlassSpacing.xs) {
+                    GlassMetaLabel("name — always \"\(GlassBrand.name)\", never lowercase")
+                    GlassMetaLabel("wordmark — Archivo medium, −0.02em")
+                    GlassMetaLabel("mark — rx 0.219 · dot 0.203 · stroke 0.047 of the box")
+                    GlassMetaLabel("dot #FF3E3E — the logo red, not colors.accent (#F23A3A)")
+                }
+            }
+        }
+    }
+
+    private func specimen(
+        _ label: String, @ViewBuilder content: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: GlassSpacing.sm) {
+            GlassMetaLabel(label)
+            content()
+        }
+    }
+}
+
+// MARK: - Buttons
+
+/// Every button emphasis against every interaction state.
+///
+/// The grid is the argument: reading down a column you should be able to rank
+/// the three emphases without being told which is which, and reading across a
+/// row you should be able to tell resting from hover from disabled. If either
+/// is ambiguous here, it is worse in the product.
+///
+/// Hover, focus and press can't be forced from a static specimen, so the
+/// rightmost columns are live: tab into them for the focus ring, point at them
+/// for the hover lift.
+struct GalleryButtonSection: View {
+    private struct Row: Identifiable {
+        let id = UUID()
+        let name: String
+        let rank: String
+        let emphasis: GlassButtonEmphasis
+        let label: String
+    }
+
+    private var rows: [Row] {
+        [
+            .init(name: "primary", rank: "Primary",
+                  emphasis: .primary, label: "record"),
+            .init(name: "primaryTinted", rank: "Primary",
+                  emphasis: .primaryTinted(GlassColors.standard.statusDanger), label: "delete"),
+            .init(name: "primaryNeutral", rank: "Primary",
+                  emphasis: .primaryNeutral, label: "choose folder…"),
+            .init(name: "secondary", rank: "Secondary",
+                  emphasis: .secondary, label: "keep"),
+            .init(name: "tertiary", rank: "Tertiary",
+                  emphasis: .tertiary, label: "dismiss"),
+            .init(name: "blocked", rank: "Primary, unavailable",
+                  emphasis: .blocked, label: "grant permission"),
+        ]
+    }
+
+    var body: some View {
+        GalleryChapter(
+            title: "Buttons",
+            note: "Three ranks, carried by fill luminance. No resting state is stroked — the only border a pill draws is its focus ring, so a ring can never be confused with a resting treatment."
+        ) {
+            VStack(alignment: .leading, spacing: GlassSpacing.l) {
+                headerRow
+                ForEach(rows) { row in
+                    HStack(spacing: GlassSpacing.m) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            GlassMetaLabel(row.name)
+                            Text(row.rank)
+                                .glassText(.metaSmall, color: .textTertiary)
+                        }
+                        .frame(width: 130, alignment: .leading)
+
+                        GlassPillButton(row.label, emphasis: row.emphasis, size: .mini) {}
+                        GlassPillButton(row.label, emphasis: row.emphasis, size: .mini, isLoading: true) {}
+                        GlassPillButton(row.label, emphasis: row.emphasis, size: .mini) {}
+                            .disabled(true)
+                        Spacer(minLength: 0)
+                    }
+                }
+
+                GlassDivider()
+
+                VStack(alignment: .leading, spacing: GlassSpacing.sm) {
+                    GlassMetaLabel("sizes — large 44 · medium 36 · small 32 · compact 30 · mini 26/28")
+                    HStack(spacing: GlassSpacing.m) {
+                        ForEach(GlassPillSize.allCases, id: \.self) { size in
+                            GlassPillButton(size.rawValue, emphasis: .secondary, size: size) {}
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: GlassSpacing.xs) {
+                    GlassMetaLabel("initial — fill by rank, never a border")
+                    GlassMetaLabel("hover — +3% scale, pointing hand; tertiary gains its plate")
+                    GlassMetaLabel("focus — 2pt accent ring, offset 2pt (tab to see it)")
+                    GlassMetaLabel("pressed — −3% scale, −6% brightness")
+                    GlassMetaLabel("disabled — dimmed, unfocusable, no cursor change")
+                    GlassMetaLabel("loading — spinner beside the label, input blocked, announced busy")
+                }
+            }
+        }
+    }
+
+    /// Deliberately not column headers: pills are sized by their label, so
+    /// fixed columns would lie about which specimen is which.
+    private var headerRow: some View {
+        HStack(spacing: GlassSpacing.m) {
+            Color.clear.frame(width: 130, height: 1)
+            Text("each row: resting · loading · disabled")
+                .glassText(.metaSmall, color: .textTertiary)
+            Spacer(minLength: 0)
+        }
+    }
 }

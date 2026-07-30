@@ -19,6 +19,13 @@ struct StageView: View {
         .frame(width: 620, height: 780)
         .background(Color(red: 0.02, green: 0.02, blue: 0.02))
         .environmentObject(store)
+        // Capture must be untouchable as well as deaf: the window fronts
+        // itself mid-run, so a click aimed at whatever was underneath lands on
+        // the concept switcher and re-skins the scenario being captured. The
+        // key guard in `handleKey` closed the keyboard half of this; a stray
+        // click on the chrome was the other half, and it produced exactly one
+        // wrong-concept screen before `verify.py` caught it.
+        .allowsHitTesting(!SnapshotDriver.isRunning)
         .focusable()
         .focused($stageFocused)
         .focusEffectDisabled()

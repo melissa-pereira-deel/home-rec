@@ -55,7 +55,7 @@ public struct GlassRecordingBar: View {
             GlassPillButton(
                 stopLabel,
                 systemImage: "stop.fill",
-                variant: .solid,
+                emphasis: .primary,
                 size: .compact,
                 action: onStop
             )

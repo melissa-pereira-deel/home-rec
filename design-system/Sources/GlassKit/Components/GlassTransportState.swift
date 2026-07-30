@@ -190,6 +190,12 @@ public struct GlassTransportPresentation: Hashable, Sendable {
     /// states are neutral on purpose: a control that can't record must not
     /// look like the control that can.
     public let isAccented: Bool
+    /// The app is working, not refusing. Drives the pill's loading state:
+    /// spinner beside the label, input blocked, announced as busy rather than
+    /// as unavailable. `arming…`, `saving…` and `opening settings…` are the
+    /// three — every one of them a wait the user is meant to sit through, not
+    /// a door that is closed.
+    public var isBusy: Bool = false
     public let intent: GlassTransportIntent
     /// VoiceOver label. Written as a sentence with a verb, because the visible
     /// lowercase label ("stop") is a fragment that reads as a noun aloud.
@@ -225,6 +231,7 @@ public extension GlassTransportState {
                 symbolName: nil,
                 isEnabled: false,
                 isAccented: false,
+                isBusy: true,
                 intent: .none,
                 accessibilityLabel: "Opening System Settings",
                 accessibilityHint: "Waiting for the permission to register."
@@ -260,6 +267,7 @@ public extension GlassTransportState {
                 symbolName: nil,
                 isEnabled: false,
                 isAccented: true,
+                isBusy: true,
                 intent: .none,
                 accessibilityLabel: "Arming",
                 accessibilityHint: nil
@@ -282,6 +290,7 @@ public extension GlassTransportState {
                 symbolName: nil,
                 isEnabled: false,
                 isAccented: true,
+                isBusy: true,
                 intent: .none,
                 accessibilityLabel: "Saving",
                 accessibilityHint: nil
