@@ -173,6 +173,86 @@ const legalPrefix = ''; // legal pages are English-only, served from the root
     </div>
   </section>
 
+  <script is:inline>
+    /* Pointer-driven light on the per-app panel.
+     *
+     * The warm source chases the cursor and the cool one swings against it,
+     * so the two colours cross the panel rather than sliding as one sheet.
+     * Travel is a fraction of the panel's own size, not a fixed pixel count,
+     * so the sweep stays proportional from 375px to 1920px.
+     *
+     * Positions ease toward the pointer instead of snapping, so the light
+     * swings and settles like a lamp being turned. Same easing returns it to
+     * rest on leave. Colour, size and blur are untouched — this only
+     * translates the two layers. */
+    (function () {
+      var stage = document.querySelector('.per-app-stage');
+      var ambient = stage && stage.querySelector('.per-app-ambient');
+      if (!stage || !ambient) return;
+
+      // Motion is the whole feature, so reduced-motion opts out rather than
+      // getting a shortened version. Coarse pointers too: with no hover to
+      // leave, the light would stick where it was last tapped.
+      if (
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        !window.matchMedia('(hover: hover) and (pointer: fine)').matches
+      ) {
+        return;
+      }
+
+      // Fractions of the panel. Large on purpose: the sources are 40%-wide
+      // gradients under a 46px blur, so a small offset is invisible — the
+      // light has to travel a good part of the panel to read as moving.
+      var WARM_X = 0.44, WARM_Y = 0.62;
+      var COOL_X = -0.3, COOL_Y = -0.42;
+      var EASE = 0.11;
+
+      var w = 0, h = 0;
+      var tx = 0, ty = 0; // target, -1..1 from the panel's centre
+      var cx = 0, cy = 0; // current
+      var raf = 0;
+
+      function step() {
+        cx += (tx - cx) * EASE;
+        cy += (ty - cy) * EASE;
+
+        var st = ambient.style;
+        st.setProperty('--warm-x', (cx * w * WARM_X).toFixed(1) + 'px');
+        st.setProperty('--warm-y', (cy * h * WARM_Y).toFixed(1) + 'px');
+        st.setProperty('--cool-x', (cx * w * COOL_X).toFixed(1) + 'px');
+        st.setProperty('--cool-y', (cy * h * COOL_Y).toFixed(1) + 'px');
+
+        if (Math.abs(tx - cx) < 0.0005 && Math.abs(ty - cy) < 0.0005) {
+          raf = 0;
+          if (tx === 0 && ty === 0) stage.removeAttribute('data-lit');
+          return;
+        }
+        raf = requestAnimationFrame(step);
+      }
+
+      function run() {
+        stage.setAttribute('data-lit', '');
+        if (!raf) raf = requestAnimationFrame(step);
+      }
+
+      stage.addEventListener('pointermove', function (e) {
+        var r = stage.getBoundingClientRect();
+        w = r.width;
+        h = r.height;
+        // Clamped so a pointer at the very edge can't overshoot the panel.
+        tx = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2));
+        ty = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.5) * 2));
+        run();
+      });
+
+      stage.addEventListener('pointerleave', function () {
+        tx = 0;
+        ty = 0;
+        run();
+      });
+    })();
+  </script>
+
   <!-- ── Download ─────────────────────────────────────────────────────── -->
   <section class="section" id="download">
     <div class="wrap">

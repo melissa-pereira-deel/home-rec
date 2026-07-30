@@ -1167,21 +1167,56 @@ footer {
   inset: -7% -4%;
   z-index: -1;
   pointer-events: none;
-  /* Kept off the top-left corner so the badge stays legible; the warm
-     source sits low-left, the cool one high-right, so the panel picks up
-     a gradient across its diagonal rather than a hot spot. */
-  background:
-    radial-gradient(
-      40% 58% at 16% 74%,
-      rgba(242, 58, 58, 0.17),
-      transparent 72%
-    ),
-    radial-gradient(
-      46% 64% at 84% 26%,
-      rgba(86, 116, 214, 0.15),
-      transparent 74%
-    );
+}
+
+/* The two sources live on their own layers so each can be moved independently
+   by the pointer. Colours, sizes, gradient positions and blur are unchanged
+   from when they were two backgrounds on one element — at rest this renders
+   the same wash; splitting it only buys somewhere to hang a transform.
+
+   Transform is what moves, not the gradient's `at x% y%`: transforms
+   composite on the GPU, so sweeping the pointer across the panel never
+   repaints a 46px-blurred layer. */
+.per-app-ambient::before,
+.per-app-ambient::after {
+  content: '';
+  position: absolute;
+  inset: 0;
   filter: blur(46px);
+}
+
+/* Warm source, low-left at rest. */
+.per-app-ambient::before {
+  background: radial-gradient(
+    40% 58% at 16% 74%,
+    rgba(242, 58, 58, 0.17),
+    transparent 72%
+  );
+  transform: translate3d(var(--warm-x, 0px), var(--warm-y, 0px), 0);
+}
+
+/* Cool source, high-right at rest. */
+.per-app-ambient::after {
+  background: radial-gradient(
+    46% 64% at 84% 26%,
+    rgba(86, 116, 214, 0.15),
+    transparent 74%
+  );
+  transform: translate3d(var(--cool-x, 0px), var(--cool-y, 0px), 0);
+}
+
+/* Only while the light is actually in motion — will-change held permanently
+   would keep two large blurred layers promoted for the life of the page. */
+.per-app-stage[data-lit] .per-app-ambient::before,
+.per-app-stage[data-lit] .per-app-ambient::after {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .per-app-ambient::before,
+  .per-app-ambient::after {
+    transform: none;
+  }
 }
 
 .per-app-card--glass {
