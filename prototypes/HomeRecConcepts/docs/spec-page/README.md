@@ -39,6 +39,17 @@ python3 docs/spec-page/build.py
 Capture uses AppKit's `cacheDisplay`, so it needs no Screen Recording
 permission and runs unattended.
 
+Then check what you actually captured:
+
+```bash
+python3 docs/spec-page/verify.py docs/img/spec-*.png
+```
+
+Every line must read `active=4 GS lcd_green_px=0`. The stage fronts its own
+window during a run and maps digits to concepts, so before that was guarded a
+stray keystroke could switch concepts mid-run — silently producing a spec
+screen of the wrong UI, which is easy to miss when reviewing 26 images.
+
 ## Publishing
 
 The built file is not committed — it is a 1.7 MB derived artifact, and a binary

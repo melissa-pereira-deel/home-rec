@@ -206,6 +206,10 @@ struct StageView: View {
     // MARK: - Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
+        // A capture run drives the store itself and fronts its own window;
+        // swallowing input keeps a stray keystroke from switching concepts
+        // underneath a scenario and shipping a screen of the wrong UI.
+        guard !SnapshotDriver.isRunning else { return .handled }
         switch press.key {
         case "1", "2", "3", "4", "5":
             if let n = Int(press.key.character.description),

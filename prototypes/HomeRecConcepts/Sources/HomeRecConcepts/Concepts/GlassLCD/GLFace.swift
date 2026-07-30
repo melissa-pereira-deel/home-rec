@@ -208,9 +208,9 @@ struct GLFace: View {
             GLWaveLCD(samples: recording.samples, scrolling: false)
                 .transition(.opacity)
         default:
-            // At rest the grid still reads: a single lit centre row across the
-            // screen, the LCD equivalent of Glass's flat 0.05 waveform.
-            GLWaveLCD(samples: Array(repeating: 0, count: 96), scrolling: false)
+            // At rest, Glass's flat 0.05 waveform — the screen is on and
+            // ready, not blank.
+            GLWaveLCD(samples: Array(repeating: 0.05, count: 96), scrolling: false)
         }
     }
 

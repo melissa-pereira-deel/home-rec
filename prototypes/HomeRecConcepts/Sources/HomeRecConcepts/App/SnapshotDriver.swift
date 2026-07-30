@@ -7,8 +7,16 @@ import SwiftUI
 /// design-review artifact generator (no Screen Recording permission needed).
 @MainActor
 enum SnapshotDriver {
+    /// True for the whole capture run. The stage promotes itself with
+    /// `NSApp.activate(ignoringOtherApps:)` and its key handler maps digits to
+    /// concepts, so a keystroke the user aimed at whatever they were actually
+    /// doing lands on the stage and rewrites the state mid-run — silently
+    /// producing a screen of the wrong concept. Capture must be deaf.
+    private(set) static var isRunning = false
+
     static func runIfRequested() {
         guard let dir = ProcessInfo.processInfo.environment["HRC_SNAPSHOT"] else { return }
+        isRunning = true
         Task { await run(outputDir: dir) }
     }
 
