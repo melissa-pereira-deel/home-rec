@@ -26,13 +26,16 @@ Home Rec is a lightweight macOS app that captures system audio output and saves 
 ### Features
 
 - **System-wide audio capture** — Records audio from any app using Apple's ScreenCaptureKit. No virtual audio drivers, no kernel extensions, no routing tricks.
-- **Lossless WAV + M4A export** — 48 kHz / 16-bit stereo PCM out of the box; AAC at 44.1 kHz / 256 kbps when you want a smaller file. FLAC and MP3 on the roadmap.
+- **Pick what you record** — Capture everything your Mac plays, or a **single app**, or a **microphone**. Choose from the Capture Source section of the menu bar menu; the choice is remembered between launches, and the status line names it so you can see what you're about to capture. The app list shows only apps that actually have audio, so it stays short.
+- **Microphone input** — Record from the built-in mic, a USB interface, or any input device macOS exposes, under the names macOS gives them. Whatever sample rate and channel count the device uses is converted to Home Rec's canonical format, so a 44.1 kHz or mono mic records at the correct pitch and speed.
+- **Lossless WAV, FLAC + M4A export** — 48 kHz / 16-bit stereo PCM out of the box; FLAC when you want lossless at roughly 0.6× the size (and 24-bit); AAC at 44.1 kHz / 256 kbps when you want smaller still. MP3 on the roadmap.
 - **Live waveform feedback** — Real-time amplitude visualization in both the main window and the menu bar popover. You always know the signal is good.
 - **Menu bar popover** — Persistent menu bar icon with compact controls. Record, stop, reveal in Finder without switching windows.
 - **Background recording** — Close the main window, keep recording from the menu bar. App stays alive until you Quit.
 - **Choose where recordings go** — Configurable save location (defaults to Desktop). Falls back gracefully if the chosen folder disappears.
 - **Stream-failure recovery** — If macOS revokes capture mid-recording (permission flipped off, display sleep, another app grabs the device), Home Rec detects it, transitions to an error state, and **finalizes the partial WAV** so audio captured before the failure is preserved.
 - **Crash/quit-safe WAV** — The header is rewritten every ~0.7s so a force-quit or kernel panic still leaves a playable file.
+- **Recover Recordings** — If Home Rec was force-quit, crashed, or the Mac lost power mid-recording, the take is usually still on disk. Home Rec finds interrupted recordings, shows what it found, and repairs them so they play. It only lists files it can prove were interrupted, never the recording in progress, and repairs are written atomically — an interruption during recovery leaves you with either the original or a working file, never a broken one.
 - **First-run onboarding** — One-screen explanation of what Home Rec does and why it needs Screen Recording permission. Re-openable from the Help menu.
 - **Live permission re-detection** — Grant Screen Recording in System Settings, switch back to Home Rec, and the Record button enables itself. No quit-and-relaunch.
 - **Diagnostics export + "Report a Problem"** — A menu-bar action gathers recent `os.Logger` entries plus app/macOS version into a shareable text file and opens a prefilled GitHub issue.
@@ -58,7 +61,8 @@ Home Rec is designed for users who want the simplest possible path to recording 
 
 - macOS 15 (Sequoia) or later
 - Apple Silicon or Intel
-- Screen Recording permission (the app prompts on first record)
+- Screen Recording permission (the app prompts on first record) — required by ScreenCaptureKit even for audio-only capture
+- Microphone permission, **only** if you record from a microphone. Unlike the Screen Recording prompt, macOS will ask again if you decline this one.
 
 For building from source: Xcode 16+ and a free Apple Developer account.
 
@@ -107,12 +111,15 @@ If you want to build it yourself:
 ## Usage
 
 1. **Launch the app** — a menu bar icon (waveform) appears alongside the main window.
-2. **Click "Start recording"** — use the main window or the menu bar popover. Recording starts immediately; the live timer and waveform confirm audio is flowing.
-3. **Play audio** from any app on your Mac.
-4. **Click "Stop recording"** when done — from either the window or the menu bar.
-5. **Find your recording** in the save location you chose (defaults to Desktop) as `recording_YYYY-MM-DD_HH-MM-SS.wav`. A "Reveal in Finder" button appears in the popover after each recording.
+2. **Choose what to record** *(optional)* — right-click the menu bar icon, or click **•••** in the popover, and pick from **Capture Source**: all system audio (the default), a single running app, or a microphone. The status line names your choice, so you can confirm it before you commit to a take.
+3. **Click "Start recording"** — use the main window or the menu bar popover. Recording starts immediately; the live timer and waveform confirm audio is flowing.
+4. **Play audio** from any app on your Mac — or talk, if you selected a microphone.
+5. **Click "Stop recording"** when done — from either the window or the menu bar.
+6. **Find your recording** in the save location you chose (defaults to Desktop) as `recording_YYYY-MM-DD_HH-MM-SS.wav` (or `.flac` / `.m4a`). A "Reveal in Finder" button appears in the popover after each recording.
 
 > **Tip:** Close the main window and keep recording from the menu bar. The app stays alive as long as the icon is visible. Quit via the popover or ⌘Q.
+
+> **Note on the capture-source picker:** opening the menu never asks for permission. The app list is only enumerated when you actually open the **App** submenu, and only once Screen Recording is already granted — so browsing the menu can't trigger a system dialog.
 
 ### Granting Screen Recording permission
 
@@ -184,13 +191,17 @@ Home Rec needs **Screen Recording** permission to capture system audio. The firs
 
 ### Audio Format
 
-| Property | Value |
-|----------|-------|
-| Sample Rate | 48,000 Hz |
-| Channels | 2 (Stereo) |
-| Bit Depth | 16-bit PCM |
-| Format | WAV (RIFF container) |
-| Quality | Lossless, uncompressed |
+Capture is normalised to one canonical format before encoding, so every source — system audio, a single app, or a microphone at its own native rate — reaches the encoder identically:
+
+| Property | Capture (canonical) | WAV output | FLAC output | M4A output |
+|----------|--------------------|------------|-------------|------------|
+| Sample rate | 48,000 Hz | 48,000 Hz | 48,000 Hz | 44,100 Hz |
+| Channels | 2 (stereo) | 2 | 2 | 2 |
+| Bit depth | 32-bit float | 16-bit PCM | 24-bit | AAC @ 256 kbps |
+| Container | — | RIFF/WAV | FLAC | MP4 |
+| Quality | — | Lossless | Lossless | Lossy |
+
+A microphone's buffers arrive in whatever format the device uses, so they are resampled to the canonical format on the way in. The encoders refuse a buffer that does not match what their file header declares, rather than writing audio that would play at the wrong pitch or speed.
 
 ### Why ScreenCaptureKit?
 
@@ -257,18 +268,26 @@ _Note: Test coverage is a work in progress._
 
 ## Known limitations
 
-1. FLAC and MP3 export are not yet supported (WAV + M4A ship today).
-2. No per-application audio capture yet — Home Rec captures whatever your Mac is outputting as a whole. Per-app capture is on the roadmap.
-3. The custom Screen Recording permission prompt copy is still macOS's default ("would like to record this computer's screen and audio") instead of a Home Rec-authored string. Polish item, not a functionality gap.
+1. MP3 export is not yet supported (WAV, FLAC and M4A ship today).
+2. **Microphone and system audio cannot be recorded into the same file.** Selecting a microphone captures the microphone only. Mixing the two is a deliberate scope decision, not an oversight — it is a mixing feature, and doing it properly means levels, and levels mean a mixer UI.
+3. **A FLAC recording interrupted by a crash cannot be played as found**, because the format writes the information a player needs only when you press stop. Home Rec repairs these via **Recover Recordings**; if surviving an interruption matters more to you than file size, record to WAV, which stays playable with no repair step.
+4. The Screen Recording permission prompt uses macOS's default wording ("would like to record this computer's screen and audio") rather than a Home Rec-authored string. This is **not a polish item we have skipped** — `NSScreenCaptureUsageDescription` is not among the keys Xcode will place in a generated `Info.plist`, so there is no supported way to customise it. The wording changes only if the underlying permission changes.
 
 ## Roadmap
 
 **Next up:**
-- FLAC export (lossless, smaller than WAV)
+- Live input monitoring (hear your microphone through headphones while recording)
 - MP3 export (via AVAssetExportSession post-stop)
-- Per-application audio capture
-- Custom permission-prompt copy (`NSScreenCaptureUsageDescription`)
+- Pause/resume within a single recording
+- Preferences window + customizable keyboard shortcuts
 - Sparkle auto-update
+
+**Shipped in v1.1** *(see [CHANGELOG.md](CHANGELOG.md) for the full list):*
+
+- Per-application audio capture — record one app instead of everything
+- Microphone input with a device picker
+- FLAC export
+- Recover Recordings — repair takes interrupted by a crash or force-quit
 
 **Shipped in v1.0** *(highlights — see [CHANGELOG.md](CHANGELOG.md) for the full list):*
 
