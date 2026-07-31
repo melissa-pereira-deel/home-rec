@@ -24,7 +24,11 @@ struct OnboardingView: View {
                 .font(.custom("Archivo", size: 22, relativeTo: .title))
                 .fontWeight(.semibold)
 
-            Text("Home Rec captures your Mac's audio output and saves it as a lossless WAV file — perfect for grabbing exactly what you're hearing.")
+            // Kept to one sentence deliberately: this is the only screen a
+            // first-run user is guaranteed to read, so it names what the app
+            // records rather than listing formats. The format picker is
+            // discoverable; the fact that you can pick a *source* is not.
+            Text("Home Rec records what your Mac is playing — everything, a single app, or a microphone — and saves it straight to your Desktop.")
                 .font(.custom("Inter-Regular", size: 13, relativeTo: .body))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -33,6 +37,12 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Home Rec needs Screen Recording permission to capture audio.", systemImage: "lock.shield")
                 Label("It only captures audio — never your screen.", systemImage: "eye.slash")
+                // The screen-recording rationale above used to be the whole
+                // permission story. It stopped being true when microphone
+                // capture shipped, and a welcome screen that implies there is
+                // one permission makes the second prompt feel like an ambush.
+                Label("Recording a microphone asks for its own permission, only when you choose one.", systemImage: "mic")
+                    .fixedSize(horizontal: false, vertical: true)
                 // Where to actually find it. Without this the line above sends
                 // people to the audio-only list, which doesn't contain Home Rec.
                 Label(PermissionKind.screenCapture.navigationHint, systemImage: "list.bullet")

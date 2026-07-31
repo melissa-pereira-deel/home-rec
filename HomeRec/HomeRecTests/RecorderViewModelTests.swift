@@ -520,3 +520,65 @@ struct SettingsShelfVisibilityTests {
         #expect(RecordingState.recovering.allowsCaptureSourceChange == false)
     }
 }
+
+// MARK: - Errors from the v1.1 capture sources say what actually went wrong
+
+@MainActor
+struct CaptureSourceErrorTests {
+
+    @Test("An unavailable source keeps its own copy instead of the generic message")
+    func sourceUnavailableUsesItsOwnCopy() async {
+        // Regression: every non-disk-space failure was flattened into
+        // `.startFailed(error.localizedDescription)`, so a quit app or an
+        // unplugged mic reported "Make sure some audio is playing, then try
+        // again" — advice that cannot work for either cause — and discarded the
+        // accurate copy `AudioSourceError` had already written.
+        let source = MockAudioSourceProviding(selectedSource: .app(bundleID: "com.ableton.live"))
+        source.validateError = AudioSourceError.appNotRunning("com.ableton.live")
+        let controller = RecordingController(
+            captureManager: MockAudioCapturing(),
+            audioRecorder: MockAudioFileWriting(),
+            saveLocation: MockSaveLocationProviding(directory: FileManager.default.temporaryDirectory),
+            audioSource: source
+        )
+        let viewModel = RecorderViewModel(
+            controller: controller,
+            permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(),
+            audioSource: source
+        )
+
+        await viewModel.startRecording()
+
+        #expect(viewModel.state == .error(.sourceUnavailable(.appNotRunning("com.ableton.live"))))
+        let message = try? #require(viewModel.errorMessage)
+        #expect(message?.contains("not currently running") == true)
+        #expect(message?.contains("audio is playing") == false)
+    }
+
+    @Test("An unavailable source does not offer Try again")
+    func sourceUnavailableOffersNoRetry() {
+        // The app is still closed and the mic is still unplugged, so a retry
+        // fails identically. Offering it is a loop dressed as a way out.
+        #expect(RecorderError.sourceUnavailable(.appNotRunning("x")).recovery == nil)
+        #expect(RecorderError.sourceUnavailable(.micNotAvailable("y")).recovery == nil)
+    }
+
+    @Test("Denied microphone access points at Settings, never at Try again")
+    func microphoneDeniedOffersSettings() {
+        // Once denied, `AVCaptureDevice.requestAccess` returns false immediately
+        // and without prompting — so `.tryAgain` here is an infinite loop with a
+        // button on it. Settings is the only real way out.
+        #expect(RecorderError.microphoneDenied.recovery == .openMicrophoneSettings)
+        #expect(RecorderError.microphoneDenied.recovery != .tryAgain)
+        #expect(RecorderError.microphoneDenied.message.contains("microphone"))
+    }
+
+    @Test("Microphone recovery opens the Microphone pane, not Screen Recording")
+    func microphoneRecoveryOpensTheRightPane() {
+        // Sending someone to the wrong System Settings pane is the exact failure
+        // BL-081 existed to fix.
+        #expect(PermissionKind.microphone.settingsAnchor == "Privacy_Microphone")
+        #expect(PermissionKind.screenCapture.settingsAnchor == "Privacy_ScreenCapture")
+    }
+}

@@ -12,6 +12,21 @@ import Foundation
 /// A recoverable failure surfaced to the user during recording.
 enum RecorderError: Error, Equatable, Sendable {
     case startFailed(String)
+    /// The chosen capture source can't be captured right now — the app quit, or
+    /// the microphone was unplugged (BL-100/BL-130).
+    ///
+    /// Carries the source error rather than its string: `AudioSourceError`
+    /// already writes accurate, specific copy for both cases, and flattening it
+    /// into `.startFailed` discarded that and replaced it with "make sure some
+    /// audio is playing" — advice that cannot work for either cause.
+    case sourceUnavailable(AudioSourceError)
+    /// Microphone access was refused (BL-130).
+    ///
+    /// Distinct from `.startFailed` because the recovery differs and getting it
+    /// wrong strands the user: once denied, `AVCaptureDevice.requestAccess`
+    /// returns false **immediately and without prompting**, so offering "try
+    /// again" here is an infinite loop. Settings is the only way out.
+    case microphoneDenied
     case stopFailed(String)
     case streamFailed(String)
     case diskFull
@@ -23,6 +38,10 @@ enum RecorderError: Error, Equatable, Sendable {
         switch self {
         case .startFailed(let detail), .stopFailed(let detail), .streamFailed(let detail):
             return detail
+        case .sourceUnavailable(let error):
+            return error.errorDescription ?? "capture source unavailable"
+        case .microphoneDenied:
+            return "microphone access denied"
         case .diskFull:
             return "insufficient free disk space"
         case .saveLocationUnavailable:
@@ -35,6 +54,12 @@ enum RecorderError: Error, Equatable, Sendable {
         switch self {
         case .startFailed:
             return "Home Rec couldn't start recording. Make sure some audio is playing, then try again."
+        case .sourceUnavailable(let error):
+            // Already written for the specific cause — the app that quit, or the
+            // microphone that was unplugged.
+            return error.errorDescription ?? "The capture source you chose isn't available."
+        case .microphoneDenied:
+            return "Home Rec doesn't have permission to use the microphone."
         case .stopFailed:
             return "Home Rec couldn't finish saving the recording. The audio captured so far may still be on your Desktop."
         case .streamFailed:
@@ -51,6 +76,13 @@ enum RecorderError: Error, Equatable, Sendable {
         switch self {
         case .startFailed:
             return .tryAgain
+        case .sourceUnavailable:
+            // Deliberately not `.tryAgain`: the app is still closed and the mic is
+            // still unplugged, so retrying fails identically. The fix is to change
+            // the source, which lives in the menu.
+            return nil
+        case .microphoneDenied:
+            return .openMicrophoneSettings
         case .streamFailed:
             return .openSettings
         case .saveLocationUnavailable:
@@ -64,14 +96,19 @@ enum RecorderError: Error, Equatable, Sendable {
 /// A concrete recovery action offered alongside an error.
 enum RecoverySuggestion: Equatable, Sendable {
     case openSettings
+    /// Opens the Microphone pane specifically. Separate from `.openSettings`,
+    /// which goes to Screen Recording — sending someone to the wrong pane is
+    /// the failure BL-081 existed to fix.
+    case openMicrophoneSettings
     case tryAgain
     case chooseFolder
 
     nonisolated var label: String {
         switch self {
-        case .openSettings: return "Open settings"
-        case .tryAgain: return "Try again"
-        case .chooseFolder: return "Choose folder…"
+        case .openSettings:           return "Open settings"
+        case .openMicrophoneSettings: return "Open settings"
+        case .tryAgain:               return "Try again"
+        case .chooseFolder:           return "Choose folder…"
         }
     }
 }

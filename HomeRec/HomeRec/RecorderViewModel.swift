@@ -342,7 +342,7 @@ class RecorderViewModel: ObservableObject {
         // asserts the key is in the product for exactly this reason.
         if case .mic = audioSource.selectedSource {
             guard await requestMicrophoneAccess() else {
-                transition(to: .error(.startFailed("microphone access denied")))
+                transition(to: .error(.microphoneDenied))
                 return
             }
         }
@@ -377,6 +377,14 @@ class RecorderViewModel: ObservableObject {
         } catch RecordingControllerError.insufficientDiskSpace {
             Log.recorder.error("Refusing to record: insufficient disk space")
             transition(to: .error(.diskFull))
+        } catch let sourceError as AudioSourceError {
+            // Caught ahead of the generic clause on purpose. `AudioSourceError`
+            // already writes accurate copy for its two cases — the app quit, the
+            // mic was unplugged — and flattening it into `.startFailed` replaced
+            // that with "make sure some audio is playing", which cannot help with
+            // either. It also offered "Try again", which fails identically.
+            Log.recorder.error("Capture source unavailable: \(sourceError.localizedDescription, privacy: .public)")
+            transition(to: .error(.sourceUnavailable(sourceError)))
         } catch {
             Log.recorder.error("Failed to start recording: \(error.localizedDescription, privacy: .public)")
             transition(to: .error(.startFailed(error.localizedDescription)))
@@ -759,6 +767,11 @@ class RecorderViewModel: ObservableObject {
         switch suggestion {
         case .openSettings:
             openSystemSettings()
+        case .openMicrophoneSettings:
+            // Straight to the Microphone pane. The screen-capture flow's
+            // registering probe and grant watcher do not apply here: mic access
+            // is re-promptable and its status is live rather than latched.
+            permissions.openSystemPreferences(for: .microphone)
         case .tryAgain:
             Task { await startRecording() }
         case .chooseFolder:
