@@ -496,3 +496,26 @@ struct MicrophoneMenuTests {
         #expect(AudioSource.app(bundleID: "y").kind == .app)
     }
 }
+
+// MARK: - App-list filtering (BL-100 corrections C4/C5)
+
+@MainActor
+struct AppListFilteringTests {
+
+    @Test("Finder is excluded from the capture-source list")
+    func finderIsExcluded() {
+        // Finder is `.regular` and always running, so `activationPolicy`
+        // filtering cannot remove it — without the named exclusion it appears
+        // as a capture target on every Mac, forever, at the top of an
+        // alphabetical list. Nobody wants to record Finder.
+        #expect(AudioSourceManager.alwaysExcludedBundleIDs.contains("com.apple.finder"))
+    }
+
+    @Test("The exclusion list stays short")
+    func exclusionListIsNotGrowingIntoARule() {
+        // A long list here means the *rule* is wrong, not that the list is
+        // incomplete — and the honest rule ("apps that can produce audio")
+        // needs Core Audio process taps (BL-101), not more names.
+        #expect(AudioSourceManager.alwaysExcludedBundleIDs.count <= 3)
+    }
+}

@@ -72,6 +72,22 @@ final class AudioSourceManager: AudioSourceProviding {
     private let deviceEnumerator: InputDeviceEnumerating
     private let key = "selectedAudioSource"
 
+    /// Apps that pass every other filter but that nobody would ever choose to
+    /// record.
+    ///
+    /// Finder is user-facing (`activationPolicy == .regular`) and always running,
+    /// so the policy filter cannot remove it — it would otherwise appear as a
+    /// capture target on every Mac, forever, at the top of an alphabetical list.
+    ///
+    /// A named list rather than a rule, because the honest rule ("apps that can
+    /// produce audio") is **not implementable here**: ScreenCaptureKit exposes no
+    /// such signal, and finding out needs Core Audio process taps — BL-101, which
+    /// is deferred. Keep this list short; if it grows past a couple of entries,
+    /// that is the signal the rule is wrong rather than the list incomplete.
+    static let alwaysExcludedBundleIDs: Set<String> = [
+        "com.apple.finder"
+    ]
+
     /// Read-through cache. The getter used to hit `UserDefaults` *and* run a
     /// `JSONDecoder` on every access; the menu builder reads it once per row, so
     /// that cost is now per-launch instead of per-read.
@@ -164,6 +180,7 @@ final class AudioSourceManager: AudioSourceProviding {
         return content.applications
             .filter { $0.bundleIdentifier != ownBundleID }
             .filter { userFacing.contains($0.bundleIdentifier) }
+            .filter { !Self.alwaysExcludedBundleIDs.contains($0.bundleIdentifier) }
             // An app running twice appears twice. There is nowhere to put a PID:
             // `AudioSource.app` carries only a bundle ID, and a PID would not
             // survive the relaunch that persistence requires. So all instances
