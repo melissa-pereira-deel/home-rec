@@ -471,7 +471,10 @@ class RecorderViewModel: ObservableObject {
         case .systemAll:
             return nil
         case .app(let bundleID):
-            return knownAppNames[bundleID] ?? bundleID
+            // Falls back to the bundle ID only if this app has never been seen
+            // in the picker — which cannot happen for a source the user chose
+            // there, but can for a value restored from a much older build.
+            return audioSource.knownAppName(forBundleID: bundleID) ?? bundleID
         case .mic(let deviceUID):
             // Devices are enumerable at any time without a prompt, so unlike an
             // app name this never has to fall back to a raw identifier in
@@ -480,11 +483,6 @@ class RecorderViewModel: ObservableObject {
                 .first { $0.uid == deviceUID }?.name ?? "Microphone"
         }
     }
-
-    /// Last-seen display names for app bundle IDs, so the status line can name a
-    /// selection without re-enumerating (which would cost a permission probe).
-    /// Fed by the menu when it enumerates; empty until then.
-    var knownAppNames: [String: String] = [:]
 
     func openSystemSettings() {
         guard !installLocation.blocksRecording else {

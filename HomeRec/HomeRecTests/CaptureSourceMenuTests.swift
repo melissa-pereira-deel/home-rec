@@ -382,6 +382,12 @@ final class CountingAudioSourceProviding: AudioSourceProviding {
         inputDeviceCallCount += 1
         return devicesToReturn
     }
+
+    var knownNames: [String: String] = [:]
+
+    func knownAppName(forBundleID bundleID: String) -> String? {
+        knownNames[bundleID]
+    }
 }
 
 // MARK: - Microphone rows (BL-130)

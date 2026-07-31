@@ -177,14 +177,23 @@ final class MockAudioSourceProviding: AudioSourceProviding {
         if let validateError { throw validateError }
     }
 
+    private(set) var availableAppsCallCount = 0
+
     func availableApps() async throws -> [RunningAppInfo] {
-        availableAppsResult
+        availableAppsCallCount += 1
+        return availableAppsResult
     }
 
     var availableInputDevicesResult: [InputDeviceInfo] = []
 
     func availableInputDevices() -> [InputDeviceInfo] {
         availableInputDevicesResult
+    }
+
+    var knownAppNamesResult: [String: String] = [:]
+
+    func knownAppName(forBundleID bundleID: String) -> String? {
+        knownAppNamesResult[bundleID]
     }
 }
 

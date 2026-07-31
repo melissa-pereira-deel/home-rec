@@ -17,11 +17,21 @@ struct StreamFailureTests {
     func streamFailureFinalizesAndErrors() async {
         let mockCapturer = MockAudioCapturing()
         let mockWriter = MockAudioFileWriting()
-        let controller = RecordingController(captureManager: mockCapturer, audioRecorder: mockWriter)
+        // `audioSource` is injected, not defaulted: the test host IS the app, so
+        // `UserDefaults.standard` here is the developer's real preferences. A
+        // real `AudioSourceManager` would read whatever source they last picked
+        // and pre-flight it against live ScreenCaptureKit — making this suite
+        // pass or fail depending on which apps happen to be running.
+        let controller = RecordingController(
+            captureManager: mockCapturer,
+            audioRecorder: mockWriter,
+            audioSource: MockAudioSourceProviding()
+        )
         let viewModel = RecorderViewModel(
             controller: controller,
             permissions: MockPermissionProviding(.granted),
-            clock: ManualClock()
+            clock: ManualClock(),
+            audioSource: MockAudioSourceProviding()
         )
 
         await viewModel.startRecording()
@@ -48,11 +58,21 @@ struct StreamFailureTests {
     func streamErrorWhileIdleIsIgnored() {
         let mockCapturer = MockAudioCapturing()
         let mockWriter = MockAudioFileWriting()
-        let controller = RecordingController(captureManager: mockCapturer, audioRecorder: mockWriter)
+        // `audioSource` is injected, not defaulted: the test host IS the app, so
+        // `UserDefaults.standard` here is the developer's real preferences. A
+        // real `AudioSourceManager` would read whatever source they last picked
+        // and pre-flight it against live ScreenCaptureKit — making this suite
+        // pass or fail depending on which apps happen to be running.
+        let controller = RecordingController(
+            captureManager: mockCapturer,
+            audioRecorder: mockWriter,
+            audioSource: MockAudioSourceProviding()
+        )
         let viewModel = RecorderViewModel(
             controller: controller,
             permissions: MockPermissionProviding(.granted),
-            clock: ManualClock()
+            clock: ManualClock(),
+            audioSource: MockAudioSourceProviding()
         )
 
         #expect(viewModel.state == .idle)

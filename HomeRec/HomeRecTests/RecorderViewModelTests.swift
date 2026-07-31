@@ -410,3 +410,57 @@ struct RecorderViewModelTests {
         #expect(controller.lastStartFormat == .m4a)
     }
 }
+
+// MARK: - The source name shown on both surfaces
+
+@MainActor
+struct CaptureSourceNameTests {
+
+    private func makeViewModel(
+        source: MockAudioSourceProviding
+    ) -> RecorderViewModel {
+        RecorderViewModel(
+            controller: MockRecordingControlling(),
+            permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(),
+            audioSource: source
+        )
+    }
+
+    @Test("A selected app is named, not shown as a bundle identifier")
+    func selectedAppIsNamed() {
+        // Regression: `captureSourceName` read a `knownAppNames` dictionary on
+        // the view model that nothing ever wrote, so this fell through to
+        // `?? bundleID` and the status line read "Ready to record
+        // com.ableton.live" on both surfaces — for the headline feature.
+        let source = MockAudioSourceProviding(selectedSource: .app(bundleID: "com.ableton.live"))
+        source.knownAppNamesResult = ["com.ableton.live": "Ableton Live"]
+        let viewModel = makeViewModel(source: source)
+
+        #expect(viewModel.captureSourceName == "Ableton Live")
+        #expect(viewModel.statusText == "Ready to record Ableton Live")
+    }
+
+    @Test("An app never seen in the picker still renders something usable")
+    func unknownAppFallsBackToBundleID() {
+        // Only reachable for a selection restored from a build that predates the
+        // name memory. Ugly, but naming it wrongly would be worse.
+        let source = MockAudioSourceProviding(selectedSource: .app(bundleID: "com.unknown.app"))
+        let viewModel = makeViewModel(source: source)
+        #expect(viewModel.captureSourceName == "com.unknown.app")
+    }
+
+    @Test("Naming the source performs zero app enumeration")
+    func namingNeverEnumerates() {
+        // Enumeration costs a permission prompt. The status line is evaluated on
+        // every view update, so if it ever enumerated the app would prompt
+        // continuously — the worst possible version of the BL-085 bug.
+        let source = MockAudioSourceProviding(selectedSource: .app(bundleID: "com.ableton.live"))
+        source.knownAppNamesResult = ["com.ableton.live": "Ableton Live"]
+        let viewModel = makeViewModel(source: source)
+
+        _ = viewModel.statusText
+        _ = viewModel.captureSourceName
+        #expect(source.availableAppsCallCount == 0)
+    }
+}

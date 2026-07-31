@@ -64,6 +64,12 @@ protocol AudioSourceProviding: AnyObject {
     func availableApps() async throws -> [RunningAppInfo]
     /// Currently connected input devices (BL-130). Synchronous and prompt-free.
     func availableInputDevices() -> [InputDeviceInfo]
+    /// Last-known display name for a bundle ID, or nil if never seen.
+    ///
+    /// `AudioSource.app` persists only a bundle ID, so without this the UI has
+    /// nothing to show but the raw identifier. Reading it must never enumerate —
+    /// that would cost a permission prompt on whatever path asked.
+    func knownAppName(forBundleID bundleID: String) -> String?
 }
 
 @MainActor
@@ -72,6 +78,7 @@ final class AudioSourceManager: AudioSourceProviding {
     private let deviceEnumerator: InputDeviceEnumerating
     private let audioProcesses: AudioCapableProcessListing
     private let key = "selectedAudioSource"
+    private let namesKey = "knownAppNames"
 
     /// Apps that pass every other filter but that nobody would ever choose to
     /// record.
@@ -118,6 +125,30 @@ final class AudioSourceManager: AudioSourceProviding {
     /// `.notDetermined` and raises no dialog. Only actually *capturing* prompts.
     func availableInputDevices() -> [InputDeviceInfo] {
         deviceEnumerator.availableInputDevices()
+    }
+
+    /// Bundle ID → display name, remembered from the last enumeration.
+    ///
+    /// Persisted because the selection is: after a relaunch the app list has not
+    /// been enumerated yet (that needs a deliberate submenu open), so without
+    /// this the status line would show a raw bundle ID until the user happened
+    /// to open the picker again.
+    private lazy var knownAppNames: [String: String] =
+        defaults.dictionary(forKey: namesKey) as? [String: String] ?? [:]
+
+    func knownAppName(forBundleID bundleID: String) -> String? {
+        knownAppNames[bundleID]
+    }
+
+    private func rememberNames(_ apps: [RunningAppInfo]) {
+        var changed = false
+        for app in apps where knownAppNames[app.bundleID] != app.applicationName {
+            knownAppNames[app.bundleID] = app.applicationName
+            changed = true
+        }
+        // Only touch UserDefaults when something actually moved — this runs on
+        // every submenu open.
+        if changed { defaults.set(knownAppNames, forKey: namesKey) }
     }
 
     var selectedSource: AudioSource {
@@ -204,7 +235,7 @@ final class AudioSourceManager: AudioSourceProviding {
         }
 
         var seen = Set<String>()
-        return content.applications
+        let apps = content.applications
             .filter { $0.bundleIdentifier != ownBundleID }
             .filter { userFacing.contains($0.bundleIdentifier) }
             .filter { !Self.alwaysExcludedBundleIDs.contains($0.bundleIdentifier) }
@@ -220,5 +251,10 @@ final class AudioSourceManager: AudioSourceProviding {
             // the original spec is unimplementable here — ScreenCaptureKit
             // exposes no is-this-app-making-sound signal (correction C2).
             .sorted { $0.applicationName.localizedStandardCompare($1.applicationName) == .orderedAscending }
+        // Enumeration is the only place names are available, and it is gated
+        // behind permission and a deliberate submenu open. Capture them here so
+        // every other surface can name the selection without enumerating.
+        rememberNames(apps)
+        return apps
     }
 }
