@@ -1,0 +1,363 @@
+//
+//  CaptureSourceMenuTests.swift
+//  HomeRecTests
+//
+//  BL-111: the capture-source section of the overflow menu.
+//
+//  Every test here runs against the pure builder — no AppKit event loop, no live
+//  status item, no permission. That is the point of `entries(_:)` being a
+//  function of a snapshot.
+//
+//  ⚠️ The invariants below are deliberately written over the builder's *output*
+//  rather than over a list of known row ids. An id list would keep passing when
+//  BL-130 adds a microphone row and nobody remembers to extend it — which is
+//  precisely the failure it exists to catch.
+//
+
+import Testing
+import AppKit
+@testable import HomeRec
+
+@MainActor
+struct CaptureSourceMenuTests {
+
+    private let apps = [
+        RunningAppInfo(bundleID: "com.ableton.live", applicationName: "Ableton Live"),
+        RunningAppInfo(bundleID: "com.apple.logic10", applicationName: "Logic Pro"),
+        RunningAppInfo(bundleID: "com.spotify.client", applicationName: "Spotify")
+    ]
+
+    private func context(
+        selected: AudioSource = .systemAll,
+        unlocked: Bool = true,
+        granted: Bool = true,
+        apps: [RunningAppInfo]? = nil,
+        selectedAppName: String? = nil
+    ) -> OverflowContext {
+        OverflowContext(
+            selectedSource: selected,
+            allowsCaptureSourceChange: unlocked,
+            permissionGranted: granted,
+            apps: apps,
+            selectedAppName: selectedAppName
+        )
+    }
+
+    private func headers(_ entries: [OverflowEntry]) -> [String] {
+        entries.compactMap { if case .sectionHeader(let t) = $0 { return t } else { return nil } }
+    }
+
+    private func notices(_ entries: [OverflowEntry]) -> [String] {
+        entries.compactMap { if case .disabledNotice(let t) = $0 { return t } else { return nil } }
+    }
+
+    // MARK: - Shape
+
+    @Test("The section offers one row per kind, not one row per app")
+    func rootHasOneRowPerKind() {
+        // The root must not reshape because the world changed. Whether three apps
+        // are running or none, the section is the same height.
+        let many = OverflowMenu.captureSourceEntries(context(apps: apps))
+        let none = OverflowMenu.captureSourceEntries(context(apps: []))
+
+        let shape: ([OverflowEntry]) -> [String] = { entries in
+            entries.compactMap { entry in
+                switch entry {
+                case .action(let a) where a.isSourceRow: return "action"
+                case .submenu:                           return "submenu"
+                default:                                 return nil
+                }
+            }
+        }
+        #expect(shape(many) == ["action", "submenu"])
+        #expect(shape(none) == shape(many))
+    }
+
+    @Test("Section header is passed in sentence case for the system to style")
+    func headerIsNotPreUppercased() {
+        #expect(headers(OverflowMenu.captureSourceEntries(context())) == ["Capture Source"])
+    }
+
+    // MARK: - Checkmarks are derived, and there is exactly one
+
+    /// Checked source rows at the top level, and inside the Per-App submenu.
+    ///
+    /// Counted per level on purpose. A selected running app is legitimately
+    /// checked twice — once on the parent row, which is what lets the root answer
+    /// "what am I recording?" without being opened, and once on the leaf inside.
+    /// That is a hierarchy, not two competing selections; macOS renders nested
+    /// pickers exactly this way. What would be a real defect is two checkmarks
+    /// *side by side* in one menu.
+    private func checkedPerLevel(_ context: OverflowContext) -> (root: Int, submenu: Int) {
+        let entries = OverflowMenu.captureSourceEntries(context)
+        var root = 0
+        var submenu = 0
+        for entry in entries {
+            switch entry {
+            case .action(let action) where action.isSourceRow && action.isChecked:
+                root += 1
+            case .submenu(let child):
+                if child.isChecked { root += 1 }
+                submenu += child.entries.filter { entry in
+                    if case .action(let a) = entry { return a.isSourceRow && a.isChecked }
+                    return false
+                }.count
+            default:
+                break
+            }
+        }
+        return (root, submenu)
+    }
+
+    @Test(
+        "Exactly one source row is checked at each level, in every context",
+        arguments: [
+            AudioSource.systemAll,
+            .app(bundleID: "com.ableton.live"),
+            .app(bundleID: "com.notrunning.app")
+        ]
+    )
+    func exactlyOneSourceRowIsCheckedPerLevel(_ selected: AudioSource) {
+        let counts = checkedPerLevel(
+            context(selected: selected, apps: apps, selectedAppName: "Some App")
+        )
+        #expect(counts.root == 1)
+        // Zero inside when the selection isn't an app at all; never more than one.
+        #expect(counts.submenu <= 1)
+        if case .app = selected {
+            #expect(counts.submenu == 1)
+        } else {
+            #expect(counts.submenu == 0)
+        }
+    }
+
+    @Test("Selecting system audio checks the system row and nothing else")
+    func systemAllIsCheckedByDefault() throws {
+        let actions = OverflowMenu.actions(context(apps: apps))
+        let system = try #require(actions.first { $0.id == "sourceSystemAll" })
+        #expect(system.isChecked)
+        #expect(actions.first { $0.id == "sourcePerApp" }?.isChecked == false)
+    }
+
+    @Test("A running selection checks its row and names the root")
+    func runningSelectionNamesTheRootRow() throws {
+        let entries = OverflowMenu.captureSourceEntries(
+            context(selected: .app(bundleID: "com.ableton.live"), apps: apps)
+        )
+        let submenu = try #require(
+            entries.compactMap { if case .submenu(let s) = $0 { return s } else { return nil } }.first
+        )
+        // The root answers "what am I recording?" without being opened.
+        #expect(submenu.title == "Ableton Live")
+        #expect(submenu.isChecked)
+    }
+
+    // MARK: - The persisted-but-not-running case
+
+    @Test("A selection that isn't running still renders, checked and disabled")
+    func notRunningSelectionKeepsItsCheckmark() throws {
+        // Without this row the builder emits zero checkmarks, and the menu
+        // silently implies "All System Audio" while startRecording fails with
+        // `.appNotRunning`.
+        let actions = OverflowMenu.actions(
+            context(
+                selected: .app(bundleID: "com.ableton.live"),
+                apps: [],
+                selectedAppName: "Ableton Live"
+            )
+        )
+        let row = try #require(actions.first { $0.id == "sourceAppNotRunning" })
+        #expect(row.title == "Ableton Live (not running)")
+        #expect(row.isChecked)
+        #expect(row.isEnabled == false)
+    }
+
+    @Test("The parent row stays enabled so the user can change away from it")
+    func notRunningParentRemainsSelectable() throws {
+        let actions = OverflowMenu.actions(
+            context(selected: .app(bundleID: "com.ableton.live"), apps: [], selectedAppName: "Ableton Live")
+        )
+        let parent = try #require(actions.first { $0.id == "sourcePerApp" })
+        #expect(parent.isEnabled)
+    }
+
+    // MARK: - Empty and cold states are different
+
+    @Test("An unprobed list does not claim there are no apps")
+    func coldCacheShowsLookingRatherThanEmpty() throws {
+        let submenu = OverflowMenu.perAppSubmenu(context(apps: nil))
+        #expect(notices(submenu.entries) == ["Looking for open apps…"])
+    }
+
+    @Test("A probed-but-empty list says so")
+    func emptyListSaysNoAppsAreOpen() {
+        let submenu = OverflowMenu.perAppSubmenu(context(apps: []))
+        #expect(notices(submenu.entries) == ["No other apps are open"])
+    }
+
+    // MARK: - Permission
+
+    @Test("Without permission the submenu offers a way out, not a dead end")
+    func missingPermissionOffersAnEnabledAction() throws {
+        let submenu = OverflowMenu.perAppSubmenu(context(granted: false, apps: apps))
+        let actions: [OverflowAction] = submenu.entries.compactMap {
+            if case .action(let a) = $0 { return a } else { return nil }
+        }
+        #expect(actions.count == 1)
+        let row = try #require(actions.first)
+        #expect(row.title == "Allow Screen Recording…")
+        // Enabled on purpose: the user is asking "why can't I?", and a disabled
+        // row answers that while leaving them stuck.
+        #expect(row.isEnabled)
+    }
+
+    @Test("Without permission no app row is offered, even if a list is cached")
+    func missingPermissionNeverListsApps() {
+        let actions = OverflowMenu.actions(context(granted: false, apps: apps))
+        #expect(actions.contains { $0.id.hasPrefix("sourceApp:") } == false)
+    }
+
+    // MARK: - The mid-recording lock
+
+    @Test("While recording, no capture-source row exists at all")
+    func recordingRemovesEverySourceRow() {
+        // Written over the builder's output: *any* source row, not a known list.
+        // A microphone row added later is covered the moment it exists.
+        for selected in [AudioSource.systemAll, .app(bundleID: "com.ableton.live")] {
+            let actions = OverflowMenu.actions(
+                context(selected: selected, unlocked: false, apps: apps)
+            )
+            #expect(actions.contains { $0.isSourceRow } == false)
+        }
+    }
+
+    @Test("While recording, the section header and submenu are gone too")
+    func recordingRemovesTheWholeSection() {
+        let entries = OverflowMenu.entries(context(unlocked: false, apps: apps))
+        #expect(headers(entries).isEmpty)
+        #expect(entries.contains { if case .submenu = $0 { return true } else { return false } } == false)
+    }
+
+    @Test("The lock follows RecordingState, not a hardcoded state list")
+    func lockMirrorsRecordingState() {
+        #expect(RecordingState.idle.allowsCaptureSourceChange)
+        // The user must be able to change source to *fix* an error.
+        #expect(RecordingState.error(.startFailed("x")).allowsCaptureSourceChange)
+        #expect(RecordingState.starting.allowsCaptureSourceChange == false)
+        #expect(RecordingState.recording.allowsCaptureSourceChange == false)
+        #expect(RecordingState.stopping.allowsCaptureSourceChange == false)
+        #expect(RecordingState.recovering.allowsCaptureSourceChange == false)
+    }
+
+    @Test("App-level actions survive the lock")
+    func appActionsAreNeverLocked() {
+        // Hiding the source section must not take Quit or Show Window with it —
+        // mid-recording those are the main reason to open the menu at all.
+        let ids = Set(OverflowMenu.actions(context(unlocked: false)).map(\.id))
+        #expect(ids.isSuperset(of: ["showWindow", "quit", "about", "recoverRecordings"]))
+    }
+
+    // MARK: - NSMenu rendering
+
+    @Test("The NSMenu tree mirrors the builder, recursing into submenus")
+    func nsMenuTreeMatchesBuilder() throws {
+        let context = context(selected: .app(bundleID: "com.spotify.client"), apps: apps)
+        let menu = OverflowMenu.makeNSMenu(context)
+
+        let perApp = try #require(
+            menu.items.first { $0.identifier?.rawValue == OverflowMenu.perAppItemIdentifier }
+        )
+        #expect(perApp.title == "Spotify")
+        #expect(perApp.state == .on)
+
+        let submenu = try #require(perApp.submenu)
+        let spotify = try #require(submenu.items.first { $0.title == "Spotify" })
+        #expect(spotify.state == .on)
+        #expect(submenu.items.filter { $0.state == .on }.count == 1)
+
+        // The system row is a sibling and must be unchecked.
+        let system = try #require(menu.items.first { $0.title == "All System Audio" })
+        #expect(system.state == .off)
+    }
+
+    @Test("Disabled rows carry no action, so AppKit cannot re-enable them")
+    func disabledRowsHaveNoAction() throws {
+        let menu = OverflowMenu.makeNSMenu(
+            context(selected: .app(bundleID: "com.ableton.live"), apps: [], selectedAppName: "Ableton Live")
+        )
+        let perApp = try #require(
+            menu.items.first { $0.identifier?.rawValue == OverflowMenu.perAppItemIdentifier }
+        )
+        let notRunning = try #require(perApp.submenu?.items.first { $0.title.contains("not running") })
+        #expect(notRunning.isEnabled == false)
+        #expect(notRunning.action == nil)
+    }
+
+    // MARK: - The safety property that matters most
+
+    @Test("Opening the submenu without permission performs zero enumeration")
+    func submenuWithoutPermissionNeverProbes() async {
+        // The single most important safety property in BL-111. Enumeration costs
+        // a TCC prompt, so with permission missing it must not happen at all —
+        // otherwise merely *hovering* this submenu raises a system dialog, which
+        // is worse than the click-triggered prompt BL-085 removed.
+        let probe = CountingAudioSourceProviding()
+        let delegate = PerAppMenuDelegate(
+            cache: PerAppListCache(),
+            source: probe,
+            makeContext: { self.context(granted: false, apps: nil) }
+        )
+
+        let menu = NSMenu()
+        delegate.menuNeedsUpdate(menu)
+        // The refresh, if one were wrongly scheduled, is a `Task` — yield so it
+        // would have had the chance to run before we assert it did not.
+        await Task.yield()
+
+        #expect(probe.availableAppsCallCount == 0)
+        #expect(menu.items.contains { $0.title == "Allow Screen Recording…" })
+    }
+
+    @Test("Opening the submenu with permission returns immediately, then refreshes")
+    func submenuPopulatesFromCacheThenRefreshes() async throws {
+        // `menuNeedsUpdate` runs synchronously inside AppKit's menu-tracking
+        // loop, so it must return without awaiting anything. Bridging the async
+        // enumeration with a semaphore there is a guaranteed deadlock, not a slow
+        // menu — the Task is queued on the main actor while wait() blocks the
+        // very thread that would drain it.
+        let probe = CountingAudioSourceProviding()
+        probe.appsToReturn = apps
+        let cache = PerAppListCache()
+        let delegate = PerAppMenuDelegate(
+            cache: cache,
+            source: probe,
+            makeContext: { self.context(apps: cache.apps) }
+        )
+
+        let menu = NSMenu()
+        // Returns synchronously against a cold cache: the placeholder, not apps.
+        delegate.menuNeedsUpdate(menu)
+        #expect(menu.items.map(\.title) == ["Looking for open apps…"])
+
+        // The out-of-band refresh then fills it in place.
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(probe.availableAppsCallCount == 1)
+        #expect(menu.items.map(\.title) == ["Ableton Live", "Logic Pro", "Spotify"])
+    }
+}
+
+/// Counts enumeration calls so a test can assert none happened.
+@MainActor
+final class CountingAudioSourceProviding: AudioSourceProviding {
+    private(set) var availableAppsCallCount = 0
+    var selectedSource: AudioSource = .systemAll
+    var appsToReturn: [RunningAppInfo] = []
+
+    func setSelectedSource(_ source: AudioSource) { selectedSource = source }
+    func validate(_ source: AudioSource) async throws {}
+
+    func availableApps() async throws -> [RunningAppInfo] {
+        availableAppsCallCount += 1
+        return appsToReturn
+    }
+}

@@ -15,43 +15,51 @@ import AppKit
 @MainActor
 struct OverflowMenuTests {
 
+    /// A context in which the capture-source section is absent, so these tests
+    /// keep asserting exactly the app-level action set they were written for.
+    /// The section's own behaviour lives in `CaptureSourceMenuTests`.
+    private var recordingContext: OverflowContext {
+        OverflowContext(allowsCaptureSourceChange: false)
+    }
+
     /// Every action that was a flat popover button before BL-110, plus the
     /// standard app-menu pair. Losing any of these is a user-facing regression.
     @Test("Menu still offers every action that was reachable in v1.0")
     func retainsPreviouslyReachableActions() {
-        let ids = Set(OverflowMenu.actions.map(\.id))
+        let ids = Set(OverflowMenu.actions(recordingContext).map(\.id))
         #expect(ids.isSuperset(of: ["showWindow", "exportDiagnostics", "reportProblem", "quit"]))
     }
 
     @Test("Quit is bound to ⌘Q")
     func quitHasCommandQ() throws {
-        let quit = try #require(OverflowMenu.actions.first { $0.id == "quit" })
+        let quit = try #require(OverflowMenu.actions(recordingContext).first { $0.id == "quit" })
         #expect(quit.commandKey == "q")
     }
 
     @Test("Quit is the only shortcut-bound action for now")
     func onlyQuitHasAShortcut() {
-        let shortcutBound = OverflowMenu.actions.filter { $0.commandKey != nil }.map(\.id)
+        let shortcutBound = OverflowMenu.actions(recordingContext).filter { $0.commandKey != nil }.map(\.id)
         #expect(shortcutBound == ["quit"])
     }
 
     @Test("Action ids are unique — they key test assertions and must not collide")
     func actionIDsAreUnique() {
-        let ids = OverflowMenu.actions.map(\.id)
+        let ids = OverflowMenu.actions(recordingContext).map(\.id)
         #expect(Set(ids).count == ids.count)
     }
 
     @Test("No action ships with an empty title")
     func everyActionHasATitle() {
-        #expect(OverflowMenu.actions.allSatisfy { !$0.title.isEmpty })
+        #expect(OverflowMenu.actions(recordingContext).allSatisfy { !$0.title.isEmpty })
     }
 
     // MARK: - The AppKit twin matches the shared definition
 
     @Test("NSMenu renders exactly the shared entries, in order, separators included")
     func nsMenuMatchesEntries() {
-        let items = OverflowMenu.makeNSMenu().items
-        let entries = OverflowMenu.entries
+        let context = recordingContext
+        let items = OverflowMenu.makeNSMenu(context).items
+        let entries = OverflowMenu.entries(context)
 
         #expect(items.count == entries.count)
 
@@ -63,13 +71,22 @@ struct OverflowMenuTests {
                 #expect(item.isSeparatorItem == false)
                 #expect(item.title == action.title)
                 #expect(item.keyEquivalent == action.commandKey.map(String.init) ?? "")
+            case .sectionHeader(let title):
+                #expect(item.title == title)
+            case .disabledNotice(let title):
+                #expect(item.title == title)
+                #expect(item.isEnabled == false)
+            case .submenu(let submenu):
+                #expect(item.title == submenu.title)
+                #expect(item.submenu != nil)
             }
         }
     }
 
-    @Test("Every NSMenu action item is wired to a target — no dead rows")
+    @Test("Every enabled NSMenu action item is wired to a target — no dead rows")
     func nsMenuItemsAreWired() {
-        let actionItems = OverflowMenu.makeNSMenu().items.filter { !$0.isSeparatorItem }
+        let actionItems = OverflowMenu.makeNSMenu(recordingContext).items
+            .filter { !$0.isSeparatorItem && $0.isEnabled && $0.submenu == nil }
         #expect(actionItems.isEmpty == false)
         // `NSMenuItem.target` does not retain, so a missing retain elsewhere would
         // surface here as a nil target and a silently unresponsive row.

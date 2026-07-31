@@ -15,7 +15,7 @@
 import Foundation
 import AVFoundation
 
-protocol AudioFileEncoder: AnyObject {
+nonisolated protocol AudioFileEncoder: AnyObject {
     /// Open the output file. `sampleRate`/`channels` describe the *input* buffers
     /// the encoder will receive (the capture format, currently 48kHz stereo). Each
     /// encoder owns its own *output* format internally and resamples if it differs.

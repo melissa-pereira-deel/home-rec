@@ -85,6 +85,25 @@ enum RecordingState: Equatable, Sendable {
     case error(RecorderError)
     case recovering
 
+    /// Whether the user may change the capture source right now (BL-111).
+    ///
+    /// `.error` is deliberately **true**: changing the source is one of the ways
+    /// a user fixes an error (the selected app quit, a mic was unplugged), so
+    /// locking them out of it there would strand them.
+    ///
+    /// ⚠️ Written as an exhaustive switch with **no `default`** on purpose —
+    /// unlike `canTransition` below, which has one. A new state (BL-132's
+    /// `.paused`) must become a compile error here so someone decides, rather
+    /// than silently inheriting "false". Do not copy the escape hatch up.
+    nonisolated var allowsCaptureSourceChange: Bool {
+        switch self {
+        case .idle, .error:
+            return true
+        case .starting, .recording, .stopping, .recovering:
+            return false
+        }
+    }
+
     /// Whether moving to `next` is a legal transition from `self`.
     /// Illegal transitions (e.g. `idle → stopping`) return `false`.
     nonisolated func canTransition(to next: RecordingState) -> Bool {

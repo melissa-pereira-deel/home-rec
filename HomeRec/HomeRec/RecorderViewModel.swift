@@ -424,6 +424,34 @@ class RecorderViewModel: ObservableObject {
     /// Order is guide → probe → pane on purpose: the guide is instant, so a slow
     /// or hung probe degrades into "panel is up, carrying its own retry button"
     /// rather than a dead click.
+    /// Change the capture source (BL-111).
+    ///
+    /// The only write path. `objectWillChange` is sent explicitly because the
+    /// selection lives on `AudioSourceManager`, not in a `@Published` property —
+    /// without it the status line would keep naming the previous source until
+    /// some unrelated state change happened to redraw the view.
+    func setCaptureSource(_ source: AudioSource) {
+        guard source != audioSource.selectedSource else { return }
+        objectWillChange.send()
+        audioSource.setSelectedSource(source)
+    }
+
+    /// Human-readable name of the current capture source, for the status line.
+    /// `nil` for all-system-audio, which needs no qualifier.
+    var captureSourceName: String? {
+        switch audioSource.selectedSource {
+        case .systemAll:
+            return nil
+        case .app(let bundleID):
+            return knownAppNames[bundleID] ?? bundleID
+        }
+    }
+
+    /// Last-seen display names for app bundle IDs, so the status line can name a
+    /// selection without re-enumerating (which would cost a permission probe).
+    /// Fed by the menu when it enumerates; empty until then.
+    var knownAppNames: [String: String] = [:]
+
     func openSystemSettings() {
         guard !installLocation.blocksRecording else {
             showInstallLocationNotice()
@@ -724,10 +752,21 @@ class RecorderViewModel: ObservableObject {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    /// Status text
+    /// Status text.
+    ///
+    /// This line names the capture source, and that is deliberate rather than
+    /// decorative (BL-111). Picking the wrong format is convertible and the wrong
+    /// save location is findable, but recording the wrong *source* means the
+    /// audio you wanted does not exist — there is no undo for a take. It is the
+    /// one setting that earns permanent space on the primary surface.
+    ///
+    /// It is also why "Play something, then hit record" could not simply stay:
+    /// that sentence is itself a source claim, and it is false the moment a
+    /// non-system source is selected.
     var statusText: String {
         switch state {
         case .recording:
+            if let name = captureSourceName { return "Recording \(name)" }
             return "Recording"
         case .starting:
             return "Starting…"
@@ -741,7 +780,12 @@ class RecorderViewModel: ObservableObject {
             // A translocated bundle can't hold a permission grant, so "Almost
             // ready / grant permission" would be a lie — point at the real fix.
             if installLocation.blocksRecording { return "Move to Applications" }
-            return permissionStatus != .granted ? "Almost ready" : "Play something, then hit record"
+            guard permissionStatus == .granted else { return "Almost ready" }
+            // Naming the source here also pre-announces the failure that
+            // `AudioSourceManager.validate()` would otherwise only raise *after*
+            // the user commits to a click.
+            if let name = captureSourceName { return "Ready to record \(name)" }
+            return "Play something, then hit record"
         }
     }
 }

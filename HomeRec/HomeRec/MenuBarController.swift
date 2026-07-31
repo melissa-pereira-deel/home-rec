@@ -15,10 +15,31 @@ class MenuBarController: NSObject {
     private var statusItem: NSStatusItem
     private let popover = NSPopover()
     private var cancellable: AnyCancellable?
+    /// Held so the overflow menu can be rebuilt from live state on every open.
+    private let viewModel: RecorderViewModel
+    /// Warmed only by a deliberate Per-App submenu open — never at launch.
+    private let appListCache = PerAppListCache()
+    /// Retained for the lifetime of the controller: `NSMenu.delegate` is weak.
+    private var perAppDelegate: PerAppMenuDelegate?
 
     init(viewModel: RecorderViewModel) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        self.viewModel = viewModel
         super.init()
+
+        // The single write path for the capture source. Checkmarks are derived
+        // from the selection at build time, so nothing else may set it.
+        OverflowMenu.onSelectSource = { [weak viewModel] source in
+            viewModel?.setCaptureSource(source)
+        }
+        OverflowMenu.onRequestPermission = { [weak viewModel] in
+            viewModel?.openSystemSettings()
+        }
+        // One factory for both surfaces — the popover's "•••" and the status
+        // item's right-click render the identical menu, delegate included.
+        OverflowMenu.makeConfiguredMenu = { [weak self] in
+            self?.makeOverflowMenu() ?? OverflowMenu.makeNSMenu()
+        }
 
         // BL-140: the recovery window must never offer the file being written
         // right now — a live recording is unfinalized by definition.
@@ -97,6 +118,49 @@ class MenuBarController: NSObject {
         return type == .leftMouseUp && modifiers.contains(.control)
     }
 
+    /// Snapshot of everything the menu renders from, read fresh on every open.
+    ///
+    /// Nothing here touches ScreenCaptureKit: `apps` comes from the in-memory
+    /// cache, which only a deliberate Per-App submenu open ever fills. That is
+    /// what keeps a plain right-click free of permission prompts.
+    private func currentContext() -> OverflowContext {
+        let selected = viewModel.audioSource.selectedSource
+        var selectedAppName: String?
+        if case .app(let bundleID) = selected {
+            selectedAppName = appListCache.name(for: bundleID)
+        }
+        return OverflowContext(
+            selectedSource: selected,
+            allowsCaptureSourceChange: viewModel.state.allowsCaptureSourceChange,
+            permissionGranted: viewModel.permissionStatus == .granted,
+            apps: appListCache.apps,
+            selectedAppName: selectedAppName
+        )
+    }
+
+    /// Build the menu for right now, and attach the delegate that fills the
+    /// Per-App submenu lazily when (and only when) it is opened.
+    private func makeOverflowMenu() -> NSMenu {
+        let context = currentContext()
+        let menu = OverflowMenu.makeNSMenu(context)
+
+        let delegate = PerAppMenuDelegate(
+            cache: appListCache,
+            source: viewModel.audioSource,
+            makeContext: { [weak self] in self?.currentContext() ?? OverflowContext() }
+        )
+        // Retained here because `NSMenu.delegate` is weak.
+        perAppDelegate = delegate
+        // Attached to the *submenu only*, so opening the root menu enumerates
+        // nothing. The capture-source section is absent entirely while recording,
+        // in which case there is no submenu to find.
+        menu.items
+            .first { $0.identifier?.rawValue == OverflowMenu.perAppItemIdentifier }?
+            .submenu?.delegate = delegate
+
+        return menu
+    }
+
     private func showOverflowMenu() {
         // The popover and the menu would otherwise overlap on screen.
         if popover.isShown {
@@ -107,7 +171,7 @@ class MenuBarController: NSObject {
         // highlighted-while-open appearance. It has to come straight back off:
         // while a menu is attached AppKit routes every click to it and never
         // fires the button's action, which would strand the left-click popover.
-        statusItem.menu = OverflowMenu.makeNSMenu()
+        statusItem.menu = makeOverflowMenu()
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
     }

@@ -28,6 +28,17 @@ struct OverflowAction: Identifiable {
     /// Shown on hover in the AppKit menu. Used sparingly — only where the row's
     /// purpose isn't self-evident from its title (BL-140's recovery entry).
     let toolTip: String?
+    /// Whether this row shows a checkmark. Always *derived* from the context at
+    /// build time (`row.source == context.selectedSource`), never stored.
+    let isChecked: Bool
+    let isEnabled: Bool
+    /// Marks a row as a member of the one-of-N capture-source group.
+    ///
+    /// Exists so the mid-recording assertion can be written over the builder's
+    /// *output* — "no source row survives in a locked context" — instead of over
+    /// a hardcoded list of ids, which would silently pass when BL-130 adds a mic
+    /// row and nobody remembers to extend the list.
+    let isSourceRow: Bool
     let perform: @MainActor () -> Void
 
     init(
@@ -35,30 +46,221 @@ struct OverflowAction: Identifiable {
         title: String,
         commandKey: Character? = nil,
         toolTip: String? = nil,
+        isChecked: Bool = false,
+        isEnabled: Bool = true,
+        isSourceRow: Bool = false,
         perform: @escaping @MainActor () -> Void
     ) {
         self.id = id
         self.title = title
         self.commandKey = commandKey
         self.toolTip = toolTip
+        self.isChecked = isChecked
+        self.isEnabled = isEnabled
+        self.isSourceRow = isSourceRow
         self.perform = perform
     }
 }
 
-enum OverflowEntry {
+/// A row that opens a nested menu.
+///
+/// Its contents are enumerated at runtime, which under BL-111's root-row rule is
+/// exactly what earns a submenu: one root row per *kind* of source, so the shape
+/// of the menu never changes because an app launched or a device was plugged in.
+struct OverflowSubmenu: Identifiable {
+    let id: String
+    /// Folds the current selection into the row — "Ableton Live" rather than
+    /// "App" — so the root answers "what am I recording?" without opening it.
+    let title: String
+    let isChecked: Bool
+    let isEnabled: Bool
+    let isSourceRow: Bool
+    /// Built lazily on open. `nil` here would mean "nothing to show"; the builder
+    /// always supplies at least one row (a notice) so a submenu is never an
+    /// empty dead end that reads as a bug.
+    let entries: [OverflowEntry]
+
+    init(
+        id: String,
+        title: String,
+        isChecked: Bool = false,
+        isEnabled: Bool = true,
+        isSourceRow: Bool = true,
+        entries: [OverflowEntry]
+    ) {
+        self.id = id
+        self.title = title
+        self.isChecked = isChecked
+        self.isEnabled = isEnabled
+        self.isSourceRow = isSourceRow
+        self.entries = entries
+    }
+}
+
+indirect enum OverflowEntry {
     case action(OverflowAction)
     case separator
+    /// A styled group title. Rendered with `NSMenuItem.sectionHeader(title:)`,
+    /// which applies system styling itself — so the title is passed in sentence
+    /// case, not pre-uppercased.
+    case sectionHeader(String)
+    case submenu(OverflowSubmenu)
+    /// A non-clickable explanatory row. Used only where the user is standing on a
+    /// blocked path and is actively asking why.
+    case disabledNotice(String)
 }
 
 @MainActor
 enum OverflowMenu {
 
-    /// The menu's contents, in display order.
+    /// Writes the user's capture-source choice. Set once at startup by
+    /// `MenuBarController`. The single write path — checkmarks are derived from
+    /// the selection, so nothing else may set it.
+    static var onSelectSource: @MainActor (AudioSource) -> Void = { _ in }
+
+    /// Stable identifier stamped onto the Per-App submenu row, so the controller
+    /// can attach its delegate without matching on the row's title (which now
+    /// changes to reflect the selection).
+    static let perAppItemIdentifier = "sourcePerApp"
+
+    /// Builds the fully-configured menu — current context, submenu delegate and
+    /// all. Set once at startup by `MenuBarController`, which owns the app-list
+    /// cache the delegate fills.
     ///
-    /// Sections from other backlog items (CAPTURE SOURCE for BL-100, MONITORING
-    /// for BL-131) slot in above these as they ship; the actions here are the
-    /// app-level ones that were previously flat buttons in the popover footer.
-    static var entries: [OverflowEntry] {
+    /// Both surfaces call this, so "the popover menu matches the right-click
+    /// menu" stops being a property to test and becomes the same object.
+    static var makeConfiguredMenu: @MainActor () -> NSMenu = { makeNSMenu() }
+
+    /// The menu's contents for `context`, in display order.
+    ///
+    /// A pure function of the snapshot: same context in, same rows out, no I/O.
+    /// That is what lets the whole menu — including sections BL-130 and BL-131
+    /// will add — be tested without AppKit, a live status item, or permission.
+    static func entries(_ context: OverflowContext) -> [OverflowEntry] {
+        captureSourceEntries(context) + appActionEntries
+    }
+
+    /// The capture-source section, or nothing at all.
+    ///
+    /// **Hidden, not greyed, while a recording is running.** The app already
+    /// settled this: `RecorderView` hides the whole settings shelf during a take
+    /// ("both settings are locked once capture starts"), and having two different
+    /// rules for locked settings would be worse than either rule. The user's
+    /// question — "why is this grey?" — never arises, and the state stays legible
+    /// where it belongs: a red menu-bar icon and a source-aware status line.
+    static func captureSourceEntries(_ context: OverflowContext) -> [OverflowEntry] {
+        guard context.allowsCaptureSourceChange else { return [] }
+
+        return [
+            .sectionHeader("Capture Source"),
+            .action(OverflowAction(
+                id: "sourceSystemAll",
+                title: "All System Audio",
+                isChecked: context.selectedSource == .systemAll,
+                isSourceRow: true,
+                perform: { onSelectSource(.systemAll) }
+            )),
+            .submenu(perAppSubmenu(context)),
+            .separator
+        ]
+    }
+
+    /// One root row for the whole per-app *kind*, whose title carries the current
+    /// choice. Runtime-enumerated contents always live behind a submenu, so
+    /// launching an app can never reshape the menu the user is looking at.
+    static func perAppSubmenu(_ context: OverflowContext) -> OverflowSubmenu {
+        let selectedBundleID: String? = {
+            if case .app(let bundleID) = context.selectedSource { return bundleID }
+            return nil
+        }()
+
+        return OverflowSubmenu(
+            id: "sourcePerApp",
+            title: selectedAppTitle(context, selectedBundleID: selectedBundleID),
+            isChecked: selectedBundleID != nil,
+            entries: perAppEntries(context, selectedBundleID: selectedBundleID)
+        )
+    }
+
+    private static func selectedAppTitle(
+        _ context: OverflowContext,
+        selectedBundleID: String?
+    ) -> String {
+        guard let selectedBundleID else { return "App" }
+        // Prefer the live name, fall back to the remembered one, and only show a
+        // bundle ID when neither exists — it is ugly, but inventing a name is
+        // worse and showing nothing loses the selection entirely.
+        if let running = context.apps?.first(where: { $0.bundleID == selectedBundleID }) {
+            return running.applicationName
+        }
+        return context.selectedAppName ?? selectedBundleID
+    }
+
+    private static func perAppEntries(
+        _ context: OverflowContext,
+        selectedBundleID: String?
+    ) -> [OverflowEntry] {
+        // Permission first, and it is a hard gate: without it we must not call
+        // `SCShareableContent` at all, so merely *hovering* this submenu cannot
+        // raise a system dialog. An enabled row beats a disabled one here — the
+        // user is asking "why can't I?" and this answers it *and* fixes it.
+        guard context.permissionGranted else {
+            return [.action(OverflowAction(
+                id: "sourcePermissionNeeded",
+                title: "Allow Screen Recording…",
+                perform: { onRequestPermission() }
+            ))]
+        }
+
+        var entries: [OverflowEntry] = []
+
+        // A selection that isn't running still has to render, checked, or the
+        // menu emits zero checkmarks and silently implies "All System Audio"
+        // while `startRecording` fails with `.appNotRunning`.
+        let isRunning = context.apps?.contains { $0.bundleID == selectedBundleID } ?? false
+        if let selectedBundleID, !isRunning {
+            let name = context.selectedAppName ?? selectedBundleID
+            entries.append(.action(OverflowAction(
+                id: "sourceAppNotRunning",
+                title: "\(name) (not running)",
+                isChecked: true,
+                isEnabled: false,
+                isSourceRow: true,
+                perform: {}
+            )))
+            entries.append(.separator)
+        }
+
+        guard let apps = context.apps else {
+            // Cache is cold and nothing has probed yet. Saying "no apps are open"
+            // here would be a claim we have not earned.
+            entries.append(.disabledNotice("Looking for open apps…"))
+            return entries
+        }
+
+        guard !apps.isEmpty else {
+            entries.append(.disabledNotice("No other apps are open"))
+            return entries
+        }
+
+        entries.append(contentsOf: apps.map { app in
+            .action(OverflowAction(
+                id: "sourceApp:\(app.bundleID)",
+                title: app.applicationName,
+                isChecked: app.bundleID == selectedBundleID,
+                isSourceRow: true,
+                perform: { onSelectSource(.app(bundleID: app.bundleID)) }
+            ))
+        })
+        return entries
+    }
+
+    /// Opens System Settings at the Screen Recording pane. Set by
+    /// `MenuBarController`, which has the view model that owns the navigation.
+    static var onRequestPermission: @MainActor () -> Void = {}
+
+    /// The app-level actions — unchanged by BL-111, and always present.
+    static var appActionEntries: [OverflowEntry] {
         [
             .action(OverflowAction(id: "showWindow", title: "Show Window", perform: showMainWindow)),
             .separator,
@@ -79,12 +281,37 @@ enum OverflowMenu {
         ]
     }
 
-    /// Just the actions, separators dropped — for assertions and iteration that
-    /// don't care about visual grouping.
-    static var actions: [OverflowAction] {
-        entries.compactMap { entry in
-            if case .action(let action) = entry { return action }
-            return nil
+    /// Every action the builder emits for `context`, **including inside
+    /// submenus**, separators and headers dropped.
+    ///
+    /// Recursing matters: the mid-recording lock and one-checkmark invariants are
+    /// asserted over this, and a per-app row that stayed clickable would hide
+    /// inside a submenu where a top-level-only walk could never see it.
+    static func actions(_ context: OverflowContext = OverflowContext()) -> [OverflowAction] {
+        flatten(entries(context))
+    }
+
+    private static func flatten(_ entries: [OverflowEntry]) -> [OverflowAction] {
+        entries.flatMap { entry -> [OverflowAction] in
+            switch entry {
+            case .action(let action):
+                return [action]
+            case .submenu(let submenu):
+                // The submenu's own row is an action-like source row in its own
+                // right (it carries the checkmark), so include it as well as its
+                // contents.
+                let parent = OverflowAction(
+                    id: submenu.id,
+                    title: submenu.title,
+                    isChecked: submenu.isChecked,
+                    isEnabled: submenu.isEnabled,
+                    isSourceRow: submenu.isSourceRow,
+                    perform: {}
+                )
+                return [parent] + flatten(submenu.entries)
+            case .separator, .sectionHeader, .disabledNotice:
+                return []
+            }
         }
     }
 
@@ -117,7 +344,7 @@ enum OverflowMenu {
     }
 }
 
-// MARK: - AppKit rendering (right-click on the status item)
+// MARK: - AppKit rendering
 
 /// Retains a menu action's closure for the lifetime of its `NSMenuItem`.
 /// AppKit's target/action can't invoke a Swift closure directly, and
@@ -139,48 +366,100 @@ private final class OverflowActionTarget: NSObject {
 @MainActor
 extension OverflowMenu {
 
-    /// The AppKit twin of the SwiftUI `Menu`, built from the same `entries`.
-    static func makeNSMenu() -> NSMenu {
+    /// Render `context` as a real `NSMenu`.
+    ///
+    /// Both surfaces — the status item's right-click and the popover's "•••" —
+    /// now call this. They used to render the same list twice, once as `NSMenu`
+    /// and once as a SwiftUI `Menu`, and parity between them was an assertion.
+    /// It is now an identity.
+    static func makeNSMenu(_ context: OverflowContext = OverflowContext()) -> NSMenu {
         let menu = NSMenu()
+        populate(menu, with: entries(context))
+        return menu
+    }
+
+    /// Fill `menu` with `entries`, replacing whatever it held.
+    ///
+    /// Separate from `makeNSMenu` because the per-app submenu is refreshed
+    /// **in place while it is open** — see `PerAppMenuDelegate`.
+    static func populate(_ menu: NSMenu, with entries: [OverflowEntry]) {
+        menu.removeAllItems()
         for entry in entries {
             switch entry {
             case .separator:
                 menu.addItem(.separator())
+
+            case .sectionHeader(let title):
+                // Applies system styling itself, so the title is passed in
+                // sentence case rather than pre-uppercased.
+                menu.addItem(.sectionHeader(title: title))
+
+            case .disabledNotice(let title):
+                let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+
             case .action(let action):
-                let item = NSMenuItem(
-                    title: action.title,
-                    action: #selector(OverflowActionTarget.fire(_:)),
-                    // NSMenuItem defaults its modifier mask to ⌘, matching the
-                    // command-only shortcuts `OverflowAction` models.
-                    keyEquivalent: action.commandKey.map(String.init) ?? ""
-                )
-                item.toolTip = action.toolTip
-                let target = OverflowActionTarget(perform: action.perform)
-                item.target = target
-                item.representedObject = target
+                menu.addItem(makeItem(for: action))
+
+            case .submenu(let submenu):
+                let item = NSMenuItem(title: submenu.title, action: nil, keyEquivalent: "")
+                item.state = submenu.isChecked ? .on : .off
+                item.isEnabled = submenu.isEnabled
+                // Carries the builder's stable id, so a caller can find this row
+                // to attach a delegate without matching on user-visible copy.
+                item.identifier = NSUserInterfaceItemIdentifier(submenu.id)
+                let child = NSMenu(title: submenu.title)
+                populate(child, with: submenu.entries)
+                item.submenu = child
                 menu.addItem(item)
             }
         }
-        return menu
+    }
+
+    private static func makeItem(for action: OverflowAction) -> NSMenuItem {
+        let item = NSMenuItem(
+            title: action.title,
+            // A disabled row must have no action, or AppKit's automatic menu
+            // enabling can re-enable it behind us.
+            action: action.isEnabled ? #selector(OverflowActionTarget.fire(_:)) : nil,
+            // NSMenuItem defaults its modifier mask to command, matching the
+            // command-only shortcuts `OverflowAction` models.
+            keyEquivalent: action.commandKey.map(String.init) ?? ""
+        )
+        item.toolTip = action.toolTip
+        item.state = action.isChecked ? .on : .off
+        item.isEnabled = action.isEnabled
+        if action.isEnabled {
+            let target = OverflowActionTarget(perform: action.perform)
+            item.target = target
+            item.representedObject = target
+        }
+        return item
     }
 }
 
-// MARK: - SwiftUI rendering (the "•••" button in the popover)
+// MARK: - The popover's "•••" affordance
 
-/// The popover's overflow affordance. SwiftUI's `Menu` renders as a real
-/// `NSMenu` on macOS, so this gets system styling and shortcut display for free.
+/// Pops the same `NSMenu` the status item's right-click does.
+///
+/// ⚠️ This deliberately is **not** a SwiftUI `Menu`. SwiftUI evaluates a
+/// `Menu`'s content ViewBuilder **eagerly** — measured: the closure body runs
+/// with zero clicks, before the menu is ever opened — and offers no supported
+/// open hook. A capture-source picker built inside one would therefore call
+/// `SCShareableContent` on *popover appearance*: a zero-click permission dialog,
+/// the exact bug class BL-085 removed. A plain `Button` that builds the menu in
+/// its action keeps enumeration behind a real click.
 struct OverflowMenuButton: View {
 
     var body: some View {
-        Menu {
-            ForEach(Array(OverflowMenu.entries.enumerated()), id: \.offset) { _, entry in
-                switch entry {
-                case .separator:
-                    Divider()
-                case .action(let action):
-                    button(for: action)
-                }
-            }
+        Button {
+            // Built in the action, never in the view body: that timing is the
+            // whole point of this type.
+            let menu = OverflowMenu.makeConfiguredMenu()
+            // Screen coordinates: passing `in: nil` avoids needing a host view,
+            // which SwiftUI does not hand out.
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 13, weight: .semibold))
@@ -190,20 +469,8 @@ struct OverflowMenuButton: View {
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
+        .buttonStyle(.plain)
         .help("More options")
         .accessibilityLabel("More options")
-    }
-
-    @ViewBuilder
-    private func button(for action: OverflowAction) -> some View {
-        if let key = action.commandKey {
-            Button(action.title) { action.perform() }
-                .keyboardShortcut(KeyEquivalent(key), modifiers: .command)
-        } else {
-            Button(action.title) { action.perform() }
-        }
     }
 }

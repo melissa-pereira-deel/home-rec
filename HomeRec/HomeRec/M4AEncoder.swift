@@ -38,7 +38,7 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
     }
 }
 
-final class M4AEncoder: AudioFileEncoder {
+nonisolated final class M4AEncoder: AudioFileEncoder {
 
     // AAC output config (BL-012).
     private let outputSampleRate: Double = 44_100
