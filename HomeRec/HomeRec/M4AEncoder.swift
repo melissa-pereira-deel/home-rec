@@ -24,12 +24,16 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
     case setupFailed
     case notOpen
     case writeFailed
+    /// A buffer arrived whose rate/channels differ from what the writer input was
+    /// configured for. Appending it would fail and cost the whole take at stop.
+    case formatMismatch
 
     var errorDescription: String? {
         switch self {
-        case .setupFailed: return "Failed to set up the M4A encoder"
-        case .notOpen:     return "M4A file is not open for writing"
-        case .writeFailed: return "Failed to finalize the M4A file"
+        case .setupFailed:     return "Failed to set up the M4A encoder"
+        case .notOpen:         return "M4A file is not open for writing"
+        case .writeFailed:     return "Failed to finalize the M4A file"
+        case .formatMismatch:  return "Audio format changed mid-recording"
         }
     }
 }
@@ -55,6 +59,9 @@ final class M4AEncoder: AudioFileEncoder {
     /// Input (capture) sample rate, used to stamp presentation times. The AAC
     /// output rate differs; AVAssetWriter resamples and remaps timestamps.
     private var inputSampleRate: Double = 48_000
+    /// Input channel count the writer input was configured for. A buffer with a
+    /// different count cannot be appended to it (see the guard in `writeBuffer`).
+    private var inputChannels: Int = 2
     private var totalInputFrames: Int64 = 0
 
     /// Buffers awaiting append while the input reports not-ready (FIFO).
@@ -62,6 +69,7 @@ final class M4AEncoder: AudioFileEncoder {
 
     func createFile(at url: URL, sampleRate: Double, channels: Int) throws {
         inputSampleRate = sampleRate
+        inputChannels = channels
         totalInputFrames = 0
         pending.removeAll()
 
@@ -97,6 +105,19 @@ final class M4AEncoder: AudioFileEncoder {
     func writeBuffer(_ buffer: AVAudioPCMBuffer) throws {
         guard let input = input, writer != nil else { throw M4AEncoderError.notOpen }
 
+        // Presentation times are stamped from the *declared* input rate while the
+        // sample buffer's format description comes from the buffer's own — so a
+        // rate mismatch drifts the timeline and reports a wrong duration. A
+        // channel mismatch is worse: the writer input was configured for
+        // `inputChannels`, so appending a differently-shaped buffer fails and
+        // `finalize()` then throws `.writeFailed` — losing the entire take rather
+        // than mistiming it. `AudioFormatNormalizer` should make this unreachable
+        // (BL-112); reaching it must fail loudly, not silently.
+        guard buffer.format.sampleRate == inputSampleRate,
+              Int(buffer.format.channelCount) == inputChannels else {
+            throw M4AEncoderError.formatMismatch
+        }
+
         let pts = CMTime(value: totalInputFrames, timescale: CMTimeScale(inputSampleRate))
         guard let sample = Self.makeInterleavedSampleBuffer(from: buffer, presentationTime: pts) else {
             // Bad/empty buffer: drop it (matches the WAV path's hot-path tolerance).
@@ -105,15 +126,29 @@ final class M4AEncoder: AudioFileEncoder {
         totalInputFrames += Int64(buffer.frameLength)
 
         pending.append(sample)
-        drainPending(into: input)
+        guard drainPending(into: input) else { throw M4AEncoderError.writeFailed }
     }
 
     /// Append as many pending buffers as the input will currently accept.
-    private func drainPending(into input: AVAssetWriterInput) {
+    ///
+    /// - Returns: false once an append is refused. That return used to be
+    ///   discarded, which made a rejected buffer invisible until `finalize()`
+    ///   found `writer.status != .completed` and threw — by which point the whole
+    ///   take was gone with no indication of when or why it broke.
+    @discardableResult
+    private func drainPending(into input: AVAssetWriterInput) -> Bool {
         while let head = pending.first, input.isReadyForMoreMediaData {
-            input.append(head)
+            guard input.append(head) else {
+                // The writer has failed; every later append fails too. Stop and
+                // let the caller surface it while there is still context.
+                Log.recorder.error(
+                    "M4A append rejected: \(self.writer?.error?.localizedDescription ?? "unknown", privacy: .public)"
+                )
+                return false
+            }
             pending.removeFirst()
         }
+        return true
     }
 
     func finalize() throws {

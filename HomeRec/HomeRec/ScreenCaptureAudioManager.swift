@@ -59,6 +59,16 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     private var audioCallback: ((AVAudioPCMBuffer) -> Void)?
     private var isCapturing = false
 
+    /// Forces every captured buffer to the canonical 48 kHz stereo format the
+    /// encoders are told to expect (BL-112).
+    ///
+    /// ⚠️ One normalizer per sample-handler queue — it holds a stateful
+    /// `AVAudioConverter`, which is declared Sendable but is not safe to drive
+    /// from two queues. This one belongs to the `.audio` handler queue. When
+    /// BL-130 adds a `.microphone` output it must either share that queue or get
+    /// its own normalizer; it must not share this one across queues.
+    private var audioNormalizer = AudioFormatNormalizer()
+
     /// Called when the stream stops unexpectedly. See `AudioCapturing`.
     var onStreamError: (@MainActor (String) -> Void)?
 
@@ -72,6 +82,10 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     ///   is `.app` and no running app matches its bundle ID.
     func setupCapture(source: AudioSource, audioCallback: @escaping (AVAudioPCMBuffer) -> Void) async throws {
         self.audioCallback = audioCallback
+        // Fresh converter state per session: this manager outlives a single
+        // recording, and a converter carrying the previous take's resampler state
+        // would start the next one mid-phase.
+        self.audioNormalizer = AudioFormatNormalizer()
 
         // Get available displays (and, for .app, running applications)
         let content = try await SCShareableContent.excludingDesktopWindows(
@@ -203,8 +217,12 @@ extension ScreenCaptureAudioManager: SCStreamOutput {
         guard type == .audio else { return }
 
         // Convert at the delegate boundary so every AudioCapturing implementation
-        // hands AudioRecorder the same canonical AVAudioPCMBuffer type (BL-099).
-        guard let pcmBuffer = AudioSampleConverter.makePCMBuffer(from: sampleBuffer) else { return }
-        audioCallback?(pcmBuffer)
+        // hands AudioRecorder the same canonical AVAudioPCMBuffer type (BL-099),
+        // then normalise so it is the same *format* too (BL-112). For system
+        // audio the normaliser is a pass-through — the SCK config already pins
+        // 48 kHz stereo — so the existing path stays byte-identical.
+        guard let pcmBuffer = AudioSampleConverter.makePCMBuffer(from: sampleBuffer),
+              let normalized = audioNormalizer.normalize(pcmBuffer) else { return }
+        audioCallback?(normalized)
     }
 }

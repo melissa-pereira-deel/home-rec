@@ -14,6 +14,8 @@ enum WAVWriterError: Error, LocalizedError, Equatable {
     case fileWriteFailed
     case invalidFormat
     case fileNotOpen
+    /// A buffer arrived whose rate/channels differ from what the header declares.
+    case formatMismatch
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +27,8 @@ enum WAVWriterError: Error, LocalizedError, Equatable {
             return "Invalid audio format"
         case .fileNotOpen:
             return "WAV file is not open for writing"
+        case .formatMismatch:
+            return "Audio format changed mid-recording"
         }
     }
 
@@ -38,6 +42,8 @@ enum WAVWriterError: Error, LocalizedError, Equatable {
             return "Use 44.1kHz or 48kHz stereo format"
         case .fileNotOpen:
             return "Call createFile() before writing data"
+        case .formatMismatch:
+            return "Capture buffers must be normalised to the file's declared format before writing"
         }
     }
 }
@@ -96,6 +102,22 @@ class WAVWriter: AudioFileEncoder {
     func writeBuffer(_ buffer: AVAudioPCMBuffer) throws {
         guard let fileHandle = fileHandle else {
             throw WAVWriterError.fileNotOpen
+        }
+
+        // The header was stamped with the rate and channel count `createFile`
+        // was given, but the payload loop below interleaves using the *buffer's*
+        // channel count. A mismatch is therefore silent corruption, not a bad
+        // frame: a mono buffer written into a stereo-declared file reads back as
+        // L/R pairs — half speed, an octave down — and a 44.1 kHz buffer plays
+        // ~8.8% fast. `AudioFormatNormalizer` should make this unreachable; if it
+        // is ever reached, refusing beats writing a pitch-shifted file (BL-112).
+        //
+        // Deliberately narrower than FLAC's full `AVAudioFormat` equality: these
+        // two fields are what the header commits to, and interleaving is already
+        // covered by the `floatChannelData` guard below.
+        guard buffer.format.sampleRate == sampleRate,
+              Int(buffer.format.channelCount) == channels else {
+            throw WAVWriterError.formatMismatch
         }
 
         guard let floatChannelData = buffer.floatChannelData else {

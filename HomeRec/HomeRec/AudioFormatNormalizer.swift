@@ -1,0 +1,152 @@
+//
+//  AudioFormatNormalizer.swift
+//  HomeRec
+//
+//  Forces every captured buffer to one canonical format before it reaches an
+//  encoder (BL-112).
+//
+//  Why this exists: `AudioRecorder` tells each encoder the file is 48 kHz stereo
+//  (`AudioRecorder.startRecording`), and that has been true only because
+//  `ScreenCaptureAudioManager` pins `config.sampleRate`/`channelCount` on the
+//  `.audio` output. Those settings do **not** govern the `.microphone` output —
+//  the SDK states a mic buffer's format follows the *device's* native format
+//  (`SCStream.h`). A 44.1 kHz or mono mic would therefore reach an encoder that
+//  has already written a 48 kHz stereo header, with no error anywhere:
+//
+//    · WAV  — the header stamps the declared rate/channels while the interleave
+//             loop uses the buffer's, so a mono take plays at half speed an
+//             octave down, and a 44.1 kHz take plays ~8.8% fast.
+//    · M4A  — a mono buffer is appended to a 2-channel input; the append fails,
+//             and `finalize()` then throws `.writeFailed`. The whole take is lost
+//             at stop, not merely mistimed.
+//    · FLAC — already refuses, via its own `processingFormat` guard (BL-013).
+//
+//  ⚠️ Threading: `AVAudioConverter` is declared Sendable but carries mutable
+//  resampler state, so the compiler will not warn about cross-queue use. One
+//  normalizer belongs to exactly one sample-handler queue, for its lifetime.
+//  `.audio` and `.microphone` must therefore either share a queue or hold
+//  separate normalizers — never one normalizer across two queues.
+//
+//  Not here: BL-130's Force Mono. Averaging L+R back into *both* channels is not
+//  `AVAudioConverter.downmix` (which converts N→1 and would change the channel
+//  count); it needs a separate transform on the already-canonical buffer. It
+//  belongs downstream of this type, not inside it.
+//
+
+import AVFoundation
+
+/// Converts captured buffers to Home Rec's canonical encoder input format.
+///
+/// Explicitly `nonisolated`: the app target builds with
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so an unannotated class would be
+/// inferred `@MainActor` and then be illegal to touch from the capture queue.
+nonisolated final class AudioFormatNormalizer {
+
+    /// 48 kHz, stereo, Float32, non-interleaved — what every encoder is told to
+    /// expect and what `AudioRecorder` hardcodes.
+    static let canonical: AVAudioFormat = {
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2) else {
+            // `standardFormatWithSampleRate` only fails on nonsense arguments;
+            // these are compile-time constants, so this is unreachable.
+            preconditionFailure("Canonical 48kHz/stereo format is not constructible")
+        }
+        return format
+    }()
+
+    private let outputFormat: AVAudioFormat
+    private var converter: AVAudioConverter?
+    /// The input format `converter` was built for. A mid-stream format change
+    /// (device switch) invalidates it.
+    private var converterInputFormat: AVAudioFormat?
+
+    init(outputFormat: AVAudioFormat = AudioFormatNormalizer.canonical) {
+        self.outputFormat = outputFormat
+    }
+
+    /// Convert `buffer` to the canonical format, or return it untouched if it is
+    /// already canonical.
+    ///
+    /// - Returns: nil if conversion failed or produced no frames. Callers drop
+    ///   the buffer, matching the capture path's existing hot-path tolerance.
+    func normalize(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        // Fast path, and the one that matters for regression safety: system-audio
+        // capture is already canonical, so it must reach the encoder untouched
+        // rather than round-tripping through a converter (BL-051 golden file).
+        if buffer.format == outputFormat {
+            return buffer
+        }
+
+        guard let converter = converter(for: buffer.format) else { return nil }
+
+        // Output length varies per call even for a constant input length, so the
+        // buffer needs headroom and `frameLength` must be read back afterwards —
+        // never computed.
+        let ratio = outputFormat.sampleRate / buffer.format.sampleRate
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
+        guard let output = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else {
+            return nil
+        }
+
+        // The simple `convert(to:from:)` form throws -50 for any sample-rate
+        // conversion; the input-block form is the only supported route.
+        let source = InputSource(buffer)
+        var conversionError: NSError?
+        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
+            guard let next = source.next() else {
+                inputStatus.pointee = .noDataNow
+                return nil
+            }
+            inputStatus.pointee = .haveData
+            return next
+        }
+
+        // ⚠️ `.inputRanDry` is the NORMAL result of feeding one buffer per call —
+        // it is returned on every single call and `.haveData` never is. Gating on
+        // `.haveData` here would silently discard 100% of the audio.
+        guard status != .error, conversionError == nil, output.frameLength > 0 else {
+            return nil
+        }
+        return output
+    }
+
+    /// The converter for `inputFormat`, built on first use and reused after that.
+    ///
+    /// Held across buffers deliberately: a converter rebuilt (or `reset()`) per
+    /// buffer loses its resampler state, which measurably produces a full-scale
+    /// discontinuity at every buffer seam — an audible click ~47×/second — plus
+    /// steady frame drift. Rebuilding is therefore reserved for a genuine input
+    /// format change, where one click is unavoidable anyway.
+    private func converter(for inputFormat: AVAudioFormat) -> AVAudioConverter? {
+        if let converter, converterInputFormat == inputFormat {
+            return converter
+        }
+        guard let fresh = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+            return nil
+        }
+        converter = fresh
+        converterInputFormat = inputFormat
+        return fresh
+    }
+}
+
+/// Feeds one buffer to `AVAudioConverter`'s input block, then reports dry.
+///
+/// `@unchecked Sendable` on purpose: the block's signature is `@Sendable`, but
+/// `AVAudioConverter` invokes it **synchronously, on this thread, before
+/// `convert` returns**, so the non-Sendable `AVAudioPCMBuffer` never crosses a
+/// concurrency domain. The type system cannot express "escaping in signature
+/// only", and the alternative — capturing the buffer directly — is the same
+/// unsafety with a warning instead of a written-down reason.
+private final class InputSource: @unchecked Sendable {
+    private var buffer: AVAudioPCMBuffer?
+
+    init(_ buffer: AVAudioPCMBuffer) {
+        self.buffer = buffer
+    }
+
+    /// The buffer on the first call, nil on every call after it.
+    func next() -> AVAudioPCMBuffer? {
+        defer { buffer = nil }
+        return buffer
+    }
+}
