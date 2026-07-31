@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+---
+
+## [1.0.2] - 2026-07-31
+
+> A one-fix patch. M4A recordings interrupted by a crash, force-quit, or power
+> loss were left completely unopenable — the whole take gone. WAV was never
+> affected. If you record in M4A, this is worth updating for; nothing else in the
+> app changes.
+
 ### Fixed
 - **An M4A recording interrupted by a crash or force-quit is no longer lost** — WAV recordings have always survived an abrupt exit: the file's header is rewritten every fraction of a second, so whatever was captured stays playable. M4A never got the same treatment. Its index was written only when you pressed stop, so if Home Rec was force-quit or the Mac lost power mid-recording, the file left on disk was **completely unreadable** — not truncated, not partial, simply unopenable, with the entire take gone. M4A now flushes a recoverable checkpoint every second, so an interrupted recording plays back with everything up to the last second intact. Measured before and after: a mid-recording copy went from unreadable to recovering 1.97 s of a 2.9 s take. Files are roughly 6% larger as a result. WAV is unchanged, and recordings you stop normally are unaffected. (BL-016)
 - **A recording that fails to save when you press stop now tells you** — If finalising the file failed, the error was discarded and Home Rec returned to idle as though the save had succeeded, leaving a corrupt or missing file with no indication anything was wrong. Pressing stop now surfaces such a failure as a visible error. (Recordings cut short by a capture failure still report the capture failure itself, which is the more useful diagnosis.) (BL-016)
