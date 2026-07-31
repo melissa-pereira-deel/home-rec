@@ -59,6 +59,20 @@ class RecorderViewModel: ObservableObject {
     /// Whether a recording is actively capturing. Derived from `state`.
     var isRecording: Bool { state == .recording }
 
+    /// Whether the settings shelf (save location, format, capture source) is shown.
+    ///
+    /// Gated on the state machine rather than on `isRecording`, which is
+    /// `.recording` **only**. The shelf's own comment claims its settings are
+    /// "locked once capture starts", and with `isRecording` that was false: the
+    /// shelf stayed visible and clickable through `.starting` and `.stopping`,
+    /// after `selectedFormat` had already been captured for the take in flight.
+    /// `.recovering` is not reachable today, but it returns to `.recording`, so
+    /// the same rule keeps the shelf from popping back mid-take if it ever is.
+    ///
+    /// Extracted from the view so the rule is reachable by a test — living inside
+    /// a SwiftUI `if` is why the divergence went unnoticed.
+    var showsSettingsShelf: Bool { state.allowsCaptureSourceChange }
+
     /// Whether the app is actually in a position to record: permission granted and
     /// the bundle in a location where that grant will survive. The record button is
     /// live only in this state; otherwise it carries a corrective action instead.

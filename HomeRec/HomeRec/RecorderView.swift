@@ -161,9 +161,9 @@ struct RecorderView: View {
             // from the action controls by a faint divider. Two sibling controls
             // (save destination + output format) share the ShelfMenu chrome and
             // sit a touch tighter to each other (6pt) than to the divider (10pt),
-            // so they read as one unit. Hidden entirely while recording — both
-            // settings are locked once capture starts.
-            if !viewModel.isRecording {
+            // so they read as one unit. Hidden for the whole of a take — the
+            // settings are captured at start and cannot change until it ends.
+            if viewModel.showsSettingsShelf {
                 VStack(spacing: 10) {
                     Divider()
                         .frame(width: 300)

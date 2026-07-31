@@ -127,7 +127,7 @@ class MenuBarController: NSObject {
         let selected = viewModel.audioSource.selectedSource
         var selectedAppName: String?
         if case .app(let bundleID) = selected {
-            selectedAppName = appListCache.name(for: bundleID)
+            selectedAppName = viewModel.audioSource.knownAppName(forBundleID: bundleID)
         }
         // Devices are enumerated eagerly, unlike apps: it is synchronous, cheap,
         // and raises no permission dialog, so there is nothing to defer.

@@ -464,3 +464,59 @@ struct CaptureSourceNameTests {
         #expect(source.availableAppsCallCount == 0)
     }
 }
+
+// MARK: - The settings shelf follows the state machine
+
+@MainActor
+struct SettingsShelfVisibilityTests {
+
+    private func makeViewModel() -> RecorderViewModel {
+        RecorderViewModel(
+            controller: MockRecordingControlling(),
+            permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(),
+            audioSource: MockAudioSourceProviding()
+        )
+    }
+
+    @Test("The shelf is shown when idle and hidden while a take is running")
+    func shelfHidesForTheWholeTake() async {
+        let viewModel = makeViewModel()
+        #expect(viewModel.showsSettingsShelf)
+
+        await viewModel.startRecording()
+        #expect(viewModel.state == .recording)
+        #expect(viewModel.showsSettingsShelf == false)
+
+        await viewModel.stopRecording()
+        #expect(viewModel.showsSettingsShelf)
+    }
+
+    @Test("The shelf reappears after a failure so the user can change settings to fix it")
+    func shelfIsAvailableInErrorState() async {
+        let controller = MockRecordingControlling()
+        controller.startError = NSError(domain: "test", code: 1)
+        let viewModel = RecorderViewModel(
+            controller: controller,
+            permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(),
+            audioSource: MockAudioSourceProviding()
+        )
+
+        await viewModel.startRecording()
+        #expect(viewModel.showsSettingsShelf)
+    }
+
+    @Test("The shelf and the capture-source menu are driven by one rule")
+    func shelfAgreesWithMenuSection() {
+        // Was gated on `isRecording`, i.e. `.recording` **only** — so the shelf
+        // stayed visible and clickable through `.starting` and `.stopping`,
+        // offering a format switch for a take whose format was already captured.
+        // Two rules for "settings are locked" is what let them diverge; this
+        // pins that there is now one. The per-state truth table lives in
+        // `CaptureSourceMenuTests.lockMirrorsRecordingState`.
+        #expect(RecordingState.starting.allowsCaptureSourceChange == false)
+        #expect(RecordingState.stopping.allowsCaptureSourceChange == false)
+        #expect(RecordingState.recovering.allowsCaptureSourceChange == false)
+    }
+}

@@ -24,6 +24,11 @@ import AppKit
 
 /// In-memory list of running apps, shared between menu opens.
 ///
+/// Deliberately holds *only* the probe result. Display names live on
+/// `AudioSourceManager`, which persists them — a second copy here would be the
+/// same fact in two stores, diverging the moment one is updated and the other
+/// isn't, and would be lost on relaunch besides.
+///
 /// Deliberately a reference type held by `MenuBarController`: the menu is rebuilt
 /// per open, so a cache owned by the menu would be cold every single time and the
 /// first open would always show a placeholder.
@@ -32,20 +37,8 @@ final class PerAppListCache {
     /// nil until the first successful enumeration — which is *not* the same as
     /// an empty list, and the menu renders the two differently.
     private(set) var apps: [RunningAppInfo]?
-    /// Remembers the display name of the selected app so a selection that is no
-    /// longer running can still render as "‹name› (not running)" rather than as
-    /// a raw bundle identifier. `AudioSource.app` persists only the bundle ID.
-    private(set) var knownNames: [String: String] = [:]
-
     func update(_ apps: [RunningAppInfo]) {
         self.apps = apps
-        for app in apps {
-            knownNames[app.bundleID] = app.applicationName
-        }
-    }
-
-    func name(for bundleID: String) -> String? {
-        knownNames[bundleID]
     }
 }
 
