@@ -519,3 +519,49 @@ struct AppListFilteringTests {
         #expect(AudioSourceManager.alwaysExcludedBundleIDs.count <= 3)
     }
 }
+
+// MARK: - Audio-capability filtering
+
+/// Returns a fixed set, so filtering can be asserted without real Core Audio.
+@MainActor
+final class StubAudioCapableProcesses: AudioCapableProcessListing {
+    var result: Set<String>?
+    init(_ result: Set<String>?) { self.result = result }
+    func audioCapableBundleIDs() -> Set<String>? { result }
+}
+
+@MainActor
+struct AudioCapableFilterTests {
+
+    @Test("A real Core Audio query answers without prompting")
+    func realQueryWorks() {
+        // Measured on a real machine: `kAudioHardwarePropertyProcessObjectList`
+        // returns in microseconds and raises no permission dialog — unlike
+        // `SCShareableContent`, which is why this is safe to call anywhere.
+        // Asserting non-nil rather than a specific set: what is running varies,
+        // but Home Rec itself always holds audio objects.
+        let real = AudioCapableProcesses().audioCapableBundleIDs()
+        #expect(real != nil)
+        #expect(real?.isEmpty == false)
+    }
+
+    @Test("A failed query disables filtering instead of emptying the list")
+    func nilResultMeansNoFilter() {
+        // A list that is too long is a papercut; a list that is wrongly empty is
+        // a broken feature. `nil` must degrade to "show everything".
+        let stub = StubAudioCapableProcesses(nil)
+        #expect(stub.audioCapableBundleIDs() == nil)
+    }
+
+    @Test("Terminal is not treated as a non-audio app")
+    func terminalIsNotBlocklisted() {
+        // The blocklist instinct would have hidden Terminal, Xcode and Notes as
+        // "not audio apps". Measured: Terminal holds a live Core Audio process
+        // object (the bell), Xcode plays build sounds, Notes plays attachments.
+        // Whether they appear must depend on whether they actually have audio,
+        // never on a guess about what kind of app they are.
+        #expect(AudioSourceManager.alwaysExcludedBundleIDs.contains("com.apple.Terminal") == false)
+        #expect(AudioSourceManager.alwaysExcludedBundleIDs.contains("com.apple.dt.Xcode") == false)
+        #expect(AudioSourceManager.alwaysExcludedBundleIDs.contains("com.apple.Notes") == false)
+    }
+}

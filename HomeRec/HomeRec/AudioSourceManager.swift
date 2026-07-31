@@ -70,6 +70,7 @@ protocol AudioSourceProviding: AnyObject {
 final class AudioSourceManager: AudioSourceProviding {
     private let defaults: UserDefaults
     private let deviceEnumerator: InputDeviceEnumerating
+    private let audioProcesses: AudioCapableProcessListing
     private let key = "selectedAudioSource"
 
     /// Apps that pass every other filter but that nobody would ever choose to
@@ -79,11 +80,14 @@ final class AudioSourceManager: AudioSourceProviding {
     /// so the policy filter cannot remove it — it would otherwise appear as a
     /// capture target on every Mac, forever, at the top of an alphabetical list.
     ///
-    /// A named list rather than a rule, because the honest rule ("apps that can
-    /// produce audio") is **not implementable here**: ScreenCaptureKit exposes no
-    /// such signal, and finding out needs Core Audio process taps — BL-101, which
-    /// is deferred. Keep this list short; if it grows past a couple of entries,
-    /// that is the signal the rule is wrong rather than the list incomplete.
+    /// Kept even though `AudioCapableProcesses` now does the real filtering:
+    /// Finder does hold audio objects on some systems (Quick Look preview
+    /// playback runs under it), so the audio-capability rule alone would not
+    /// reliably remove it — and it is never a thing anyone means to record.
+    ///
+    /// Keep this list short. It is a patch over specific known-wrong entries,
+    /// **not** a substitute for a rule; if it starts growing, the filter above it
+    /// is what needs fixing.
     static let alwaysExcludedBundleIDs: Set<String> = [
         "com.apple.finder"
     ]
@@ -99,10 +103,12 @@ final class AudioSourceManager: AudioSourceProviding {
 
     init(
         defaults: UserDefaults = .standard,
-        deviceEnumerator: InputDeviceEnumerating? = nil
+        deviceEnumerator: InputDeviceEnumerating? = nil,
+        audioProcesses: AudioCapableProcessListing? = nil
     ) {
         self.defaults = defaults
         self.deviceEnumerator = deviceEnumerator ?? InputDeviceEnumerator()
+        self.audioProcesses = audioProcesses ?? AudioCapableProcesses()
     }
 
     /// Input devices for the picker.
@@ -176,11 +182,33 @@ final class AudioSourceManager: AudioSourceProviding {
                 .compactMap(\.bundleIdentifier)
         )
 
+        // Narrow to apps that actually have audio. Without this the list is
+        // every open window on the Mac — Notes, Xcode, a text editor — none of
+        // which anyone scrolls past on purpose.
+        //
+        // `nil` means Core Audio could not answer, in which case skip the filter
+        // rather than showing an empty picker: too long is a papercut, wrongly
+        // empty is a broken feature.
+        let audioCapable = audioProcesses.audioCapableBundleIDs()
+
+        // The current selection always survives the filter. An app that has not
+        // touched audio *yet* holds no Core Audio object, so a DAW sitting idle
+        // could otherwise drop out of the list and take the user's own choice
+        // with it — leaving the menu implying something they never picked.
+        var keep: Set<String>?
+        if var audioCapable {
+            if case .app(let selectedBundleID) = selectedSource {
+                audioCapable.insert(selectedBundleID)
+            }
+            keep = audioCapable
+        }
+
         var seen = Set<String>()
         return content.applications
             .filter { $0.bundleIdentifier != ownBundleID }
             .filter { userFacing.contains($0.bundleIdentifier) }
             .filter { !Self.alwaysExcludedBundleIDs.contains($0.bundleIdentifier) }
+            .filter { keep?.contains($0.bundleIdentifier) ?? true }
             // An app running twice appears twice. There is nowhere to put a PID:
             // `AudioSource.app` carries only a bundle ID, and a PID would not
             // survive the relaunch that persistence requires. So all instances
