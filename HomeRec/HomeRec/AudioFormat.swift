@@ -14,7 +14,7 @@
 
 import Foundation
 
-enum AudioFormat: String, CaseIterable, Sendable {
+nonisolated enum AudioFormat: String, CaseIterable, Sendable {
     case wav
     case m4a
     case flac

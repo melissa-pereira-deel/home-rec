@@ -49,7 +49,7 @@ enum FLACEncoderError: Error, LocalizedError, Equatable {
     }
 }
 
-final class FLACEncoder: AudioFileEncoder {
+nonisolated final class FLACEncoder: AudioFileEncoder {
 
     /// FLAC encodes in fixed packets; nothing at all is written to disk until the
     /// first full packet exists. A shorter take produces a 42-byte header stub

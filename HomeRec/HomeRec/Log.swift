@@ -13,7 +13,7 @@ import os
 /// Use `.debug`/`.info` for development tracing (not persisted in Release)
 /// and `.error` for failures worth diagnosing from a shipped build.
 /// Never log on the audio hot path (per-buffer processing).
-enum Log {
+nonisolated enum Log {
     private static let subsystem = "com.mdebritto.homerec"
 
     static let capture = Logger(subsystem: subsystem, category: "capture")

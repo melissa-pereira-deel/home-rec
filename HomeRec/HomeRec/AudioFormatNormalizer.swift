@@ -131,13 +131,21 @@ nonisolated final class AudioFormatNormalizer {
 
 /// Feeds one buffer to `AVAudioConverter`'s input block, then reports dry.
 ///
+/// ⚠️ `nonisolated` is load-bearing, not decoration. The app target sets
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without it this type is
+/// implicitly `@MainActor` while being constructed and called from the capture
+/// queue — the exact defect constraint #12 exists to prevent, in the file
+/// written to fix it. The `@unchecked Sendable` below is what silences Swift 5,
+/// which is why a warning-free build did not catch it; `SWIFT_VERSION=6`
+/// reports it as an error at the call site.
+///
 /// `@unchecked Sendable` on purpose: the block's signature is `@Sendable`, but
 /// `AVAudioConverter` invokes it **synchronously, on this thread, before
 /// `convert` returns**, so the non-Sendable `AVAudioPCMBuffer` never crosses a
 /// concurrency domain. The type system cannot express "escaping in signature
 /// only", and the alternative — capturing the buffer directly — is the same
 /// unsafety with a warning instead of a written-down reason.
-private final class InputSource: @unchecked Sendable {
+private nonisolated final class InputSource: @unchecked Sendable {
     private var buffer: AVAudioPCMBuffer?
 
     init(_ buffer: AVAudioPCMBuffer) {

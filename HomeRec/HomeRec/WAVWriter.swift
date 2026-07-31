@@ -247,7 +247,10 @@ nonisolated class WAVWriter: AudioFileEncoder {
 
 // MARK: - Data Extension Helpers
 
-extension Data {
+// `nonisolated` for the same reason the writer is: these run on
+// `AudioRecorder.processingQueue`, and the app target would otherwise infer
+// `@MainActor` on an unannotated extension.
+nonisolated extension Data {
     mutating func append(string: String) {
         if let stringData = string.data(using: .ascii) {
             self.append(stringData)
