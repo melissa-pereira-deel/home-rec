@@ -88,6 +88,13 @@ class RecorderViewModel: ObservableObject {
     private let permissions: PermissionProviding
     private let clock: DurationClock
     private let saveLocation: SaveLocationProviding
+    /// Capture-source selection, shared with the `RecordingController` that reads it
+    /// at `startRecording`. There must be exactly **one** of these in the app: the
+    /// menu writes the selection and the controller reads it, so a second instance
+    /// would let a picked source be silently ignored by the next recording. Reads
+    /// are `UserDefaults`-backed today and so tolerate duplicates by accident — once
+    /// the selection is cached in memory (BL-111), duplicates diverge for real.
+    let audioSource: AudioSourceProviding
     private var recordingStartTime: Date?
     private var longRecordingWarned = false
     private var activationObserver: NSObjectProtocol?
@@ -151,6 +158,7 @@ class RecorderViewModel: ObservableObject {
         permissions: PermissionProviding? = nil,
         clock: DurationClock? = nil,
         saveLocation: SaveLocationProviding? = nil,
+        audioSource: AudioSourceProviding? = nil,
         installLocation: InstallLocationProviding? = nil,
         defaults: UserDefaults = .standard,
         installNoticePresenter: (() -> Void)? = nil,
@@ -167,7 +175,14 @@ class RecorderViewModel: ObservableObject {
         self.installNoticePresenter = installNoticePresenter
         let resolvedSaveLocation = saveLocation ?? SaveLocationManager(defaults: defaults)
         self.saveLocation = resolvedSaveLocation
-        self.controller = controller ?? RecordingController(saveLocation: resolvedSaveLocation)
+        // Resolved once and handed to the controller, so the menu's writes and the
+        // controller's reads are the same object (see `audioSource` above).
+        let resolvedAudioSource = audioSource ?? AudioSourceManager(defaults: defaults)
+        self.audioSource = resolvedAudioSource
+        self.controller = controller ?? RecordingController(
+            saveLocation: resolvedSaveLocation,
+            audioSource: resolvedAudioSource
+        )
         self.permissions = permissions ?? PermissionManager()
         self.clock = clock ?? SystemDurationClock()
         self.defaults = defaults

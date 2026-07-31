@@ -41,6 +41,24 @@ struct RecorderViewModelTests {
         #expect(viewModel.isRecording == false)
     }
 
+    @Test("The capture source the menu reads is the instance it was given")
+    func captureSourceIsSharedNotDuplicated() {
+        // The menu writes the selection through `viewModel.audioSource`; the
+        // controller reads it at `startRecording`. A second instance would make
+        // that write invisible to the next recording — silent today, because
+        // every read hits UserDefaults and so duplicates agree by accident.
+        // Pin the exposure before BL-111's in-memory cache removes that accident.
+        let shared = MockAudioSourceProviding(selectedSource: .app(bundleID: "com.example.app"))
+        let viewModel = RecorderViewModel(
+            controller: MockRecordingControlling(),
+            permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(),
+            audioSource: shared
+        )
+        #expect(viewModel.audioSource === shared)
+        #expect(viewModel.audioSource.selectedSource == .app(bundleID: "com.example.app"))
+    }
+
     @Test("Re-probing reflects a newly granted permission without relaunch (BL-040)")
     func permissionReprobeUpdatesState() async {
         let permission = MockPermissionProviding(.denied)
