@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import AVFoundation
 import ScreenCaptureKit
 import AppKit
 import CoreGraphics
@@ -36,6 +37,17 @@ class PermissionManager: PermissionProviding {
         switch kind {
         case .screenCapture:
             return CGPreflightScreenCaptureAccess() ? .granted : .denied
+        case .microphone:
+            // ⚠️ The "latched at process start" caveat above is a *screen
+            // capture* property, not a general one. `AVCaptureDevice`'s status
+            // is live and updates within the session, so for this kind preflight
+            // is trustworthy at any time — not only at launch.
+            switch AVCaptureDevice.authorizationStatus(for: .audio) {
+            case .authorized:                 return .granted
+            case .notDetermined:              return .notDetermined
+            case .denied, .restricted:        return .denied
+            @unknown default:                 return .denied
+            }
         }
     }
 
@@ -55,6 +67,11 @@ class PermissionManager: PermissionProviding {
             } catch {
                 return .denied
             }
+        case .microphone:
+            // No probing side effect to worry about here: reading the status is
+            // free and silent. Unlike `SCShareableContent`, it neither prompts
+            // nor registers the app anywhere.
+            return preflight(.microphone)
         }
     }
 

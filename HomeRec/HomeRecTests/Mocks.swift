@@ -180,6 +180,12 @@ final class MockAudioSourceProviding: AudioSourceProviding {
     func availableApps() async throws -> [RunningAppInfo] {
         availableAppsResult
     }
+
+    var availableInputDevicesResult: [InputDeviceInfo] = []
+
+    func availableInputDevices() -> [InputDeviceInfo] {
+        availableInputDevicesResult
+    }
 }
 
 @MainActor

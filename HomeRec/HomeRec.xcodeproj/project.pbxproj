@@ -412,6 +412,7 @@
 				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mdebritto.HomeRec;
 				INFOPLIST_KEY_CFBundleDisplayName = "Home Rec";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Home Rec needs access to your microphone to record from it. Audio is saved only to your Mac.";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -456,6 +457,7 @@
 				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mdebritto.HomeRec;
 				INFOPLIST_KEY_CFBundleDisplayName = "Home Rec";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Home Rec needs access to your microphone to record from it. Audio is saved only to your Mac.";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;

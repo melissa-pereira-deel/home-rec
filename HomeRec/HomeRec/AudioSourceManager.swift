@@ -20,11 +20,15 @@ struct RunningAppInfo: Identifiable, Sendable, Equatable {
 
 enum AudioSourceError: Error, LocalizedError, Equatable {
     case appNotRunning(String)
+    /// The selected input device is no longer connected (BL-130).
+    case micNotAvailable(String)
 
     var errorDescription: String? {
         switch self {
         case .appNotRunning(let bundleID):
             return "The selected app (\(bundleID)) is not currently running."
+        case .micNotAvailable:
+            return "The selected microphone isn't connected."
         }
     }
 
@@ -32,6 +36,8 @@ enum AudioSourceError: Error, LocalizedError, Equatable {
         switch self {
         case .appNotRunning:
             return "Open the app, or choose a different capture source."
+        case .micNotAvailable:
+            return "Reconnect it, or choose a different capture source."
         }
     }
 }
@@ -56,11 +62,14 @@ protocol AudioSourceProviding: AnyObject {
     /// this on *popover appearance* — a zero-click prompt. Enumerate only on an
     /// explicit submenu open, and only when `permissionStatus == .granted`.
     func availableApps() async throws -> [RunningAppInfo]
+    /// Currently connected input devices (BL-130). Synchronous and prompt-free.
+    func availableInputDevices() -> [InputDeviceInfo]
 }
 
 @MainActor
 final class AudioSourceManager: AudioSourceProviding {
     private let defaults: UserDefaults
+    private let deviceEnumerator: InputDeviceEnumerating
     private let key = "selectedAudioSource"
 
     /// Read-through cache. The getter used to hit `UserDefaults` *and* run a
@@ -72,8 +81,21 @@ final class AudioSourceManager: AudioSourceProviding {
     /// source picked in the menu would be silently ignored by the next recording.
     private var cachedSource: AudioSource?
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        deviceEnumerator: InputDeviceEnumerating? = nil
+    ) {
         self.defaults = defaults
+        self.deviceEnumerator = deviceEnumerator ?? InputDeviceEnumerator()
+    }
+
+    /// Input devices for the picker.
+    ///
+    /// Unlike `availableApps()` this needs **no permission gate**: discovery
+    /// returns real device names with microphone authorization still
+    /// `.notDetermined` and raises no dialog. Only actually *capturing* prompts.
+    func availableInputDevices() -> [InputDeviceInfo] {
+        deviceEnumerator.availableInputDevices()
     }
 
     var selectedSource: AudioSource {
@@ -115,6 +137,12 @@ final class AudioSourceManager: AudioSourceProviding {
             let apps = try await availableApps()
             guard apps.contains(where: { $0.bundleID == bundleID }) else {
                 throw AudioSourceError.appNotRunning(bundleID)
+            }
+        case .mic(let deviceUID):
+            // Fail here rather than letting `startCapture` fail obscurely with a
+            // device that was unplugged since it was chosen (BL-130).
+            guard deviceEnumerator.availableInputDevices().contains(where: { $0.uid == deviceUID }) else {
+                throw AudioSourceError.micNotAvailable(deviceUID)
             }
         }
     }

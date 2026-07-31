@@ -161,8 +161,75 @@ enum OverflowMenu {
                 perform: { onSelectSource(.systemAll) }
             )),
             .submenu(perAppSubmenu(context)),
+            .submenu(microphoneSubmenu(context)),
             .separator
         ]
+    }
+
+    /// The microphone root row (BL-130).
+    ///
+    /// A submenu for the same reason Per-App is one — its contents are
+    /// enumerated at runtime — so plugging in an interface changes what is
+    /// *behind* the row, never the shape of the section.
+    ///
+    /// Unlike Per-App this needs **no permission gate**: enumerating input
+    /// devices raises no dialog and returns real names even with microphone
+    /// access still undetermined. Only capturing prompts. Do not copy the
+    /// Per-App gate here — its rationale does not apply, and a pasted-in reason
+    /// rots into a mystery.
+    static func microphoneSubmenu(_ context: OverflowContext) -> OverflowSubmenu {
+        let selectedUID: String? = {
+            if case .mic(let uid) = context.selectedSource { return uid }
+            return nil
+        }()
+        let devices = context.inputDevices
+        let liveName = devices.first { $0.uid == selectedUID }?.name
+
+        var entries: [OverflowEntry] = []
+        if selectedUID != nil, liveName == nil {
+            // Chosen in an earlier session and since unplugged. Same reasoning as
+            // the app case: without this row the section shows zero checkmarks
+            // and silently implies system audio.
+            entries.append(.action(OverflowAction(
+                id: "sourceMicNotAvailable",
+                title: "\(context.selectedMicName ?? "Microphone") (not connected)",
+                isChecked: true,
+                isEnabled: false,
+                isSourceRow: true,
+                perform: {}
+            )))
+            entries.append(.separator)
+        }
+
+        if devices.isEmpty {
+            entries.append(.disabledNotice("No microphones found"))
+        } else {
+            entries.append(contentsOf: devices.map { device in
+                OverflowEntry.action(OverflowAction(
+                    id: "sourceMic:\(device.uid)",
+                    title: device.name,
+                    isChecked: device.uid == selectedUID,
+                    isSourceRow: true,
+                    perform: { onSelectSource(.mic(deviceUID: device.uid)) }
+                ))
+            })
+        }
+
+        let title: String
+        if let liveName {
+            title = liveName
+        } else if selectedUID != nil {
+            title = context.selectedMicName ?? "Microphone"
+        } else {
+            title = "Microphone"
+        }
+
+        return OverflowSubmenu(
+            id: "sourceMicrophone",
+            title: title,
+            isChecked: selectedUID != nil,
+            entries: entries
+        )
     }
 
     /// One root row for the whole per-app *kind*, whose title carries the current

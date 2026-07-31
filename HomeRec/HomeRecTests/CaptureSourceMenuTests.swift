@@ -32,16 +32,25 @@ struct CaptureSourceMenuTests {
         unlocked: Bool = true,
         granted: Bool = true,
         apps: [RunningAppInfo]? = nil,
-        selectedAppName: String? = nil
+        selectedAppName: String? = nil,
+        devices: [InputDeviceInfo] = [],
+        selectedMicName: String? = nil
     ) -> OverflowContext {
         OverflowContext(
             selectedSource: selected,
             allowsCaptureSourceChange: unlocked,
             permissionGranted: granted,
             apps: apps,
-            selectedAppName: selectedAppName
+            selectedAppName: selectedAppName,
+            inputDevices: devices,
+            selectedMicName: selectedMicName
         )
     }
+
+    private let devices = [
+        InputDeviceInfo(uid: "BuiltInMic", name: "MacBook Pro Microphone"),
+        InputDeviceInfo(uid: "USB:Scarlett", name: "Scarlett 2i2 4th Gen")
+    ]
 
     private func headers(_ entries: [OverflowEntry]) -> [String] {
         entries.compactMap { if case .sectionHeader(let t) = $0 { return t } else { return nil } }
@@ -69,7 +78,9 @@ struct CaptureSourceMenuTests {
                 }
             }
         }
-        #expect(shape(many) == ["action", "submenu"])
+        // System audio (a compile-time singleton) plus one submenu per
+        // runtime-enumerated kind: apps and microphones.
+        #expect(shape(many) == ["action", "submenu", "submenu"])
         #expect(shape(none) == shape(many))
     }
 
@@ -359,5 +370,129 @@ final class CountingAudioSourceProviding: AudioSourceProviding {
     func availableApps() async throws -> [RunningAppInfo] {
         availableAppsCallCount += 1
         return appsToReturn
+    }
+
+    /// Counted separately: unlike app enumeration this is prompt-free, so the
+    /// menu is allowed to call it eagerly. Conflating the two counters would
+    /// hide a real regression in the one that matters.
+    private(set) var inputDeviceCallCount = 0
+    var devicesToReturn: [InputDeviceInfo] = []
+
+    func availableInputDevices() -> [InputDeviceInfo] {
+        inputDeviceCallCount += 1
+        return devicesToReturn
+    }
+}
+
+// MARK: - Microphone rows (BL-130)
+
+@MainActor
+struct MicrophoneMenuTests {
+
+    private let devices = [
+        InputDeviceInfo(uid: "BuiltInMic", name: "MacBook Pro Microphone"),
+        InputDeviceInfo(uid: "USB:Scarlett", name: "Scarlett 2i2 4th Gen")
+    ]
+
+    private func context(
+        selected: AudioSource = .systemAll,
+        granted: Bool = true,
+        devices: [InputDeviceInfo] = [],
+        selectedMicName: String? = nil
+    ) -> OverflowContext {
+        OverflowContext(
+            selectedSource: selected,
+            permissionGranted: granted,
+            inputDevices: devices,
+            selectedMicName: selectedMicName
+        )
+    }
+
+    @Test("Devices are listed with the names macOS reports")
+    func devicesUseSystemNames() {
+        let submenu = OverflowMenu.microphoneSubmenu(context(devices: devices))
+        let titles = submenu.entries.compactMap { entry -> String? in
+            if case .action(let a) = entry { return a.title }
+            return nil
+        }
+        #expect(titles == ["MacBook Pro Microphone", "Scarlett 2i2 4th Gen"])
+    }
+
+    @Test("Selecting a mic checks its row and names the root")
+    func selectedMicNamesTheRoot() {
+        let submenu = OverflowMenu.microphoneSubmenu(
+            context(selected: .mic(deviceUID: "USB:Scarlett"), devices: devices)
+        )
+        #expect(submenu.title == "Scarlett 2i2 4th Gen")
+        #expect(submenu.isChecked)
+
+        let checked = submenu.entries.compactMap { entry -> OverflowAction? in
+            if case .action(let a) = entry, a.isChecked { return a }
+            return nil
+        }
+        #expect(checked.count == 1)
+        #expect(checked.first?.id == "sourceMic:USB:Scarlett")
+    }
+
+    @Test("A disconnected selection keeps its checkmark rather than vanishing")
+    func disconnectedMicStillRenders() throws {
+        // Same reasoning as the not-running app row: without it the section
+        // shows zero checkmarks and silently implies system audio, while
+        // startRecording fails pre-flight with `.micNotAvailable`.
+        let submenu = OverflowMenu.microphoneSubmenu(
+            context(
+                selected: .mic(deviceUID: "USB:Gone"),
+                devices: devices,
+                selectedMicName: "Scarlett 2i2 4th Gen"
+            )
+        )
+        let row = try #require(submenu.entries.compactMap { entry -> OverflowAction? in
+            if case .action(let a) = entry, a.id == "sourceMicNotAvailable" { return a }
+            return nil
+        }.first)
+        #expect(row.title == "Scarlett 2i2 4th Gen (not connected)")
+        #expect(row.isChecked)
+        #expect(row.isEnabled == false)
+        #expect(submenu.isChecked)
+    }
+
+    @Test("No devices says so rather than showing an empty submenu")
+    func emptyDeviceListShowsNotice() {
+        let notices = OverflowMenu.microphoneSubmenu(context()).entries
+            .compactMap { entry -> String? in
+                if case .disabledNotice(let t) = entry { return t }
+                return nil
+            }
+        #expect(notices == ["No microphones found"])
+    }
+
+    @Test("Devices are listed without Screen Recording permission")
+    func micListDoesNotRequireScreenPermission() {
+        // Enumerating input devices raises no dialog and returns real names even
+        // with mic access undetermined, so the Per-App permission gate must NOT
+        // be copied here — only capturing prompts.
+        let submenu = OverflowMenu.microphoneSubmenu(context(granted: false, devices: devices))
+        let titles = submenu.entries.compactMap { entry -> String? in
+            if case .action(let a) = entry { return a.title }
+            return nil
+        }
+        #expect(titles == ["MacBook Pro Microphone", "Scarlett 2i2 4th Gen"])
+    }
+
+    @Test("A mic source is still locked away while recording")
+    func micRowsObeyTheRecordingLock() {
+        let locked = OverflowContext(
+            selectedSource: .mic(deviceUID: "BuiltInMic"),
+            allowsCaptureSourceChange: false,
+            inputDevices: devices
+        )
+        #expect(OverflowMenu.actions(locked).contains { $0.isSourceRow } == false)
+    }
+
+    @Test("Microphone is a distinct source kind")
+    func micHasItsOwnKind() {
+        #expect(AudioSource.mic(deviceUID: "x").kind == .microphone)
+        #expect(AudioSource.systemAll.kind == .systemAll)
+        #expect(AudioSource.app(bundleID: "y").kind == .app)
     }
 }

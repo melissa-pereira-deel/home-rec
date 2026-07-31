@@ -129,12 +129,22 @@ class MenuBarController: NSObject {
         if case .app(let bundleID) = selected {
             selectedAppName = appListCache.name(for: bundleID)
         }
+        // Devices are enumerated eagerly, unlike apps: it is synchronous, cheap,
+        // and raises no permission dialog, so there is nothing to defer.
+        let devices = viewModel.audioSource.availableInputDevices()
+        var selectedMicName: String?
+        if case .mic(let uid) = selected {
+            selectedMicName = devices.first { $0.uid == uid }?.name
+        }
+
         return OverflowContext(
             selectedSource: selected,
             allowsCaptureSourceChange: viewModel.state.allowsCaptureSourceChange,
             permissionGranted: viewModel.permissionStatus == .granted,
             apps: appListCache.apps,
-            selectedAppName: selectedAppName
+            selectedAppName: selectedAppName,
+            inputDevices: devices,
+            selectedMicName: selectedMicName
         )
     }
 

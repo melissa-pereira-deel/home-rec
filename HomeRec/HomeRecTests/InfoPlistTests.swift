@@ -62,20 +62,25 @@ struct InfoPlistTests {
     /// matching key, so a key that is present in a file but absent from the bundle
     /// is a crash waiting on the feature that needs it.
     ///
-    /// Home Rec requests no protected resource whose string it must declare today:
-    /// Screen Recording is gated by TCC without a required purpose string (BL-080
-    /// adds `NSScreenCaptureUsageDescription` for honesty, not necessity), and
-    /// microphone access does not exist until BL-130. Each of those items extends
-    /// the list below as it lands.
+    /// Home Rec requests one protected resource whose string it must declare: the
+    /// microphone (BL-130). Screen Recording is gated by TCC without a required
+    /// purpose string — and `INFOPLIST_KEY_NSScreenCaptureUsageDescription` is not
+    /// on Xcode's allow-list at all, which is what closed BL-080 as impossible.
     @Test("Declared usage descriptions match what the app actually requests")
     func usageDescriptionsMatchCapabilities() {
-        // Deliberately empty: declaring a permission the app never requests would
-        // contradict the product's own permission-honesty positioning. BL-080 adds
-        // NSScreenCaptureUsageDescription; BL-130 adds NSMicrophoneUsageDescription.
-        let required: [String] = []
+        // ⚠️ Asserted against the **built product**, never the repo — that is the
+        // whole point of this suite. Requesting mic access without this key in
+        // the shipped bundle is an immediate TCC *termination*: the app is
+        // killed, not denied. And the key looked present for months while living
+        // in a file that was not part of the build at all (BL-084).
+        let required = ["NSMicrophoneUsageDescription"]
         for key in required {
             #expect(string(key)?.isEmpty == false, "Missing usage description: \(key)")
         }
+
+        // Must explain itself, not merely exist: a vague string is what users
+        // read in the system prompt and what App Review rejects.
+        #expect(string("NSMicrophoneUsageDescription")?.contains("microphone") == true)
 
         // The reverse guard: nothing the app cannot justify. NSAppleEventsUsageDescription
         // was carried in the dead file for months with no AppleEvents code anywhere.

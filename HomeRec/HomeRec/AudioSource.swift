@@ -12,6 +12,13 @@ import Foundation
 nonisolated enum AudioSource: Codable, Sendable, Equatable {
     case systemAll
     case app(bundleID: String)
+    /// A microphone or other input device, by `AVCaptureDevice.uniqueID` (BL-130).
+    ///
+    /// Carries **only** the device UID. Force Mono is deliberately *not* an
+    /// associated value here: it is a processing modifier, not part of the
+    /// source's identity, and putting it inside the case would silently discard
+    /// the setting every time the user switched to system audio and back.
+    case mic(deviceUID: String)
 }
 
 /// The *category* a source belongs to, which is what the menu renders as a row.
@@ -24,7 +31,8 @@ nonisolated enum AudioSourceKind: Hashable, Sendable, CaseIterable {
     case systemAll
     /// One running app, chosen from a list enumerated at runtime.
     case app
-    // BL-130 adds `.microphone`, also runtime-enumerated.
+    /// One input device, chosen from a list enumerated at runtime.
+    case microphone
 }
 
 nonisolated extension AudioSource {
@@ -36,6 +44,7 @@ nonisolated extension AudioSource {
         switch self {
         case .systemAll: return .systemAll
         case .app:       return .app
+        case .mic:       return .microphone
         }
     }
 }

@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import AVFoundation
 import Combine
 import os
 
@@ -317,6 +318,21 @@ class RecorderViewModel: ObservableObject {
             }
         }
 
+        // Recording a microphone needs its own grant, and it is a *different*
+        // flow rather than the same one parameterised (BL-130): unlike Screen
+        // Recording, macOS will genuinely re-prompt for this, so asking is the
+        // recovery path rather than a one-shot that must never be wasted.
+        //
+        // ⚠️ Requesting this without `NSMicrophoneUsageDescription` in the built
+        // bundle is an immediate TCC *termination*, not a denial. `InfoPlistTests`
+        // asserts the key is in the product for exactly this reason.
+        if case .mic = audioSource.selectedSource {
+            guard await requestMicrophoneAccess() else {
+                transition(to: .error(.startFailed("microphone access denied")))
+                return
+            }
+        }
+
         transition(to: .starting)
 
         do {
@@ -424,6 +440,18 @@ class RecorderViewModel: ObservableObject {
     /// Order is guide → probe → pane on purpose: the guide is instant, so a slow
     /// or hung probe degrades into "panel is up, carrying its own retry button"
     /// rather than a dead click.
+    /// Ask for microphone access, prompting if macOS still will (BL-130).
+    ///
+    /// Separate from `requestPermission()` on purpose. Screen Recording's prompt
+    /// is one-shot and unrepeatable, which is why BL-081 built a whole guidance
+    /// surface around it; the microphone prompt is re-presentable, so the honest
+    /// flow here is simply to ask.
+    /// - Returns: whether access is granted.
+    func requestMicrophoneAccess() async -> Bool {
+        if permissions.preflight(.microphone) == .granted { return true }
+        return await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
     /// Change the capture source (BL-111).
     ///
     /// The only write path. `objectWillChange` is sent explicitly because the
@@ -444,6 +472,12 @@ class RecorderViewModel: ObservableObject {
             return nil
         case .app(let bundleID):
             return knownAppNames[bundleID] ?? bundleID
+        case .mic(let deviceUID):
+            // Devices are enumerable at any time without a prompt, so unlike an
+            // app name this never has to fall back to a raw identifier in
+            // practice — only if the device was unplugged.
+            return audioSource.availableInputDevices()
+                .first { $0.uid == deviceUID }?.name ?? "Microphone"
         }
     }
 

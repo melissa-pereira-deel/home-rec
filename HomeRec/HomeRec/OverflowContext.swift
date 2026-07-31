@@ -44,17 +44,31 @@ struct OverflowContext: Sendable, Equatable {
     /// there is nothing to render but the raw identifier.
     var selectedAppName: String?
 
+    /// Connected input devices (BL-130).
+    ///
+    /// Not optional, unlike `apps`: enumeration is synchronous and prompt-free,
+    /// so there is no "not probed yet" state to distinguish — an empty list
+    /// genuinely means no microphones.
+    var inputDevices: [InputDeviceInfo] = []
+
+    /// Remembered name for a selected device that is no longer connected.
+    var selectedMicName: String?
+
     init(
         selectedSource: AudioSource = .systemAll,
         allowsCaptureSourceChange: Bool = true,
         permissionGranted: Bool = true,
         apps: [RunningAppInfo]? = nil,
-        selectedAppName: String? = nil
+        selectedAppName: String? = nil,
+        inputDevices: [InputDeviceInfo] = [],
+        selectedMicName: String? = nil
     ) {
         self.selectedSource = selectedSource
         self.allowsCaptureSourceChange = allowsCaptureSourceChange
         self.permissionGranted = permissionGranted
         self.apps = apps
         self.selectedAppName = selectedAppName
+        self.inputDevices = inputDevices
+        self.selectedMicName = selectedMicName
     }
 }

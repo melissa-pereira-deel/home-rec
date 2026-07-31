@@ -17,12 +17,18 @@ import Foundation
 enum PermissionKind: Sendable {
     /// Screen Recording — what ScreenCaptureKit requires, including for audio-only use.
     case screenCapture
-    // BL-130 adds `.microphone`. BL-101 moves system capture to an audio-only kind.
+    /// Microphone input (BL-130). Unlike screen capture this one is genuinely
+    /// re-promptable via `AVCaptureDevice.requestAccess`, and its status is not
+    /// latched — so the two kinds share *data*, not a flow. Do not generalise
+    /// the request path across them.
+    case microphone
+    // BL-101 moves system capture to an audio-only kind.
 
     /// Anchor for `x-apple.systempreferences:` deep links.
     var settingsAnchor: String {
         switch self {
         case .screenCapture: return "Privacy_ScreenCapture"
+        case .microphone:    return "Privacy_Microphone"
         }
     }
 
@@ -35,6 +41,7 @@ enum PermissionKind: Sendable {
     var settingsSectionName: String {
         switch self {
         case .screenCapture: return "Screen & System Audio Recording"
+        case .microphone:    return "Microphone"
         }
     }
 
@@ -48,6 +55,9 @@ enum PermissionKind: Sendable {
     var confusableSectionName: String? {
         switch self {
         case .screenCapture: return "System Audio Recording Only"
+        // No confusable neighbour: "Microphone" is its own pane and users find
+        // it. The disambiguation sentence exists for screen capture only.
+        case .microphone:    return nil
         }
     }
 
