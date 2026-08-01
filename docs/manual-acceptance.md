@@ -68,6 +68,34 @@ real force-quit is a claim, not a fact.
 - [ ] Recovery never lists the recording currently in progress
 - [ ] Recovery never touches a file that finished normally
 
+## Auto-update (BL-034) — first shipped in 1.1.0
+
+⚠️ **Nothing in the suite can reach this.** Building an `SPUUpdater` touches the
+network, so the tests assert only the recording interlock rule. Whether an
+update actually *installs* is provable one way: install the previous version and
+update to this one.
+
+- [ ] `https://homerec.app/appcast.xml` responds 200, as XML, on a machine that
+      has never loaded it (a stale CDN entry hides a broken deploy)
+- [ ] **N-1 → N end to end.** Install the previous DMG into `/Applications`,
+      launch it, **Check for Updates…**, let it install
+- [ ] It relaunches as N, **at the same path**, still named `Home Rec.app` —
+      a second differently-named copy in `/Applications` is the failure this
+      catches
+- [ ] Screen Recording and Microphone permissions **survived** the update
+      (TCC keys on the designated requirement, so a signing change silently
+      revokes the grant)
+- [ ] Tamper check: point a scratch build at an appcast entry whose
+      `edSignature` has one character changed — Sparkle must **refuse** it. A
+      signature check nobody has seen reject anything is not known to work.
+
+**The interlock, which is the part that can lose someone's take:**
+
+- [ ] While recording, **Check for Updates…** is greyed, and hovering explains why
+- [ ] It is enabled again the moment recording stops
+- [ ] Start a check, then start recording before it finishes — the update must
+      **wait**, not relaunch, and must install after you stop
+
 ## Accessibility (~30 min, on the surface that changed)
 
 - [ ] VoiceOver: cursor the Capture Source section — checkmark announced,
