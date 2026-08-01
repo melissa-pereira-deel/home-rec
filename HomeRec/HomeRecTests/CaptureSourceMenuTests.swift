@@ -539,16 +539,28 @@ final class StubAudioCapableProcesses: AudioCapableProcessListing {
 @MainActor
 struct AudioCapableFilterTests {
 
-    @Test("A real Core Audio query answers without prompting")
-    func realQueryWorks() {
-        // Measured on a real machine: `kAudioHardwarePropertyProcessObjectList`
-        // returns in microseconds and raises no permission dialog — unlike
-        // `SCShareableContent`, which is why this is safe to call anywhere.
-        // Asserting non-nil rather than a specific set: what is running varies,
-        // but Home Rec itself always holds audio objects.
+    @Test("A real Core Audio query returns rather than blocking", .timeLimit(.minutes(1)))
+    func realQueryReturns() {
+        // ⚠️ This is the ONE test that touches a real system service, and it must
+        // stay tolerant of the machine it runs on.
+        //
+        // It originally asserted the result was non-nil *and non-empty*, which is
+        // a property of the **machine**, not of this code — true on a developer
+        // Mac with audio devices, not guaranteed on a headless CI runner with no
+        // audio session. That is the same defect class as the four tests that
+        // were reading the developer's real `UserDefaults`.
+        //
+        // What is genuinely worth asserting is that the call **returns at all**:
+        // a blocking Core Audio read with nothing to answer it is a hang, and a
+        // hang with no time limit takes the whole job down with it.
         let real = AudioCapableProcesses().audioCapableBundleIDs()
-        #expect(real != nil)
-        #expect(real?.isEmpty == false)
+
+        // A machine with no audio processes legitimately yields an empty set, and
+        // an unavailable Core Audio yields nil — the production path treats nil
+        // as "skip filtering" rather than "show nothing", so neither is a defect.
+        if let real {
+            #expect(real.allSatisfy { !$0.isEmpty })
+        }
     }
 
     @Test("A failed query disables filtering instead of emptying the list")

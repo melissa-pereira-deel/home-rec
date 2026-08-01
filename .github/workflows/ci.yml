@@ -16,6 +16,11 @@ jobs:
     # If the image's Xcode is too old, pin a newer one with `xcode-select` below
     # or bump the runner image. See the "Select Xcode" step.
     runs-on: macos-15
+    # Without this, GitHub's default is SIX HOURS. A single hung test then
+    # quietly consumes the runner budget and leaves no log to diagnose from.
+    # The suite completes in 2-3 minutes; 20 is generous headroom that still
+    # fails fast.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -40,6 +45,8 @@ jobs:
             -scheme HomeRec \
             -destination 'platform=macOS' \
             -only-testing:HomeRecTests \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
             -resultBundlePath TestResults-functional.xcresult \
             CODE_SIGNING_ALLOWED=NO
 
@@ -69,6 +76,8 @@ jobs:
             -skip-testing:HomeRecTests/M4AEncoderTests \
             -skip-testing:HomeRecTests/FLACEncoderTests \
             -enableThreadSanitizer YES \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO
 
