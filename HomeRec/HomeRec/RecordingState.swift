@@ -141,6 +141,33 @@ enum RecordingState: Equatable, Sendable {
         }
     }
 
+    /// Whether Sparkle may check for or install an update right now (BL-034).
+    ///
+    /// Installing an update quits and relaunches the app. Doing that with a take
+    /// open destroys it: the encoder never reaches `finalize()`, so a WAV keeps a
+    /// header claiming length it doesn't have, an M4A loses its `moov` atom, and
+    /// a FLAC is simply unplayable until repaired. This is data safety, not
+    /// politeness — the whole reason BL-016 and BL-140 exist.
+    ///
+    /// `.stopping` is included precisely because it is the *most* dangerous
+    /// moment: that is when the file is being finalized.
+    ///
+    /// This currently returns exactly what `allowsCaptureSourceChange` returns,
+    /// and is deliberately **not** folded into it. They answer different
+    /// questions — "may the user retarget capture?" versus "may we terminate this
+    /// process?" — and a future state can easily need one and not the other.
+    ///
+    /// ⚠️ Exhaustive with **no `default`**, for the same reason as above: a new
+    /// state must become a compile error so someone decides.
+    nonisolated var allowsUpdateInstall: Bool {
+        switch self {
+        case .idle, .error:
+            return true
+        case .starting, .recording, .stopping, .recovering:
+            return false
+        }
+    }
+
     /// Whether moving to `next` is a legal transition from `self`.
     /// Illegal transitions (e.g. `idle → stopping`) return `false`.
     nonisolated func canTransition(to next: RecordingState) -> Bool {

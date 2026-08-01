@@ -15,16 +15,30 @@ class MenuBarController: NSObject {
     private var statusItem: NSStatusItem
     private let popover = NSPopover()
     private var cancellable: AnyCancellable?
+    /// Separate from `cancellable` because it tracks a different question — see
+    /// `RecordingState.allowsUpdateInstall`, which is not the same predicate as
+    /// "is the icon red" even where the two currently agree.
+    private var updateGateCancellable: AnyCancellable?
     /// Held so the overflow menu can be rebuilt from live state on every open.
     private let viewModel: RecorderViewModel
     /// Warmed only by a deliberate Per-App submenu open — never at launch.
     private let appListCache = PerAppListCache()
     /// Retained for the lifetime of the controller: `NSMenu.delegate` is weak.
     private var perAppDelegate: PerAppMenuDelegate?
+    /// Sparkle (BL-034). Owned here because this is where the overflow menu's
+    /// closures are wired, and the updater has to answer "is a take open?".
+    private let updater: UpdaterController
 
     init(viewModel: RecorderViewModel) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         self.viewModel = viewModel
+        // Read at the moment Sparkle asks, not captured now: this object outlives
+        // many recordings. `weak` so a torn-down controller can't keep the view
+        // model alive — and `false` when it is gone, because "unknown" must mean
+        // "don't terminate the process".
+        self.updater = UpdaterController { [weak viewModel] in
+            viewModel?.state.allowsUpdateInstall ?? false
+        }
         super.init()
 
         // The single write path for the capture source. Checkmarks are derived
@@ -48,6 +62,10 @@ class MenuBarController: NSObject {
         OverflowMenu.currentRecordingURL = { [weak viewModel] in
             guard let viewModel, viewModel.isRecording else { return nil }
             return viewModel.lastRecordingURL
+        }
+
+        OverflowMenu.onCheckForUpdates = { [weak self] in
+            self?.updater.checkForUpdates()
         }
 
         // Configure popover
@@ -87,6 +105,19 @@ class MenuBarController: NSObject {
                     button.image = image
                     button.contentTintColor = nil
                 }
+            }
+
+        // Release an update that finished downloading during a take (BL-034).
+        // Sparkle put a relaunch on hold and will wait indefinitely; nothing
+        // else ever invokes that handler, so without this the user's update
+        // silently never installs.
+        updateGateCancellable = viewModel.$state
+            .map(\.allowsUpdateInstall)
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] mayInstall in
+                guard mayInstall else { return }
+                self?.updater.recordingDidEnd()
             }
     }
 
@@ -144,7 +175,8 @@ class MenuBarController: NSObject {
             apps: appListCache.apps,
             selectedAppName: selectedAppName,
             inputDevices: devices,
-            selectedMicName: selectedMicName
+            selectedMicName: selectedMicName,
+            allowsUpdateInstall: viewModel.state.allowsUpdateInstall
         )
     }
 

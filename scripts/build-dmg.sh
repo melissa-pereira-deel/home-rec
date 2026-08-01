@@ -157,5 +157,59 @@ hdiutil detach "$MOUNT_DIR" >/dev/null
 echo "==> Emitting SHA-256 sidecar…"
 ( cd "$DIST_DIR" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256" )
 
+# ---------------------------------------------------------------------------
+# Sparkle appcast entry (BL-034)
+#
+# Sparkle downloads this same notarized, stapled DMG — it contains
+# "Home Rec.app", which is the name the bundle carries once installed. Feeding
+# it an archive built before the rename above would install a *second*,
+# differently-named copy alongside the original, because Sparkle replaces the
+# bundle at its installed path rather than by identifier.
+# ---------------------------------------------------------------------------
+echo "==> Signing the DMG for Sparkle…"
+
+# `sign_update` ships inside the resolved Sparkle package. Set SPARKLE_BIN to
+# override; otherwise take the copy Xcode has already checked out.
+if [[ -z "${SPARKLE_BIN:-}" ]]; then
+  SPARKLE_BIN="$(find "$HOME/Library/Developer/Xcode/DerivedData" \
+    -path "*/artifacts/sparkle/Sparkle/bin/sign_update" -type f 2>/dev/null | head -1)"
+fi
+[[ -x "${SPARKLE_BIN:-}" ]] || {
+  echo "error: sign_update not found. Build once so SPM resolves Sparkle," >&2
+  echo "       or set SPARKLE_BIN=/path/to/sign_update." >&2
+  exit 1
+}
+
+# Reads the EdDSA private key from the login Keychain, where generate_keys put
+# it. It is never written to disk and never enters this repo.
+SIG_ATTRS="$("$SPARKLE_BIN" "$DMG")"
+
+# ⚠️ Version-pinned URL, deliberately NOT the `releases/latest/download/...`
+# form the website uses. An appcast entry is permanent and must keep pointing at
+# the exact file its signature was computed over. Pointed at "latest", every
+# past entry would silently start resolving to a newer DMG, the signature check
+# would fail, and Sparkle would refuse the update with no obvious cause.
+ENCLOSURE_URL="https://github.com/melissa-pereira-deel/home-rec/releases/download/v$VERSION/$(basename "$DMG")"
+APPCAST_ITEM="$DIST_DIR/appcast-item-$VERSION.xml"
+
+cat > "$APPCAST_ITEM" <<ITEM
+    <item>
+      <title>$VERSION</title>
+      <pubDate>$(date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
+      <sparkle:version>$(defaults read "$APP/Contents/Info" CFBundleVersion)</sparkle:version>
+      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>$(defaults read "$APP/Contents/Info" LSMinimumSystemVersion)</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/melissa-pereira-deel/home-rec/releases/tag/v$VERSION</sparkle:releaseNotesLink>
+      <enclosure url="$ENCLOSURE_URL" $SIG_ATTRS type="application/octet-stream" />
+    </item>
+ITEM
+
 echo "==> Done: $DMG (v$VERSION)"
 echo "         $(awk '{print $1}' "$DMG.sha256")  sha256"
+echo
+echo "    Sparkle appcast entry written to:"
+echo "      $APPCAST_ITEM"
+echo
+echo "    Order matters: publish the GitHub release for tag v$VERSION FIRST —"
+echo "    the entry's URL points at it — then paste the item into <channel> in"
+echo "    home-rec-site/public/appcast.xml, newest first, and deploy."
