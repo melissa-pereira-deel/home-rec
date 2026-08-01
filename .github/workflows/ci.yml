@@ -51,7 +51,10 @@ jobs:
             -project HomeRec/HomeRec.xcodeproj \
             -scheme HomeRec \
             -destination 'platform=macOS' \
-            -only-testing:HomeRecTests/RecordingStateTests \
+            -only-testing:HomeRecTests/EncoderFormatGuardTests \
+            -only-testing:HomeRecTests/M4AEncoderTests \
+            -only-testing:HomeRecTests/FLACEncoderTests \
+            -only-testing:HomeRecTests/AudioFormatNormalizerTests \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 120 \
             -resultBundlePath TestResults-functional.xcresult \
