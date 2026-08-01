@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  BL-034 (Sparkle). This file holds ONLY the keys Xcode's `INFOPLIST_KEY_*`
+	  allow-list refuses to carry — `SUFeedURL` and `SUPublicEDKey` are custom
+	  third-party keys, and the allow-list is exactly what closed BL-080 as
+	  impossible. Everything Xcode CAN synthesise stays in `project.pbxproj`,
+	  because `GENERATE_INFOPLIST_FILE` remains YES and merges its keys on top
+	  of this file at build time.
+
+	  ⚠️ Do NOT move this file into `HomeRec/HomeRec/`. That directory is a
+	  file-system-synchronized group, so anything in it is also copied into
+	  `Contents/Resources/` — which is the inert second plist BL-084 deleted.
+	  `InfoPlistTests.noStrayResourceInfoPlist` fails if it comes back.
+
+	  ⚠️ Do NOT hand-add CFBundle* keys here. A key present in both files is a
+	  key with two owners, and the generated one wins silently.
+	-->
+	<key>SUFeedURL</key>
+	<string>https://homerec.app/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>SPIKE_PLACEHOLDER_NOT_A_REAL_KEY</string>
+</dict>
+</plist>

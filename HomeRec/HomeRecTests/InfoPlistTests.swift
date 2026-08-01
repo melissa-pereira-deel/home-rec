@@ -86,4 +86,34 @@ struct InfoPlistTests {
         // was carried in the dead file for months with no AppleEvents code anywhere.
         #expect(string("NSAppleEventsUsageDescription") == nil)
     }
+
+    /// BL-034 (Sparkle). `SUFeedURL` and `SUPublicEDKey` are third-party keys with
+    /// no `INFOPLIST_KEY_` equivalent — the same allow-list that closed BL-080 as
+    /// impossible. Reaching the product therefore required re-introducing a real
+    /// `INFOPLIST_FILE`, the thing BL-084 deleted.
+    ///
+    /// Both halves are asserted, because the risk was never "does the file get
+    /// read" — it was that setting `INFOPLIST_FILE` might *replace* the generated
+    /// plist rather than merge under it, silently dropping the bundle identifier
+    /// and the deployment floor while the build still succeeded. Measured on
+    /// Xcode 16 / 2026-08-01: with `GENERATE_INFOPLIST_FILE` still YES, Xcode
+    /// merges, and the generated keys survive intact.
+    ///
+    /// The file lives at `HomeRec/Info.plist` — one level *above* the source
+    /// directory on purpose. `HomeRec/HomeRec/` is a file-system-synchronized
+    /// group, so a plist placed there is also copied into `Contents/Resources/`,
+    /// which is exactly the inert second plist BL-084 removed.
+    @Test("Sparkle's feed keys reach the product without displacing generated keys")
+    func sparkleFeedKeysMergeWithGeneratedKeys() throws {
+        let feed = try #require(string("SUFeedURL"), "SUFeedURL absent — INFOPLIST_FILE is not wired in")
+        // Sparkle will refuse a plaintext feed, and an appcast fetched over HTTP
+        // is an update channel anyone on the path can rewrite.
+        #expect(feed.hasPrefix("https://"), "the appcast must be fetched over TLS")
+        #expect(string("SUPublicEDKey")?.isEmpty == false)
+
+        // The merge half. These are generated, not present in `Info.plist`; if
+        // the file had replaced rather than merged, they would be gone.
+        #expect(string("CFBundleIdentifier") == "com.mdebritto.HomeRec")
+        #expect(string("LSMinimumSystemVersion") == "15.0")
+    }
 }
