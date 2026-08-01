@@ -34,13 +34,6 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # ⚠️ TEMPORARY DIAGNOSTIC — revert immediately after this run.
-      # The suite hangs at test-host launch on this branch: two runs produced
-      # zero test cases, zero suites, and 18+ minutes of silence after the build
-      # completed. `main` clears the same point in ~67s.
-      # Narrowed to one suite of pure enum logic — no AppKit, no audio, no view
-      # model. Still hangs => the host app is failing to launch and no test is
-      # implicated. Passes => a specific test is responsible and we bisect suites.
       - name: Run unit tests (functional)
         # BLOCKING gate: full unit-test suite WITHOUT Thread Sanitizer. Covers all
         # correctness, including the AVAssetWriter-based encoder tests. No
@@ -51,14 +44,13 @@ jobs:
             -project HomeRec/HomeRec.xcodeproj \
             -scheme HomeRec \
             -destination 'platform=macOS' \
-            -only-testing:HomeRecTests/RecordingStateTests \
+            -only-testing:HomeRecTests \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 120 \
             -resultBundlePath TestResults-functional.xcresult \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Run unit tests (Thread Sanitizer, advisory)
-        if: false   # TEMPORARY: silenced for the diagnostic run above
         # ADVISORY (continue-on-error): TSan reliably aborts the test host with
         # SIGABRT on this CI runner during the audio tests — a CoreMedia/AVFoundation
         # instrumentation issue exercised by the buffer fixtures (since BL-007), NOT
