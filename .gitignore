@@ -22,7 +22,12 @@ dist/
 .build/
 Packages/
 Package.pins
-Package.resolved
+# Package.resolved is deliberately NOT ignored. That is the convention for a
+# *library*, whose consumers resolve their own versions — this is an app, and
+# the lockfile is the only record of which dependency version a release was
+# actually built from. It matters most for Sparkle (BL-034): an auto-updater
+# resolved at build time to "whatever is newest" is a supply-chain surface on
+# the one component that can replace the app on a user's disk.
 
 # Code signing
 *.mobileprovision
