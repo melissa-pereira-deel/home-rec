@@ -15,6 +15,11 @@ import Foundation
 import AVFoundation
 @testable import HomeRec
 
+/// `.serialized` because every test here calls `M4AEncoder.finalize()`, which
+/// blocks on a semaphore. Run in parallel on a small cooperative pool they
+/// deadlock the entire suite (BL-147). Serialising bounds the blocked threads to
+/// one, which the pool absorbs on any core count.
+@Suite(.serialized)
 struct EncoderFormatGuardTests {
 
     private func tempURL(_ ext: String) -> URL {
@@ -115,8 +120,8 @@ struct EncoderFormatGuardTests {
         }
     }
 
-    @Test("M4A still encodes a matching buffer to a playable file")
-    func m4aAcceptsMatchingFormat() async throws {
+    @Test("M4A still encodes a matching buffer to a finalized file")
+    func m4aAcceptsMatchingFormat() throws {
         let url = tempURL("m4a")
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -127,8 +132,21 @@ struct EncoderFormatGuardTests {
         }
         try encoder.finalize()
 
-        let asset = AVURLAsset(url: url)
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
-        #expect(tracks.isEmpty == false)
+        // ⚠️ Deliberately synchronous. This assertion used `await
+        // asset.loadTracks(...)`, which made the test `async` — and `finalize()`
+        // blocks on a `DispatchSemaphore` bridging `finishWriting`'s completion.
+        // Swift Testing runs tests on the cooperative thread pool, whose width is
+        // the core count, so a blocking wait there consumes a pool thread. Enough
+        // of them in parallel and the pool starves: measured on CI as a total
+        // deadlock with **zero** tests completing (BL-147). It survived locally
+        // only because a dev machine has more cores.
+        //
+        // Reading the container directly proves the same thing without awaiting:
+        // a finalized M4A is flat `ftyp mdat moov`, and it is the `moov` atom
+        // whose absence made crash-interrupted files unplayable before BL-016.
+        let data = try Data(contentsOf: url)
+        #expect(data.count > 1_000)
+        #expect(data.range(of: Data("ftyp".utf8)) != nil)
+        #expect(data.range(of: Data("moov".utf8)) != nil, "no moov atom — the file was never finalized")
     }
 }

@@ -14,6 +14,10 @@ import Foundation
 import AVFoundation
 @testable import HomeRec
 
+/// `.serialized` for the same reason as `EncoderFormatGuardTests`: `finalize()`
+/// blocks on a semaphore, and parallel blocking waits starve Swift's cooperative
+/// thread pool on a low-core CI runner (BL-147).
+@Suite(.serialized)
 @MainActor
 struct M4AEncoderTests {
 
