@@ -16,7 +16,12 @@ BLOCKED=0
 
 # ── 1. Filename blocklist ──────────────────────────────────────────────
 # High-confidence: these paths/extensions must never be public.
-FILE_PATTERNS='(^|/)\.env(\..*)?$|(^|/)private/|(^|/)BACKLOG\.md$|.*\.private\.md$|(^|/)secrets\.|(^|/)notariz.*\.txt$|\.(p12|cer|p8|key|pem|mobileprovision|provisionprofile)$|_private_key|(^|/)AuthKey_.*\.p8$|appcast.*\.key$|(^|/)docs/product-strategy/'
+#
+# ⚠️ `[-_]`, not `_`. Tested in a throwaway repo 2026-08-02: the underscore-only
+# spelling let `sparkle-private-key.txt` through — the exact filename the
+# Sparkle key backup was written to on this machine. Hyphens are the more
+# natural spelling and were the one this list missed.
+FILE_PATTERNS='(^|/)\.env(\..*)?$|(^|/)private/|(^|/)BACKLOG\.md$|.*\.private\.md$|(^|/)secrets\.|(^|/)notariz.*\.txt$|\.(p12|cer|p8|key|pem|mobileprovision|provisionprofile)$|[-_]priv(ate)?[-_]?key|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|(^|/)(sparkle|signing)[-_].*key|(^|/)AuthKey_.*\.p8$|appcast.*\.key$|(^|/)docs/product-strategy/'
 
 staged=$(git diff --cached --name-only --diff-filter=ACM || true)
 
@@ -29,9 +34,23 @@ while IFS= read -r f; do
 done <<< "$staged"
 
 # ── 2. Content scan (unambiguous secret material in staged diff) ───────
-if git diff --cached -U0 | grep -Eq -- \
-  '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}|xox[baprs]-[0-9A-Za-z-]{10,}|sk_live_[0-9A-Za-z]{16,}'; then
+#
+# The last alternative is the important one and the least obvious: a raw
+# Ed25519 seed — the Sparkle signing key — is 43 base64 characters plus one '='
+# and carries no header, prefix or armour. Every other rule here keys off a
+# recognisable marker, so all of them miss it, and so does every hosted secret
+# scanner. This shape rule is the only control that covers the single most
+# damaging secret in the project.
+#
+# `SUPublicEDKey` is the same shape by construction, so it is filtered out
+# first. Filter by the key name, never by the literal value: pinning the
+# current public key here would silently disarm the rule the day it rotates.
+if git diff --cached -U0 \
+  | grep -v 'SUPublicEDKey' \
+  | grep -Eq -- \
+  '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----|AKIA[0-9A-Z]{16}|xox[baprs]-[0-9A-Za-z-]{10,}|sk_live_[0-9A-Za-z]{16,}|(gh[pousr]_[A-Za-z0-9]{36})|github_pat_[A-Za-z0-9_]{22,}|(^|[^A-Za-z0-9+/])[A-Za-z0-9+/]{43}=([^A-Za-z0-9+/]|$)|[^a-z-]([a-z]{4}-){3}[a-z]{4}[^a-z-]'; then
   echo "${RED}✖ Blocked:${NC} staged content matches a private key or live API token pattern."
+  echo "  (A bare 44-char base64 string is the shape of an Ed25519 signing key.)"
   BLOCKED=1
 fi
 

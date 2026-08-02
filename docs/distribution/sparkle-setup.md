@@ -29,11 +29,31 @@ installed base is stranded, permanently, with no way to reach it except asking
 people to re-download by hand. That is the failure Sparkle exists to prevent, so
 losing the key would undo the whole point of shipping it.
 
-- Back it up somewhere durable and offline (`generate_keys -x` exports it).
-- It must **never** enter this repo. Covered by `.gitignore` and
-  `.githooks/pre-commit`, but do not rely on that alone.
-- This is a two-Mac setup. Only the Mac holding the private key can cut a
-  release; the other cannot, and there is no partial workaround.
+### Backing it up — the exact procedure
+
+The destination is a **password manager's secure-note field**. Not a file you
+keep. `generate_keys -x` writes a plaintext seed to disk, and that file is a
+liability from the moment it exists:
+
+```bash
+generate_keys -x /tmp/sparkle-seed.txt   # NOT ~/Desktop, NOT ~/Documents
+# paste the contents into your password manager, then:
+rm /tmp/sparkle-seed.txt
+```
+
+⚠️ **Never write it to `~/Desktop`, `~/Documents`, or any folder inside a sync
+root.** With iCloud Desktop & Documents sync enabled — the macOS default — a
+signing key written there is uploaded within seconds, and deleting it locally
+leaves a copy in iCloud's *Recently Deleted* for about 30 days. This happened on
+2026-08-02, which is why the instruction now names the path.
+
+Only the Mac holding the private key can cut a release. To move it to another
+machine, import from the password manager with `generate_keys -f`, using the same
+write-to-`/tmp`-then-delete discipline.
+
+The key must **never** enter this repo. `.gitignore` and `.githooks/pre-commit`
+both cover it — the hook blocks a bare 44-character base64 seed on content, not
+just on filename — but treat those as the last line, not the first.
 
 ### 2. Put the public key in the app
 
