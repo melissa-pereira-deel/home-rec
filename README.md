@@ -40,7 +40,8 @@ Home Rec is a lightweight macOS app that captures system audio output and saves 
 - **Live permission re-detection** — Grant Screen Recording in System Settings, switch back to Home Rec, and the Record button enables itself. No quit-and-relaunch.
 - **Diagnostics export + "Report a Problem"** — A menu-bar action gathers recent `os.Logger` entries plus app/macOS version into a shareable text file and opens a prefilled GitHub issue.
 - **Disk-space + long-recording guardrails** — Refuses to start when the destination volume has < 100 MB free; warns once a recording passes 30 minutes.
-- **No telemetry. No network calls. Audio stays on your Mac.** No SDK, no analytics, no crash-reporter ping. Verifiable in the source.
+- **Automatic updates** — Home Rec checks for new versions and can install them itself, signed and verified with a key only the developer holds. It will never interrupt a recording: while a take is open the check is declined, and an update that finishes downloading mid-recording waits until you stop.
+- **No telemetry. Audio stays on your Mac.** No SDK, no analytics, no crash-reporter ping, and nothing you record ever leaves your machine. Home Rec makes one kind of network request: a periodic check of `https://homerec.app/appcast.xml` for a newer version, plus the download if you install one. Like any web request that reveals your IP address to the host — but it carries no system profile, no identifier, and nothing about what you record. Verifiable in the source.
 
 ### Alternatives
 

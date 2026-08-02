@@ -89,7 +89,14 @@ dist-build.log
 *.cer
 *.p8
 *.key
-*_private_key*
+*[-_]priv[-_]key*
+*[-_]private[-_]key*
+*private[-_]key*
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*.b64
 AuthKey_*.p8
 secrets.*
 notariz*.txt
