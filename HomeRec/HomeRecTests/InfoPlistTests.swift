@@ -37,6 +37,49 @@ struct InfoPlistTests {
         #expect(try #require(string("CFBundleVersion")).isEmpty == false)
     }
 
+    /// `CFBundleVersion` must be derived from `CFBundleShortVersionString`.
+    ///
+    /// This is the update mechanism, not bookkeeping. Sparkle compares
+    /// `CFBundleVersion` — not the marketing string — to decide whether a newer
+    /// build exists (`SUAppcastItem.h`: "Sparkle uses this property to compare
+    /// update items"). `CURRENT_PROJECT_VERSION` sat at **1** across v1.0,
+    /// v1.0.1, v1.0.2 and the v1.1.0 merge, so every release would have
+    /// advertised the same build number as the one already installed and no
+    /// update would ever have been offered. The auto-updater would have shipped,
+    /// passed its tests, verified its signatures, and done nothing.
+    ///
+    /// Deriving one from the other — rather than asserting some floor like
+    /// `> 1` — is what makes the two impossible to ship out of step: bumping
+    /// `MARKETING_VERSION` without `CURRENT_PROJECT_VERSION` fails right here.
+    ///
+    /// The encoding is `major * 10000 + minor * 100 + patch`, which stays
+    /// monotonic for any component under 100 and is greater than the `1` every
+    /// copy in the wild reports, so those installs are all offered an update.
+    @Test("CFBundleVersion is derived from the marketing version, so they cannot drift")
+    func bundleVersionTracksMarketingVersion() throws {
+        let marketing = try #require(string("CFBundleShortVersionString"))
+        // Two statements, not one: `#require` cannot expand inside `#require`.
+        let buildString = try #require(string("CFBundleVersion"))
+        let build = try #require(Int(buildString),
+                                 "CFBundleVersion must be an integer; Sparkle compares it numerically")
+
+        let parts = marketing.split(separator: ".").compactMap { Int($0) }
+        #expect(parts.count == 3, "Expected a three-part marketing version, got \(marketing)")
+        for part in parts {
+            #expect(part < 100, "Component \(part) breaks the major*10000+minor*100+patch encoding")
+        }
+
+        let expected = parts[0] * 10_000 + parts[1] * 100 + parts[2]
+        #expect(
+            build == expected,
+            "CFBundleVersion (\(build)) does not match \(marketing) (expected \(expected)). Set CURRENT_PROJECT_VERSION to \(expected) in all 6 configs — Sparkle will not offer an update otherwise."
+        )
+
+        // The historic stuck value, called out separately so the failure is
+        // unmistakable if it ever returns.
+        #expect(build != 1, "CFBundleVersion is still the never-incremented 1; Sparkle can offer no update.")
+    }
+
     /// `LSMinimumSystemVersion` is synthesised from `MACOSX_DEPLOYMENT_TARGET`.
     /// The v1.1 capture work (BL-100/130) relies on macOS 15-only ScreenCaptureKit
     /// API, so a silent downgrade here would produce a bundle that launches on a
