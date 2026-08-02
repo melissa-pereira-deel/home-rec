@@ -2,35 +2,27 @@
 //  MicrophoneFormatTests.swift
 //  HomeRecTests
 //
-//  BL-150: `AudioSampleConverter.makePCMBuffer` silently drops every buffer a
-//  microphone delivers in an integer PCM format.
+//  BL-150: `AudioSampleConverter.makePCMBuffer` dropped every buffer a
+//  microphone delivered in an integer PCM format, and the caller discarded it
+//  without logging — so a recording finished as a header with no audio and the
+//  only symptom was "No audio was captured for this recording".
 //
-//  Found by manual acceptance on 2026-08-02, not by this suite — and the reason
-//  the suite missed it is worth stating. `SampleBufferFixtures` only synthesises
-//  **Float32** buffers, so every existing test feeds `makePCMBuffer` exactly the
-//  format it already assumes. The fixtures encode the same assumption as the
-//  code they exercise, which makes them incapable of failing on it.
+//  Found by manual acceptance, not by this suite, and the reason is worth
+//  keeping: `SampleBufferFixtures` could only build **Float32** buffers, so
+//  every test fed the converter exactly the format it already assumed. The
+//  fixtures encoded the same belief as the code, which made them incapable of
+//  failing on it. 282 tests green, feature broken.
 //
-//  What the device actually sent (Focusrite Scarlett 2i2 4th Gen, logged from a
-//  real capture):
+//  Measured from the hardware (Focusrite Scarlett 2i2 4th Gen):
 //
-//      4ch 48000.0Hz fmt=1819304813 flags=12
+//      4ch 48000Hz 24-bit int alignedHigh container=4B flags=20
 //
-//  `1819304813` is `'lpcm'`; `flags=12` is
-//  `kAudioFormatFlagIsPacked | kAudioFormatFlagIsSignedInteger`, with no
-//  non-interleaved bit — so: **4-channel, interleaved, signed integer**.
-//  (Four channels is correct for that interface: two analog inputs plus two
-//  loopback channels. It is not a fault.)
-//
-//  `makePCMBuffer` returned nil for it, the caller's `guard … else { return }`
-//  discarded the buffer without logging, and the recording finished as a
-//  header-only file with "No audio was captured for this recording".
-//
-//  ⚠️ This is exactly what the `audio-pipeline` skill warns about: the SCK
-//  config's `sampleRate`/`channelCount` govern the `.audio` output ONLY, while a
-//  `.microphone` buffer arrives in the device's native format. System-audio
-//  capture works because SCK pins it to Float32; microphone capture works only
-//  by luck, on devices that happen to deliver Float32.
+//  ⚠️ The general hazard, from the `audio-pipeline` skill: the SCK config's
+//  `sampleRate`/`channelCount` govern the `.audio` output ONLY. A `.microphone`
+//  buffer arrives in the device's native format. System-audio capture works
+//  because SCK pins it to Float32; microphone capture worked only on devices
+//  that happened to send Float32 — and this interface offers no Float32 format
+//  at any sample rate.
 //
 
 import Testing
@@ -41,135 +33,113 @@ import CoreMedia
 @Suite("Microphone buffer formats")
 struct MicrophoneFormatTests {
 
-    /// Build an interleaved **integer** PCM `CMSampleBuffer`, which is what a
-    /// real interface delivers and what no existing fixture can produce.
-    private func makeIntegerSampleBuffer(
-        channels: UInt32,
-        frames: Int,
-        sampleRate: Double = 48_000,
-        bitsPerChannel: UInt32 = 16,
-        bytesPerSample: UInt32? = nil,
-        formatFlags: AudioFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked
-    ) throws -> CMSampleBuffer {
-        // Container size is independent of bit depth — 24-bit audio commonly
-        // travels in 4 bytes. Defaulting to bitsPerChannel/8 only covers the
-        // packed case.
-        let sampleBytes = bytesPerSample ?? (bitsPerChannel / 8)
-        let bytesPerFrame = channels * sampleBytes
-        var asbd = AudioStreamBasicDescription(
-            mSampleRate: sampleRate,
-            mFormatID: kAudioFormatLinearPCM,
-            // Precisely the flags observed from the device: packed, signed
-            // integer, interleaved (no kAudioFormatFlagIsNonInterleaved).
-            mFormatFlags: formatFlags,
-            mBytesPerPacket: bytesPerFrame,
-            mFramesPerPacket: 1,
-            mBytesPerFrame: bytesPerFrame,
-            mChannelsPerFrame: channels,
-            mBitsPerChannel: bitsPerChannel,
-            mReserved: 0
-        )
-
-        var formatDescription: CMAudioFormatDescription?
-        try #require(CMAudioFormatDescriptionCreate(
-            allocator: kCFAllocatorDefault, asbd: &asbd,
-            layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
-            extensions: nil, formatDescriptionOut: &formatDescription
-        ) == noErr)
-        let format = try #require(formatDescription)
-
-        // Non-zero, non-constant sample data, so a silent all-zero result is
-        // distinguishable from a correctly converted one.
-        let byteCount = frames * Int(bytesPerFrame)
-        var bytes = [UInt8](repeating: 0, count: byteCount)
-        for i in stride(from: 0, to: byteCount, by: 2) {
-            let v = Int16(truncatingIfNeeded: (i * 37) % 20_000 - 10_000)
-            bytes[i] = UInt8(truncatingIfNeeded: v)
-            bytes[i + 1] = UInt8(truncatingIfNeeded: v >> 8)
-        }
-
-        var blockBuffer: CMBlockBuffer?
-        try #require(CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: byteCount,
-            blockAllocator: kCFAllocatorDefault, customBlockSource: nil,
-            offsetToData: 0, dataLength: byteCount, flags: 0, blockBufferOut: &blockBuffer
-        ) == noErr)
-        let block = try #require(blockBuffer)
-        try #require(bytes.withUnsafeBytes {
-            CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block,
-                                          offsetIntoDestination: 0, dataLength: byteCount)
-        } == noErr)
-
-        var sampleBuffer: CMSampleBuffer?
-        var timing = CMSampleTimingInfo(
-            duration: CMTime(value: 1, timescale: CMTimeScale(sampleRate)),
-            presentationTimeStamp: .zero,
-            decodeTimeStamp: .invalid
-        )
-        var sizes = Int(bytesPerFrame)
-        try #require(CMSampleBufferCreateReady(
-            allocator: kCFAllocatorDefault, dataBuffer: block, formatDescription: format,
-            sampleCount: frames, sampleTimingEntryCount: 1, sampleTimingArray: &timing,
-            sampleSizeEntryCount: 1, sampleSizeArray: &sizes, sampleBufferOut: &sampleBuffer
-        ) == noErr)
-        return try #require(sampleBuffer)
-    }
-
-    /// The shape the Scarlett 2i2 4th Gen actually delivers.
-    @Test("A 4-channel interleaved Int16 microphone buffer survives conversion")
-    func integerMicrophoneBufferConverts() throws {
-        let sample = try makeIntegerSampleBuffer(channels: 4, frames: 512)
-        let pcm = try #require(
-            AudioSampleConverter.makePCMBuffer(from: sample),
-            "makePCMBuffer returned nil for 4ch interleaved Int16 — the exact buffer a Scarlett 2i2 sends. Every such buffer is dropped by the caller's guard, and the take is written as a header with no audio."
-        )
-        #expect(pcm.frameLength == 512)
-        #expect(pcm.format.channelCount == 4)
-
-        // Converting must not silently yield digital black. An all-zero result
-        // would pass a nil-check while still losing the recording.
+    /// Peak absolute sample across every channel — a converted buffer must be
+    /// neither silent nor beyond full scale.
+    private func peak(_ pcm: AVAudioPCMBuffer) throws -> Float {
         let data = try #require(pcm.floatChannelData)
-        let peak = (0..<Int(pcm.format.channelCount)).flatMap { ch in
+        return (0..<Int(pcm.format.channelCount)).flatMap { ch in
             (0..<Int(pcm.frameLength)).map { abs(data[ch][$0]) }
         }.max() ?? 0
-        #expect(peak > 0.0001, "converted buffer is silent — samples were not carried across")
     }
 
-    /// The exact format logged from the hardware: `4ch 48000.0Hz 24-bit
-    /// flags=20` — signed integer, aligned high, in a 4-byte container. This is
-    /// the buffer that produced a header-only file; the 16-bit test above did
-    /// not reproduce it, because bit depth was inferred rather than logged.
-    @Test("A 4-channel 24-bit aligned-high buffer — the Scarlett's real format")
-    func realScarlettFormatConverts() throws {
-        let sample = try makeIntegerSampleBuffer(
-            channels: 4, frames: 512, bitsPerChannel: 24, bytesPerSample: 4,
-            formatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsAlignedHigh
+    /// The exact shape the hardware sends. This is the regression that matters:
+    /// four channels (two analog inputs plus two loopback — correct for the
+    /// device, not a fault) of 24-bit aligned-high audio in a 4-byte container.
+    @Test("The Scarlett's real format: 4ch 24-bit aligned-high")
+    func realHardwareFormatConverts() throws {
+        let sample = SampleBufferFixtures.integer(
+            frames: 512, channels: 4, layout: .int24AlignedHigh
         )
         let pcm = try #require(
             AudioSampleConverter.makePCMBuffer(from: sample),
-            "makePCMBuffer returned nil for 4ch 24-bit aligned-high — the format a Scarlett 2i2 4th Gen actually sends."
+            "returned nil for the format a Scarlett 2i2 4th Gen actually sends — every buffer is dropped and the take is written as a header with no audio"
         )
         #expect(pcm.frameLength == 512)
         #expect(pcm.format.channelCount == 4)
-        let data = try #require(pcm.floatChannelData)
-        let peak = (0..<4).flatMap { ch in (0..<512).map { abs(data[ch][$0]) } }.max() ?? 0
-        #expect(peak > 0.0001, "converted buffer is silent")
-        #expect(peak <= 1.0, "samples exceed full scale — wrong divisor for the container")
+
+        let p = try peak(pcm)
+        #expect(p > 0.01, "converted buffer is silent — samples were not carried across")
+        #expect(p <= 1.0, "samples exceed full scale — wrong divisor for the container")
     }
 
-    /// Stereo integer input is the common case for most interfaces, so it is
-    /// asserted separately: a fix that only handled four channels would leave
-    /// every 2-channel integer device broken in the same way.
-    @Test("A 2-channel interleaved Int16 microphone buffer survives conversion")
-    func stereoIntegerBufferConverts() throws {
-        let sample = try makeIntegerSampleBuffer(channels: 2, frames: 256)
-        let pcm = try #require(AudioSampleConverter.makePCMBuffer(from: sample))
+    /// Every integer layout a device might plausibly present. Parameterised so a
+    /// fix that handles only the one interface on the developer's desk fails
+    /// here rather than in someone else's studio.
+    @Test(
+        "Integer layouts all convert",
+        arguments: [
+            SampleBufferFixtures.IntegerLayout.int16,
+            SampleBufferFixtures.IntegerLayout.int32,
+            SampleBufferFixtures.IntegerLayout.int24Packed,
+            SampleBufferFixtures.IntegerLayout.int24AlignedHigh
+        ]
+    )
+    func integerLayoutsConvert(layout: SampleBufferFixtures.IntegerLayout) throws {
+        let sample = SampleBufferFixtures.integer(frames: 256, channels: 2, layout: layout)
+        let pcm = try #require(
+            AudioSampleConverter.makePCMBuffer(from: sample),
+            "returned nil for \(layout.bitsPerChannel)-bit in a \(layout.bytesPerSample)-byte container (alignedHigh=\(layout.isAlignedHigh))"
+        )
         #expect(pcm.frameLength == 256)
         #expect(pcm.format.channelCount == 2)
+
+        let p = try peak(pcm)
+        #expect(p > 0.01, "\(layout.bitsPerChannel)-bit converted to silence")
+        #expect(p <= 1.0, "\(layout.bitsPerChannel)-bit exceeded full scale")
     }
 
-    /// Regression guard for the path that already works, so a fix for the
-    /// integer case cannot break system-audio capture.
+    /// Non-interleaved integer input, which arrives as one `AudioBuffer` per
+    /// channel rather than one interleaved block. Separate code in the
+    /// converter, so a fix to one path does not imply the other.
+    ///
+    /// ⚠️ This asserts the actual sample **values**, not merely that the result
+    /// is non-silent. Mutation-tested: with a "peak > 0.01" assertion it
+    /// **passed against the unfixed converter**, because reading Int16 bytes as
+    /// `Float` yields garbage that is still loud. A test that cannot fail on
+    /// wrong data is not a test — the project has shipped several of those.
+    @Test("Non-interleaved integer input converts to the right values")
+    func nonInterleavedIntegerConverts() throws {
+        let layout = SampleBufferFixtures.IntegerLayout(bitsPerChannel: 16, isInterleaved: false)
+        // A known ramp, distinct per channel, so a swap or a misread is visible.
+        let expected: (Int, Int) -> Float = { ch, f in
+            Float(f % 8) / 16.0 + Float(ch) * 0.25
+        }
+        let sample = SampleBufferFixtures.integer(
+            frames: 256, channels: 2, layout: layout, fill: expected
+        )
+        let pcm = try #require(AudioSampleConverter.makePCMBuffer(from: sample))
+        #expect(pcm.frameLength == 256)
+
+        let data = try #require(pcm.floatChannelData)
+        // 16-bit quantisation is ~3e-5; allow an order of magnitude over it.
+        let tolerance: Float = 0.001
+        var worst: Float = 0
+        for ch in 0..<2 {
+            for frame in 0..<256 {
+                worst = max(worst, abs(data[ch][frame] - expected(ch, frame)))
+            }
+        }
+        #expect(worst < tolerance, "samples differ from what was written by up to \(worst) — the container was misread")
+    }
+
+    /// `AVAudioFormat(commonFormat:sampleRate:channels:interleaved:)` returns
+    /// **nil above 2 channels** — measured: 1 and 2 succeed, 3/4/6/8 do not. It
+    /// has no layout to infer beyond mono and stereo and will not guess. That
+    /// was the second of the three stacked defects: fixing integer decoding
+    /// alone still failed here, because the format could not be constructed.
+    @Test("Channel counts above stereo construct a format", arguments: [1, 2, 4, 6, 8] as [UInt32])
+    func multichannelFormatsConvert(channels: UInt32) throws {
+        let sample = SampleBufferFixtures.integer(frames: 128, channels: channels, layout: .int16)
+        let pcm = try #require(
+            AudioSampleConverter.makePCMBuffer(from: sample),
+            "returned nil for \(channels) channels — AVAudioFormat needs an explicit layout above stereo"
+        )
+        #expect(pcm.format.channelCount == channels)
+        #expect(pcm.frameLength == 128)
+    }
+
+    /// Regression guard for the path that already worked, so a fix aimed at
+    /// integer formats cannot quietly break system-audio capture.
     @Test("Float32 buffers still convert, unchanged")
     func floatBufferStillConverts() throws {
         let sample = SampleBufferFixtures.interleaved(frames: 256) { ch, f in
