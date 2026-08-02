@@ -176,7 +176,8 @@ class MenuBarController: NSObject {
             selectedAppName: selectedAppName,
             inputDevices: devices,
             selectedMicName: selectedMicName,
-            allowsUpdateInstall: viewModel.state.allowsUpdateInstall
+            allowsUpdateInstall: viewModel.state.allowsUpdateInstall,
+            updaterIsUsable: updater.isUsable
         )
     }
 

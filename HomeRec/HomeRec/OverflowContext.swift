@@ -63,6 +63,15 @@ struct OverflowContext: Sendable, Equatable {
     /// there.
     var allowsUpdateInstall: Bool = true
 
+    /// Whether the updater started at all (BL-034).
+    ///
+    /// Separate from `allowsUpdateInstall` because the two are different in
+    /// kind, not just in value: that one is temporary and clears when recording
+    /// stops, this one lasts for the whole process run. They also need different
+    /// copy, and collapsing them would produce a row that blames a recording for
+    /// a misconfigured build.
+    var updaterIsUsable: Bool = true
+
     init(
         selectedSource: AudioSource = .systemAll,
         allowsCaptureSourceChange: Bool = true,
@@ -71,8 +80,10 @@ struct OverflowContext: Sendable, Equatable {
         selectedAppName: String? = nil,
         inputDevices: [InputDeviceInfo] = [],
         selectedMicName: String? = nil,
-        allowsUpdateInstall: Bool = true
+        allowsUpdateInstall: Bool = true,
+        updaterIsUsable: Bool = true
     ) {
+        self.updaterIsUsable = updaterIsUsable
         self.selectedSource = selectedSource
         self.allowsCaptureSourceChange = allowsCaptureSourceChange
         self.permissionGranted = permissionGranted

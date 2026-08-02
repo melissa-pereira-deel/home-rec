@@ -35,34 +35,94 @@ final class UpdaterController {
 
     /// Retained because `SPUStandardUpdaterController` holds its delegate weakly.
     private let gate: UpdaterGate
-    private let controller: SPUStandardUpdaterController
+    /// `nil` in a unit-test host, where the app must not run an updater at all.
+    private let controller: SPUStandardUpdaterController?
 
-    /// - Parameter isSafeToInstall: Answers "is it safe to terminate this
-    ///   process right now?" — read at the moment Sparkle asks, never cached,
-    ///   because recording starts and stops long after this object is built.
-    init(isSafeToInstall: @escaping @MainActor () -> Bool) {
+    /// Why the updater cannot be used, or `nil` when it started cleanly.
+    private(set) var unavailable: UpdaterUnavailable?
+
+    /// - Parameters:
+    ///   - isSafeToInstall: Answers "is it safe to terminate this process right
+    ///     now?" — read at the moment Sparkle asks, never cached, because
+    ///     recording starts and stops long after this object is built.
+    ///   - environment: Injected so the test-host rule stays assertable.
+    init(
+        isSafeToInstall: @escaping @MainActor () -> Bool,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
         let gate = UpdaterGate(isSafeToInstall: isSafeToInstall)
         self.gate = gate
-        // `startingUpdater: true` schedules the background check Sparkle is for.
-        // The feed URL and public key come from Info.plist (`SUFeedURL`,
-        // `SUPublicEDKey`) — see `InfoPlistTests`.
-        self.controller = SPUStandardUpdaterController(
-            startingUpdater: true,
+
+        guard Self.shouldRunUpdater(in: environment) else {
+            self.controller = nil
+            self.unavailable = .notRunInTestHost
+            return
+        }
+
+        // ⚠️ `startingUpdater: false` is load-bearing, and the two ways to start
+        // are a trap. `SPUStandardUpdaterController.startUpdater()` is
+        // non-throwing and, on failure, waits one second and then runs a modal
+        // `NSAlert` we do not control. The one we want is `SPUUpdater`'s, which
+        // throws and shows nothing — and which Swift imports as `start()`, not
+        // `startUpdater()`, so the obvious spelling silently resolves to the
+        // wrong object's method.
+        //
+        // That modal is not merely ugly. `TEST_HOST` makes this app its own test
+        // host, so a modal on the main thread races XCTest's startup: on a fast
+        // machine the runner wins and the suite passes, on CI's slower VM the
+        // alert wins and the whole run reports "Test runner never began
+        // executing tests after launching" with zero tests. Measured 2026-08-02.
+        let controller = SPUStandardUpdaterController(
+            startingUpdater: false,
             updaterDelegate: gate,
             userDriverDelegate: nil
         )
+        self.controller = controller
+
+        do {
+            try controller.updater.start()
+        } catch {
+            // Deliberately quiet: a start failure means a misconfigured build,
+            // which the user can do nothing about. Surfacing it well is BL-148.
+            self.unavailable = .startFailed
+            Log.recorder.error(
+                "Sparkle updater failed to start: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
-    /// False while a check is already in flight, and while a take is open.
+    /// Whether this process should run an updater at all.
     ///
-    /// Sparkle's own `canCheckForUpdates` covers only the first. Adding the
-    /// second is what lets the menu row explain itself by being disabled rather
-    /// than failing after the user clicks it.
+    /// A unit-test host must not: it has no user to update, and Sparkle's
+    /// machinery — network, XPC helpers, modal alerts — is pure side effect in a
+    /// test run. Xcode sets `XCTestConfigurationFilePath` when it injects a test
+    /// bundle, which is exactly the situation `TEST_HOST` creates.
+    ///
+    /// Pure and `nonisolated` so it is assertable without building an
+    /// `SPUUpdater`, which reaches the network.
+    nonisolated static func shouldRunUpdater(in environment: [String: String]) -> Bool {
+        environment["XCTestConfigurationFilePath"] == nil
+    }
+
+    /// False when the updater never started, so the menu row can be disabled
+    /// rather than silently doing nothing when clicked.
+    var isUsable: Bool { unavailable == nil }
+
+    /// False while a check is in flight, while a take is open, and whenever the
+    /// updater is unusable.
+    ///
+    /// ⚠️ That last clause is not redundant. After a failed start Sparkle's own
+    /// `canCheckForUpdates` still reports `true` — it tracks whether a session is
+    /// in progress, not whether the updater ever started — while
+    /// `checkForUpdates()` degrades to a silent no-op. Without this the row would
+    /// look enabled and do nothing at all, which is worse than an honest error.
     var canCheckForUpdates: Bool {
-        controller.updater.canCheckForUpdates && gate.isSafeToInstall()
+        guard let controller, isUsable else { return false }
+        return controller.updater.canCheckForUpdates && gate.isSafeToInstall()
     }
 
     func checkForUpdates() {
+        guard let controller, isUsable else { return }
         controller.updater.checkForUpdates()
     }
 
@@ -127,6 +187,18 @@ private final class UpdaterGate: NSObject, SPUUpdaterDelegate {
         postponedRelaunch = installHandler
         return true
     }
+}
+
+/// Why the updater is unusable for this whole process run.
+///
+/// Distinct from `UpdateDeferred`, which is temporary and clears when recording
+/// stops. These two do not: they last until the app is relaunched.
+enum UpdaterUnavailable: Equatable, Sendable {
+    /// Running as a unit-test host. Not an error — the correct outcome.
+    case notRunInTestHost
+    /// `startUpdater()` threw. Always a misconfigured build (bad feed URL, bad
+    /// or missing `SUPublicEDKey`); never something the user caused or can fix.
+    case startFailed
 }
 
 /// Why an update check was refused.

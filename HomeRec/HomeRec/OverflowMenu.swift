@@ -335,6 +335,22 @@ enum OverflowMenu {
     /// be worse debt than the pattern already in use.
     static var onCheckForUpdates: @MainActor () -> Void = {}
 
+    /// Why "Check for Updates…" is greyed, or `nil` when it is live.
+    ///
+    /// A pure function so the precedence between the two independent reasons is
+    /// assertable rather than buried in a ternary inside a row builder.
+    static func updateRowTooltip(_ context: OverflowContext) -> String? {
+        if !context.allowsUpdateInstall {
+            return "Installing an update restarts Home Rec, which would end the recording."
+        }
+        if !context.updaterIsUsable {
+            // Deliberately does not say why — the causes are all misconfigured
+            // builds the user cannot act on. Point at the thing they *can* do.
+            return "Home Rec can't check for updates right now. You can download the latest version from homerec.app."
+        }
+        return nil
+    }
+
     /// The app-level actions — always present.
     ///
     /// Takes the context only for the update row's enabled state. Everything else
@@ -362,10 +378,10 @@ enum OverflowMenu {
             .action(OverflowAction(
                 id: "checkForUpdates",
                 title: "Check for Updates…",
-                toolTip: context.allowsUpdateInstall
-                    ? nil
-                    : "Installing an update restarts Home Rec, which would end the recording.",
-                isEnabled: context.allowsUpdateInstall,
+                // Recording wins the explanation when both apply: it is the one
+                // the user caused and the one that clears on its own.
+                toolTip: updateRowTooltip(context),
+                isEnabled: context.allowsUpdateInstall && context.updaterIsUsable,
                 perform: { onCheckForUpdates() }
             )),
             .separator,

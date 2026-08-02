@@ -19,8 +19,16 @@ import AppKit
 @MainActor
 struct UpdateGateTests {
 
-    private func context(canInstall: Bool = true, unlocked: Bool = true) -> OverflowContext {
-        OverflowContext(allowsCaptureSourceChange: unlocked, allowsUpdateInstall: canInstall)
+    private func context(
+        canInstall: Bool = true,
+        unlocked: Bool = true,
+        updaterUsable: Bool = true
+    ) -> OverflowContext {
+        OverflowContext(
+            allowsCaptureSourceChange: unlocked,
+            allowsUpdateInstall: canInstall,
+            updaterIsUsable: updaterUsable
+        )
     }
 
     private func updateRow(_ context: OverflowContext) -> OverflowAction? {
@@ -88,6 +96,55 @@ struct UpdateGateTests {
         let context = context(canInstall: true, unlocked: false)
         #expect(updateRow(context)?.isEnabled == true)
         #expect(OverflowMenu.actions(context).contains { $0.isSourceRow } == false)
+    }
+
+    // MARK: - The updater must not run in a test host
+
+    @Test("A test host runs no updater at all")
+    func testHostRunsNoUpdater() {
+        // This is the regression guard for a CI break that cost a full run.
+        // `TEST_HOST` makes this app its own test host, so anything Sparkle does
+        // at launch happens *inside* the test process. With `startingUpdater:
+        // true`, a failed start put a modal `NSAlert` on the main thread one
+        // second in — which races XCTest's own startup. A fast machine wins the
+        // race and the suite passes; CI's slower VM loses it and reports "Test
+        // runner never began executing tests after launching" with zero tests
+        // run. Identical code, identical command, opposite results.
+        //
+        // Xcode sets this variable whenever it injects a test bundle, so it is
+        // exactly the condition to refuse on.
+        #expect(UpdaterController.shouldRunUpdater(in: ["XCTestConfigurationFilePath": "/x.xctestconfiguration"]) == false)
+        #expect(UpdaterController.shouldRunUpdater(in: [:]))
+        // An empty value still means a test bundle was injected.
+        #expect(UpdaterController.shouldRunUpdater(in: ["XCTestConfigurationFilePath": ""]) == false)
+    }
+
+    @Test("This very process is one the updater must refuse to run in")
+    func thisProcessIsATestHost() {
+        // Asserted against the *live* environment, not a synthesised one: if the
+        // variable Xcode sets is ever renamed, the pure test above keeps passing
+        // against a name that no longer exists, and the guard silently stops
+        // guarding. This fails instead.
+        #expect(UpdaterController.shouldRunUpdater(in: ProcessInfo.processInfo.environment) == false)
+    }
+
+    @Test("An unusable updater disables the row and says something useful")
+    func unusableUpdaterDisablesTheRow() throws {
+        let context = context(updaterUsable: false)
+        #expect(try #require(updateRow(context)).isEnabled == false)
+        let tip = try #require(OverflowMenu.updateRowTooltip(context))
+        // Names no cause — every cause is a misconfigured build the user can't
+        // act on — but must still leave them somewhere to go.
+        #expect(tip.localizedCaseInsensitiveContains("homerec.app"))
+    }
+
+    @Test("Recording wins the explanation when both reasons apply")
+    func recordingTooltipTakesPrecedence() throws {
+        // Recording is the reason the user caused and the only one that clears
+        // by itself, so it is the more useful thing to say.
+        let both = context(canInstall: false, updaterUsable: false)
+        #expect(try #require(OverflowMenu.updateRowTooltip(both)).localizedCaseInsensitiveContains("recording"))
+        #expect(OverflowMenu.updateRowTooltip(context()) == nil)
     }
 
     @Test("Blocking an update reads as a reason plus a way forward")
