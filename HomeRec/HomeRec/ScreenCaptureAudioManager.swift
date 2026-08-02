@@ -69,6 +69,15 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     /// its own normalizer; it must not share this one across queues.
     private var audioNormalizer = AudioFormatNormalizer()
 
+    /// One-shot latches so a rejected buffer is reported once per session rather
+    /// than per buffer — this is the capture hot path (BL-150).
+    ///
+    /// ⚠️ Written and read on the sample-handler queue only, unlike the
+    /// properties above it, so these two add no new cross-queue access. The rest
+    /// of this file's race is TD-009 and is not made worse here.
+    private var hasLoggedConversionFailure = false
+    private var hasLoggedNormalizeFailure = false
+
     /// Called when the stream stops unexpectedly. See `AudioCapturing`.
     var onStreamError: (@MainActor (String) -> Void)?
 
@@ -256,8 +265,31 @@ extension ScreenCaptureAudioManager: SCStreamOutput {
         // then normalise so it is the same *format* too (BL-112). For system
         // audio the normaliser is a pass-through — the SCK config already pins
         // 48 kHz stereo — so the existing path stays byte-identical.
-        guard let pcmBuffer = AudioSampleConverter.makePCMBuffer(from: sampleBuffer),
-              let normalized = audioNormalizer.normalize(pcmBuffer) else { return }
+        // ⚠️ Never drop a buffer here in silence (BL-150). These two guards used
+        // to be one `else { return }`, so when a Scarlett 2i2's integer-format
+        // microphone buffers were rejected, every one vanished without a trace
+        // and the only symptom was "No audio was captured for this recording"
+        // at the end. The format is logged once per session — this is the hot
+        // path, so it must not log per buffer.
+        guard let pcmBuffer = AudioSampleConverter.makePCMBuffer(from: sampleBuffer) else {
+            if !hasLoggedConversionFailure {
+                hasLoggedConversionFailure = true
+                let desc = CMSampleBufferGetFormatDescription(sampleBuffer)
+                    .flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee }
+                    .map { "\($0.mChannelsPerFrame)ch \($0.mSampleRate)Hz \($0.mBitsPerChannel)-bit flags=\($0.mFormatFlags)" }
+                    ?? "unknown format"
+                Log.capture.error("Dropping buffers: unsupported capture format — \(desc, privacy: .public)")
+            }
+            return
+        }
+        guard let normalized = audioNormalizer.normalize(pcmBuffer) else {
+            if !hasLoggedNormalizeFailure {
+                hasLoggedNormalizeFailure = true
+                let f = pcmBuffer.format
+                Log.capture.error("Dropping buffers: normalizer rejected \(f.channelCount, privacy: .public)ch \(f.sampleRate, privacy: .public)Hz")
+            }
+            return
+        }
         audioCallback?(normalized)
     }
 }
