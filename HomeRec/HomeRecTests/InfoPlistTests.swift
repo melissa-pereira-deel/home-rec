@@ -116,4 +116,42 @@ struct InfoPlistTests {
         #expect(string("CFBundleIdentifier") == "com.mdebritto.HomeRec")
         #expect(string("LSMinimumSystemVersion") == "15.0")
     }
+
+    /// `SUPublicEDKey` must be a real Ed25519 public key in the shipped bundle.
+    ///
+    /// The two halves of the Sparkle keypair are set in different places at
+    /// different times: the private half by `generate_keys` into the login
+    /// Keychain, the public half by hand into `HomeRec/Info.plist`. Only the
+    /// private half has any natural feedback — `sign_update` fails loudly
+    /// without it. A wrong public half fails **silently and permanently**: the
+    /// build succeeds, `sign_update` succeeds, the appcast is signed, the app
+    /// launches, and every copy of that release then rejects every update it is
+    /// ever offered. That is the cohort-stranding failure BL-034 exists to
+    /// prevent, reintroduced by the mechanism meant to fix it.
+    ///
+    /// ⚠️ **What this cannot check:** whether the key is *ours*. A different but
+    /// well-formed Ed25519 key passes everything below. Verifying identity means
+    /// comparing against the private half, and CI has no Keychain and must not
+    /// have one — so that check lives in `scripts/build-dmg.sh`, which runs
+    /// `generate_keys -p` at release time. Structure is guarded here on every
+    /// PR; identity is guarded there on every release. Neither is sufficient
+    /// alone.
+    @Test("The Sparkle public key is a real Ed25519 key, not a placeholder")
+    func sparklePublicKeyIsWellFormed() throws {
+        let key = try #require(string("SUPublicEDKey"), "SUPublicEDKey is missing from the built product")
+
+        #expect(
+            key.localizedCaseInsensitiveContains("placeholder") == false,
+            "SUPublicEDKey is still the spike placeholder. Run Sparkle's generate_keys and paste the real public key into HomeRec/Info.plist — see docs/distribution/sparkle-setup.md."
+        )
+
+        // `Data(base64Encoded:)` rejects invalid characters outright, so a
+        // hand-mangled or half-pasted key fails here rather than at a user's
+        // machine months later.
+        let decoded = try #require(
+            Data(base64Encoded: key),
+            "SUPublicEDKey is not valid base64 — Sparkle refuses to start the updater with an unparseable key."
+        )
+        #expect(decoded.count == 32, "An Ed25519 public key is 32 bytes; this decoded to \(decoded.count).")
+    }
 }
