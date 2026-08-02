@@ -5,6 +5,12 @@ choreography** by construction. It has passed while a shipped feature was broken
 more than once. These checks are the part no test can do — run them before
 tagging a release and record the result in the PR.
 
+> **The boxes below stay empty.** This file is the template for *every* release,
+> not a record of any one of them. A ticked box here would make the next release
+> start out looking half-done, which is the same "it passed once, so it passes"
+> failure this file exists to prevent. Results go in the **Run log** at the
+> bottom, dated and tied to a version.
+
 ## Every release
 
 ```bash
@@ -109,3 +115,65 @@ update to this one.
 
 Add a check here in the same commit. A check that lives only in someone's head
 is the failure mode this file exists to prevent.
+
+---
+
+# Run log
+
+Newest first. Record what was checked, what was *not*, and by what means — a run
+that doesn't say what it skipped is indistinguishable from a complete one.
+
+## v1.1.0 — partial, 2026-08-02 · `f467048`
+
+**7 of 32 checks verified. 25 outstanding, all requiring a human at the machine.**
+Everything below was run mechanically; nothing in this run involved a person
+looking at the app.
+
+### Passed
+
+| Check | Evidence |
+|---|---|
+| `scripts/check-docs.sh` | exit 0 |
+| Swift 6 error count has not grown | **1** — `DiskSpace.swift:21`, `minimumBytesToRecord` referenced from a nonisolated context |
+| Full suite green | **282 passed, 0 failed, 0 build warnings** |
+| `MARKETING_VERSION` vs built product | product reports `CFBundleShortVersionString = 1.1.0`; file agrees |
+| Build number derived, not stale | product reports `CFBundleVersion = 10100` |
+| README describes the shipping app | FLAC ×7, M4A ×5, microphone ×10, automatic updates present |
+| Site parity — landing | flac/m4a/microphone ×9 on homerec.app |
+| Appcast reachable | `HTTP 200`, `application/xml; charset=utf-8` |
+| `CHANGELOG.md` written as user experience | 11 entries, all phrased as what the user meets |
+
+⚠️ **The Swift 6 count is a floor, not a total.** The build stops at the first
+failing batch, so later files are never type-checked. The same tree reported one
+error before an unrelated change and two after, with nothing touching either
+file — see TD-008. Do not read a short list as "nearly clean".
+
+### Not run — and why
+
+| Block | Checks | Blocked on |
+|---|---|---|
+| Permissions and first run | 4 | `tccutil reset` modifies a privacy setting, and no TCC prompt can be answered without a person |
+| Recording, per source | 6 | Real audio in real apps. The per-app check needs audio playing in **two** apps at once to prove the file contains only one |
+| Crash durability | 5 | A real force-quit mid-recording |
+| Auto-update | 7 of 8 | v1.1.0 must be published first — the N-1 → N test cannot precede the release it tests |
+| Accessibility | 2 | VoiceOver |
+
+### The ordering trap in the auto-update block
+
+Five of those checks can only run **after** the release they validate is public.
+Cut the release, verify immediately, and be prepared to pull it — there is no
+arrangement in which the update path is proven before shipping.
+
+### Highest risk still unverified, in order
+
+1. **FLAC force-quit → Recover Recordings → plays.** Never exercised, and
+   `CHANGELOG.md` makes the promise. FLAC is the one format that *needs* repair
+   to open at all.
+2. **Per-app isolation with two apps playing.** The headline feature, and its
+   failure is silent — you get a file, it simply has the wrong audio in it.
+3. **Mic at 44.1 kHz into a 48 kHz-declared file.** A broken normalizer plays
+   ~8.8% fast: wrong, but not obviously wrong.
+4. **N-1 → N update**, including that TCC grants survive and no second
+   `Home Rec.app` appears in `/Applications`.
+5. **Tamper check.** A signature verifier nobody has watched *reject* something
+   is only known to accept.
