@@ -68,7 +68,7 @@ enum PermissionKind: Sendable {
         guard let confusable = confusableSectionName else {
             return "macOS lists Home Rec under \(settingsSectionName)."
         }
-        return "macOS lists Home Rec under \(settingsSectionName) — "
+        return "macOS lists Home Rec under \(settingsSectionName), "
              + "not the \u{201C}\(confusable)\u{201D} list below it."
     }
 }

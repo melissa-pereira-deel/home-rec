@@ -24,31 +24,48 @@ struct OnboardingView: View {
                 .font(.custom("Archivo", size: 22, relativeTo: .title))
                 .fontWeight(.semibold)
 
-            // Kept to one sentence deliberately: this is the only screen a
-            // first-run user is guaranteed to read, so it names what the app
-            // records rather than listing formats. The format picker is
-            // discoverable; the fact that you can pick a *source* is not.
-            Text("Home Rec records what your Mac is playing — everything, a single app, or a microphone — and saves it straight to your Desktop.")
+            // Names what you can record *from*, not what formats exist: the
+            // format picker is discoverable, the fact that the source is
+            // yours to choose is not. This is the only screen a first-run
+            // user is guaranteed to read.
+            //
+            // Imperative on purpose. "Record …" makes the reader the subject,
+            // so the sentence needs no name for the app and no pronoun that
+            // could attach to the wrong noun. It also fixes an inaccuracy:
+            // the old phrasing hung "or a microphone" off "what your Mac is
+            // playing", and a microphone is not something your Mac plays.
+            Text("Record everything your Mac plays, a single app, or a microphone. Recordings go straight to your Desktop.")
                 .font(.custom("Inter-Regular", size: 13, relativeTo: .body))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 8) {
-                // Wrap rather than truncate. These two were the only lines here
-                // without it, and the first is long enough to lose its last
-                // words — on the one screen a first-run user is guaranteed to
-                // read, and precisely where it names the permission the app
+                // macOS is the subject of these three, which is both accurate
+                // and useful: it answers why an audio recorder is asking for a
+                // screen permission, and it tells the reader these prompts come
+                // from their operating system. It also avoids a pronoun — "it"
+                // would sit next to "permission" and could be read as a claim
+                // about the permission, and "the app" would collide with "a
+                // single app" one line above.
+                //
+                // `.fixedSize` on every line: without it the longest truncates
+                // mid-word, and it is the line naming the permission the app
                 // cannot work without.
-                Label("Home Rec needs Screen Recording permission to capture audio.", systemImage: "lock.shield")
+                Label("macOS requires Screen Recording permission to capture audio.", systemImage: "lock.shield")
                     .fixedSize(horizontal: false, vertical: true)
-                Label("It only captures audio — never your screen.", systemImage: "eye.slash")
+                // The reassurance keeps its own icon and stays second, because
+                // the crossed-out eye is read before any of the words are, and
+                // it is what answers the alarm the line above sets off.
+                Label("Only audio is ever recorded, never your screen.", systemImage: "eye.slash")
                     .fixedSize(horizontal: false, vertical: true)
                 // The screen-recording rationale above used to be the whole
                 // permission story. It stopped being true when microphone
                 // capture shipped, and a welcome screen that implies there is
                 // one permission makes the second prompt feel like an ambush.
-                Label("Recording a microphone asks for its own permission, only when you choose one.", systemImage: "mic")
+                // "A second permission" states the count outright, which is the
+                // whole of that warning.
+                Label("A microphone needs a second permission, requested only when you choose one.", systemImage: "mic")
                     .fixedSize(horizontal: false, vertical: true)
                 // Where to actually find it. Without this the line above sends
                 // people to the audio-only list, which doesn't contain Home Rec.
