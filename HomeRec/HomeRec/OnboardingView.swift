@@ -58,22 +58,34 @@ struct OnboardingView: View {
                     .font(.custom("Archivo", size: 14, relativeTo: .headline))
                     .foregroundColor(.green)
             } else {
-                Button("Open System Settings") {
+                // Neutral, not accent: granting permission is the step before
+                // recording, not recording itself.
+                GlassPillButton(
+                    "Open System Settings",
+                    emphasis: .primaryNeutral,
+                    size: .medium
+                ) {
                     viewModel.openSystemSettings()
                 }
-                .controlSize(.large)
             }
 
             Spacer(minLength: 0)
 
-            Button(viewModel.permissionStatus == .granted ? "Get started" : "Done") {
+            GlassPillButton(
+                viewModel.permissionStatus == .granted ? "Get started" : "Done",
+                emphasis: .primary,
+                size: .medium
+            ) {
                 viewModel.completeOnboarding()
             }
             .keyboardShortcut(.defaultAction)
-            .controlSize(.large)
         }
         .padding(32)
         .frame(width: 420, height: 440)
+        // A sheet is already inset within the window that presents it, so it gets
+        // the flat ground rather than a second mesh competing with the one behind.
+        .background(GlassFlatGround())
+        .glassThemeAdaptingToContrast()
     }
 }
 

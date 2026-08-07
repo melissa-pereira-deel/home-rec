@@ -74,6 +74,10 @@ class MenuBarController: NSObject {
         popover.contentViewController = NSHostingController(rootView: popoverView)
         popover.contentSize = NSSize(width: 280, height: 240)
         popover.behavior = .transient
+        // The popover draws its own chrome and arrow, neither of which SwiftUI can
+        // reach. Without this the arrow stays light while the content it points at
+        // is dark.
+        popover.appearance = NSAppearance(named: .darkAqua)
 
         // Configure status bar button
         if let button = statusItem.button {

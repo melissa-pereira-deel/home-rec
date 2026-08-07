@@ -21,27 +21,59 @@ struct RecorderView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            // App Logo + Status grouped closer together
-            VStack(spacing: 0) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 84, height: 84)
-                    .padding(.bottom, 32)
+            // Header, from the Glass v2 concept: brand on the left, the
+            // machine-measured facts and settings on the right. The lockup is
+            // also now the only place the app's name appears — the titlebar is
+            // hidden — and it replaces the old 84pt centred icon, which would
+            // otherwise state the brand twice on one face.
+            HStack(spacing: 10) {
+                GlassBrandLockup(size: .compact)
 
-                StatusBar(
+                Spacer()
+
+                // The sample rate is fixed by the capture pipeline
+                // (AudioRecorder.sampleRate matches the ScreenCaptureKit
+                // config), so this states it rather than measuring it.
+                GlassMetaLabel("\(viewModel.selectedFormat.shortName.lowercased()) · 48kHz")
+
+                // Same control, same gating as the old bottom shelf: hidden for
+                // the whole of a take, because the settings it opens are
+                // captured at start and cannot change until the take ends.
+                if viewModel.showsSettingsShelf {
+                    SettingsPopover()
+                }
+            }
+            // The header belongs to the window's chrome, not to the face, so it
+            // escapes the face's 40pt inset toward the edges — stated as an
+            // offset from that inset so the two cannot drift apart — and sits
+            // just below the traffic-light band rather than 40pt under it. The
+            // xl margin is the concept face's own header inset.
+            .padding(.horizontal, GlassSpacing.xl - 40)
+            .padding(.top, GlassSpacing.s)
+
+            Spacer(minLength: 0)
+
+            StatusBar(
                 isRecording: viewModel.isRecording,
                 duration: viewModel.formattedDuration,
                 statusText: viewModel.statusText
-                )
-            }
+            )
 
             // Live Waveform
+            //
+            // The explicit animation this used to carry is gone. `[Float]` is not
+            // `VectorArithmetic`, so the shape's `animatableData` never witnessed
+            // the protocol requirement and nothing was ever interpolated — the
+            // modifier only bought a 200-element equality check on every frame.
+            // At roughly 47 frames a second the frame rate is the smoothing.
             if viewModel.isRecording {
-                WaveformView(samples: viewModel.waveformSamples)
-                    .stroke(Color.red.opacity(0.7), lineWidth: 1.5)
-                    .frame(height: 60)
-                    .animation(.easeOut(duration: 0.1), value: viewModel.waveformSamples)
+                GlassLiveWaveform(
+                    samples: RecorderWaveformAdapter.magnitudes(
+                        viewModel.waveformSamples,
+                        bucketedTo: RecorderWaveformAdapter.mainWindowBarCount
+                    )
+                )
+                .frame(height: 60)
             }
 
             // Soft install-location note (BL-082): shown only for the dismissible
@@ -56,15 +88,16 @@ struct RecorderView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Button {
+                    // The glyph stays 9pt; the *target* grows to the 28pt floor.
+                    // A bare 9pt glyph was a dismiss control roughly the size of
+                    // the text beside it, which is a miss waiting to happen.
+                    GlassIconButton(
+                        systemImage: "xmark",
+                        accessibilityLabel: "Dismiss",
+                        symbolSize: 9
+                    ) {
                         viewModel.dismissInstallLocationNotice()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dismiss")
                 }
             }
 
@@ -105,7 +138,21 @@ struct RecorderView: View {
             // Primary action + contextual Reveal, grouped tighter than the rest.
             VStack(spacing: 16) {
                 // Main Control Button
-                Button(action: {
+                // `canRecord` is exactly "this button is about to record or stop".
+                // When it is false the same control carries a corrective action
+                // instead — reveal the app, or open Settings — and those have no
+                // business wearing the accent, which in this app means recording
+                // or failure and nothing else. They take the neutral fill rather
+                // than grey: grey is the system's *disabled* costume, and this is
+                // the one thing on the surface the user can actually do.
+                GlassPillButton(
+                    mainButtonTitle,
+                    systemImage: viewModel.canRecord
+                        ? (viewModel.isRecording ? "stop.circle.fill" : "record.circle")
+                        : nil,
+                    emphasis: viewModel.canRecord ? .primary : .primaryNeutral,
+                    size: .large
+                ) {
                     if viewModel.installLocationBlocksRecording {
                         viewModel.revealAppInFinder()
                     } else if viewModel.permissionStatus != .granted {
@@ -115,103 +162,34 @@ struct RecorderView: View {
                             await viewModel.toggleRecording()
                         }
                     }
-                }) {
-                    HStack {
-                        if viewModel.canRecord {
-                            Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
-                                .font(.system(size: 24))
-                        }
-                        Text(mainButtonTitle)
-                            .font(.custom("Archivo", size: 15, relativeTo: .body))
-                            .fontWeight(.medium)
-                    }
-                    .frame(width: 220, height: 50)
-                    .foregroundColor(.white)
-                    .background(viewModel.canRecord ? Color.red : Color.gray.opacity(0.3))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .buttonStyle(.plain)
+                .frame(width: 220)
                 .keyboardShortcut("r", modifiers: .command)
 
                 // Reveal in Finder — contextual action, only after a recording.
                 if viewModel.lastRecordingURL != nil, !viewModel.isRecording {
-                    Button(action: {
+                    // The outline this used to draw is gone on purpose: rank is
+                    // carried by fill alone, and the stroke is reserved for the
+                    // focus ring so that keyboard focus has something to say that
+                    // nothing else is already saying.
+                    GlassPillButton(
+                        "Reveal in Finder",
+                        systemImage: "folder",
+                        emphasis: .tertiary,
+                        size: .small
+                    ) {
                         viewModel.revealInFinder()
-                    }) {
-                        HStack {
-                            Image(systemName: "folder")
-                            Text("Reveal in Finder")
-                                .font(.custom("Inter-Regular", size: 13, relativeTo: .body))
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                        )
                     }
-                    .buttonStyle(.plain)
                     .keyboardShortcut("o", modifiers: .command)
                 }
             }
 
             Spacer()
-
-            // Settings shelf (bottom): quiet, native pop-ups, visually separated
-            // from the action controls by a faint divider. Two sibling controls
-            // (save destination + output format) share the ShelfMenu chrome and
-            // sit a touch tighter to each other (6pt) than to the divider (10pt),
-            // so they read as one unit. Hidden for the whole of a take — the
-            // settings are captured at start and cannot change until it ends.
-            if viewModel.showsSettingsShelf {
-                VStack(spacing: 10) {
-                    Divider()
-                        .frame(width: 300)
-                        .opacity(0.15)
-
-                    VStack(spacing: 6) {
-                        // Save destination (BL-010).
-                        ShelfMenu(
-                            title: "Saving to \(viewModel.saveLocationName)",
-                            help: viewModel.saveLocationPath,
-                            accessibilityLabel: "Save location",
-                            accessibilityValue: viewModel.saveLocationName
-                        ) {
-                            Button("Choose folder…") {
-                                viewModel.chooseSaveLocation()
-                            }
-                            if viewModel.hasCustomSaveLocation {
-                                Button("Reset to Desktop") {
-                                    viewModel.resetSaveLocation()
-                                }
-                            }
-                        }
-
-                        // Output format (BL-015). Offers only formats with a working
-                        // encoder (`AudioFormat.available`); the active one is checked.
-                        ShelfMenu(
-                            title: "Recording as \(viewModel.selectedFormat.shortName)",
-                            help: "New recordings are saved as \(viewModel.selectedFormat.displayName). This can't change while recording.",
-                            accessibilityLabel: "Recording format",
-                            accessibilityValue: viewModel.selectedFormat.displayName
-                        ) {
-                            ForEach(AudioFormat.available, id: \.self) { format in
-                                Button {
-                                    viewModel.setFormat(format)
-                                } label: {
-                                    if format == viewModel.selectedFormat {
-                                        Label(format.displayName, systemImage: "checkmark")
-                                    } else {
-                                        Text(format.displayName)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
-        .padding(40)
+        // No top edge in this set: the header now owns the distance to the
+        // titlebar band, and a blanket top inset would push it back down.
+        .padding(.horizontal, 40)
+        .padding(.bottom, 40)
         .frame(width: 450, height: 450)
         .alert("Something went wrong", isPresented: $viewModel.showError) {
             if let recovery = viewModel.recoverySuggestion {

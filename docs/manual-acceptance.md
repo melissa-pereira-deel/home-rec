@@ -111,6 +111,41 @@ update to this one.
       *(known open defect: the menu pops at the pointer location rather than
       under the button)*
 
+## The reskin (v1.2.0) — every state, seen once
+
+No UI test asserts anything visual, so a reskin regression cannot fail CI — and
+the states below are exactly the ones the run log shows never get exercised.
+The error states matter most: unreadable text does its worst damage to someone
+whose recording just failed. First release with the new look only; trim
+afterwards.
+
+- [ ] macOS set to **Light**, then **Dark** — every window and the popover stay
+      dark and legible in both; the menu-bar icon still reads against both
+      menu bars
+- [ ] The main window's glass over a **white desktop, a black desktop, a busy
+      photo, and a full-screen app** — controls legible on all four
+      *(the window samples the desktop now; a light wallpaper is the stress
+      case, and the popover gets the same four-background pass)*
+- [ ] Idle · recording (loud material, near-silence, stopped) — the waveform
+      visibly tracks level, silence stays a flat dotted line
+- [ ] **Disabled record button** — reads as unavailable, not as an error
+- [ ] Permission not granted · mic denied · install-from-DMG block (window
+      **and** popover) · first-run onboarding · recording error (quit the
+      captured app mid-take) · long-recording alert · recovery window with
+      results **and** empty — text legible in every one
+- [ ] **Increase Contrast** on — the high-contrast palette actually engages
+      (the record pill's fill visibly darkens)
+      *(known deviation, documented in docs/design-system.md: white-on-accent
+      is ≈3.9:1 at standard contrast)*
+- [ ] **Reduce Motion** on — hover/press scaling stops; nothing else breaks
+- [ ] Open and close the settings popover ~20× while hovering its controls —
+      the pointer returns to an arrow every time
+      *(guards an NSCursor push/pop imbalance in the vendored hover tracker,
+      which would leak a pointing-hand cursor system-wide)*
+- [ ] Drag the window by its body — it moves (there is no title bar to grab)
+- [ ] Sparkle **N-1 → N**, screenshot before and after — the only place the
+      reskin is seen arriving the way users will
+
 ## Recording anything new?
 
 Add a check here in the same commit. A check that lives only in someone's head

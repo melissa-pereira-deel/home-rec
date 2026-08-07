@@ -1,0 +1,33 @@
+--- /tmp/up.swift	2026-08-06 20:28:51
++++ HomeRec/HomeRec/DesignSystem/Vendor/Primitives/GlassPillButton.swift	2026-08-06 20:27:51
+@@ -226,6 +226,21 @@
+     /// Loading is not disabled, but it is not pressable either.
+     private var acceptsInput: Bool { isEnabled && !isLoading }
+ 
++    // HOMEREC-LOCAL: the focus ring became a permanent border on the record
++    // control. SwiftUI grants focus on a *mouse* click and keeps it after the
++    // window resigns key, so once the user clicked record the pill kept an
++    // accent ring around an accent fill — indistinguishable from the resting
++    // border this kit says it never draws, on the one control that matters most.
++    // Gating on Full Keyboard Access keeps the indicator for people who navigate
++    // by keyboard, which is who 2.4.11 is for, and removes it from ordinary
++    // mouse use. The real fix belongs upstream in ui-explorations — probably
++    // a ring colour that contrasts with the fill it surrounds, plus clearing
++    // focus on window resign. See docs/design-system-vendoring.md.
++    private static var showsFocusRing: Bool {
++        NSApplication.shared.isFullKeyboardAccessEnabled
++    }
++    // HOMEREC-LOCAL-END
++
+     var body: some View {
+         label
+             .padding(.horizontal, size.horizontalPadding)
+@@ -240,7 +255,7 @@
+             Capsule()
+                 .strokeBorder(theme.colors.accent, lineWidth: 2)
+                 .padding(-4)
+-                .opacity(isFocused ? 1 : 0)
++                .opacity(isFocused && Self.showsFocusRing ? 1 : 0)
+         }
+         // Visual capsule first, then the hit region is grown to the minimum
+         // target. The scale effects below deliberately sit *outside* the

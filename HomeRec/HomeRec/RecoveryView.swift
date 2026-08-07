@@ -22,6 +22,12 @@ struct RecoveryView: View {
             }
         }
         .frame(minWidth: 460, minHeight: 260)
+        // The ground is what the empty state stands on. When there is a list it
+        // paints over this, and that is left alone on purpose: List draws its own
+        // selection and separators, and clearing its background to show the ground
+        // through would cost those for no gain the user can see.
+        .background(GlassFlatGround())
+        .glassThemeAdaptingToContrast()
         .onAppear { viewModel.refresh() }
         .alert("Couldn't do that", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -62,8 +68,15 @@ struct RecoveryView: View {
                 }
                 Spacer()
                 if recording.isRepairable {
-                    Button("Recover") { viewModel.recover(recording) }
-                        .buttonStyle(.borderedProminent)
+                    // Neutral rather than accent: repairing a take is not
+                    // recording one, and the accent stays reserved.
+                    GlassPillButton(
+                        "Recover",
+                        emphasis: .primaryNeutral,
+                        size: .small
+                    ) {
+                        viewModel.recover(recording)
+                    }
                 }
                 Menu {
                     Button("Reveal in Finder") { viewModel.revealInFinder(recording) }
