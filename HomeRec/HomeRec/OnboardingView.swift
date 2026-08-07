@@ -35,8 +35,15 @@ struct OnboardingView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 8) {
+                // Wrap rather than truncate. These two were the only lines here
+                // without it, and the first is long enough to lose its last
+                // words — on the one screen a first-run user is guaranteed to
+                // read, and precisely where it names the permission the app
+                // cannot work without.
                 Label("Home Rec needs Screen Recording permission to capture audio.", systemImage: "lock.shield")
+                    .fixedSize(horizontal: false, vertical: true)
                 Label("It only captures audio — never your screen.", systemImage: "eye.slash")
+                    .fixedSize(horizontal: false, vertical: true)
                 // The screen-recording rationale above used to be the whole
                 // permission story. It stopped being true when microphone
                 // capture shipped, and a welcome screen that implies there is
@@ -81,7 +88,12 @@ struct OnboardingView: View {
             .keyboardShortcut(.defaultAction)
         }
         .padding(32)
-        .frame(width: 420, height: 440)
+        // Width fixed, height from the content. The height used to be pinned at
+        // 440 and the content had quietly outgrown it — the "Get started" button
+        // was cut off by the bottom edge. A number that has to be re-tuned every
+        // time this copy changes will be wrong again the next time it does, and
+        // this copy has changed twice already.
+        .frame(width: 420)
         // A sheet is already inset within the window that presents it, so it gets
         // the flat ground rather than a second mesh competing with the one behind.
         .background(GlassFlatGround())

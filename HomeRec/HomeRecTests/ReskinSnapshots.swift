@@ -319,6 +319,7 @@ struct ReskinSnapshots {
             OnboardingView().environmentObject(notGranted)
         }
 
+
         write("sheet-03-install-panel", size: CGSize(width: 340, height: 180), contrast: contrast) {
             InstallLocationNoticeView(
                 message: InstallLocation.translocated.explanation ?? "",
