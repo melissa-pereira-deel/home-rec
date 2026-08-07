@@ -47,10 +47,10 @@ struct InstallLocationNoticeView: View {
         }
         .padding(18)
         .frame(width: 340)
-        // Flat ground rather than a glass panel: this content sits inside a
-        // titled NSPanel, so a rounded card here would put a second set of
-        // corners inside the panel's own square ones.
-        .background(GlassFlatGround())
+        // Same ground as every other surface. Still not a glass *panel* — this
+        // sits inside a titled NSPanel, and a rounded card here would put a
+        // second set of corners inside the panel's own square ones.
+        .background(GlassWindowGround())
         .glassThemeAdaptingToContrast()
     }
 }

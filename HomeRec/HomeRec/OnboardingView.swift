@@ -111,9 +111,9 @@ struct OnboardingView: View {
         // time this copy changes will be wrong again the next time it does, and
         // this copy has changed twice already.
         .frame(width: 420)
-        // A sheet is already inset within the window that presents it, so it gets
-        // the flat ground rather than a second mesh competing with the one behind.
-        .background(GlassFlatGround())
+        // Same ground as every other surface. A sheet gets its own window, so it
+        // needs the treatment applied here rather than inheriting the presenter's.
+        .background(GlassWindowGround())
         .glassThemeAdaptingToContrast()
     }
 }

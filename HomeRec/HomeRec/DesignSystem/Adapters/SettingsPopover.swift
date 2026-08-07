@@ -44,9 +44,14 @@ struct SettingsPopover: View {
             }
             .padding(GlassSpacing.xl)
             .frame(minWidth: 250, alignment: .leading)
-            // A popover is hosted in its own window, so the theme has to be
-            // injected again here — it does not inherit from the view that
-            // presented it.
+            // This had no ground at all and fell back to the system popover
+            // material, which is why it did not match anything. It gets the same
+            // glass as every other surface.
+            //
+            // A popover is hosted in its own window, so both the ground and the
+            // theme have to be applied here: neither is inherited from the view
+            // that presented it.
+            .background(GlassWindowGround())
             .glassThemeAdaptingToContrast()
         }
     }

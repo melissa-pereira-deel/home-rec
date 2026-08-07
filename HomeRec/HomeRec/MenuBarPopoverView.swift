@@ -152,12 +152,12 @@ struct MenuBarPopoverView: View {
         }
         .padding(16)
         .frame(width: 280)
-        // Flat ground, not the mesh and not a glass surface. An NSPopover already
-        // draws a vibrant material sampling whatever is behind it — which here is
-        // the user's desktop, so unknowable. Stacking a second material on that is
-        // two blurs over arbitrary content, which reads as mud rather than glass.
-        // At 280pt the mesh's asymmetry would read as a lighting bug anyway.
-        .background(GlassFlatGround())
+        // The same ground as the window, deliberately. This was a flat opaque
+        // fill first, reasoning that an NSPopover already draws its own vibrancy
+        // and a second material would read as mud. What an opaque fill actually
+        // does is *cover* that vibrancy, so the popover came out visibly darker
+        // than the window it belongs to — the app looking like two apps.
+        .background(GlassWindowGround())
         .glassThemeAdaptingToContrast()
     }
 }

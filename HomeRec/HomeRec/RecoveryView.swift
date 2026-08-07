@@ -26,7 +26,7 @@ struct RecoveryView: View {
         // paints over this, and that is left alone on purpose: List draws its own
         // selection and separators, and clearing its background to show the ground
         // through would cost those for no gain the user can see.
-        .background(GlassFlatGround())
+        .background(GlassWindowGround())
         .glassThemeAdaptingToContrast()
         .onAppear { viewModel.refresh() }
         .alert("Couldn't do that", isPresented: Binding(
