@@ -119,6 +119,28 @@ The error states matter most: unreadable text does its worst damage to someone
 whose recording just failed. First release with the new look only; trim
 afterwards.
 
+**Most of the state coverage is one command.** The snapshot harness renders
+every state to PNG — no permissions to reset, no takes to kill, no window ever
+opens:
+
+```bash
+TEST_RUNNER_HR_SNAPSHOT=/tmp/reskin xcodebuild test \
+  -project HomeRec/HomeRec.xcodeproj -scheme HomeRec \
+  -destination 'platform=macOS' -only-testing:HomeRecTests/ReskinSnapshots
+```
+
+25 images: the main window across ready / recording (quiet, loud, silent) /
+permission-denied / undetermined / install-blocked / install-notice / error,
+each in both palettes, plus the popover and sheets. Flip through them, attach
+them to the PR. It asserts nothing and cannot fail — its whole job is to make
+looking cheap.
+
+Two things it deliberately does **not** prove, which stay below: that the glass
+is legible over a real desktop (an offscreen window has nothing to blur), and
+that `glassThemeAdaptingToContrast()` actually fires (the harness injects the
+palette, because `colorSchemeContrast` is read-only and `NSAppearance` does not
+drive it — measured).
+
 - [ ] macOS set to **Light**, then **Dark** — every window and the popover stay
       dark and legible in both; the menu-bar icon still reads against both
       menu bars
