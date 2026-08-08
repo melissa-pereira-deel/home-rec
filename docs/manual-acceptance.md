@@ -123,6 +123,89 @@ is the failure mode this file exists to prevent.
 Newest first. Record what was checked, what was *not*, and by what means — a run
 that doesn't say what it skipped is indistinguishable from a complete one.
 
+## v1.1.0 — partial, 2026-08-07 · `53bb672`
+
+**Both blocks the previous run called highest-risk are now verified against real
+hardware, and doing so found a release blocker.** Crash durability is complete;
+per-app isolation was done properly, with two apps playing. What remains is
+permissions, accessibility, and the auto-update path.
+
+### Passed — by a person at the machine
+
+| Check | Notes |
+|---|---|
+| **WAV** force-quit mid-recording | plays as found |
+| **M4A** force-quit | plays as found |
+| **FLAC** force-quit → Recover Recordings → repaired file opens | the check the changelog's durability promise rests on, and the one never previously run |
+| Recovery never lists the in-progress recording | |
+| Recovery never touches a file that finished normally | |
+| **Per-app** isolation | two apps playing simultaneously; the file contains only the selected one. With one app playing, a working filter and a broken one produce identical files, so this is the only form that counts |
+| **All System Audio** | recorded and played back; a 294s take measured −8.4 dBFS peak, 99.2% non-zero |
+| **Microphone**, Focusrite Scarlett 2i2 4th Gen | 10s take, left −14.1 dBFS, right silent, which is correct for one input under the `[0, 1]` channel map |
+
+### Passed — mechanically
+
+| Check | Evidence |
+|---|---|
+| `scripts/check-docs.sh` | exit 0 |
+| Full suite green | 275 passed, 0 failed, 0 skipped |
+| `MARKETING_VERSION` vs built product | both `1.1.0` |
+| Build number derived, not stale | `CFBundleVersion = 10100` |
+| `LSMinimumSystemVersion` | `15.0` |
+| Appcast reachable | `HTTP 200`, `application/xml`, cache-busted |
+| README describes the shipping app | FLAC ×7, M4A ×5, microphone ×10 |
+| Site parity | features and the privacy page current; see the gap below |
+
+### ⚠️ This run found a release blocker
+
+Microphone capture reached the file as **digital silence** — full length,
+correct duration, every sample zero. `AVAudioConverter` defaults `channelMap`
+to `[-1, -1]` for a discrete channel layout and emits zeros while reporting
+success. Fixed in `53bb672`.
+
+**It was found by hand and could not have been found otherwise.** The previous
+round's tests stopped at `makePCMBuffer`, one stage before the silence
+happened, and every guard on the path returned success. Same lesson BL-150
+taught the first time: a duration-based check calls a silent file a good take.
+
+### Two corrections to the previous entry
+
+**The Swift 6 count is understated.** The last entry records `1 —
+DiskSpace.swift:21`. Across five builds of the same tree, four reported only
+that; one also surfaced `PermissionGrantWatcher.swift:81` — *"cannot access
+property 'activity' with a non-Sendable type from nonisolated deinit"*. So **at
+least two** exist. This is the TD-008 nondeterminism, and it means "the count
+has not grown" cannot be evaluated from a single build.
+
+**Site parity is partial, and the important half is fine.** homerec.app
+describes the features (flac ×4, m4a ×4, microphone ×7) and the privacy page
+correctly documents the appcast request. The homepage never mentions automatic
+updates, a headline feature of this release. A marketing gap, not a correctness
+or privacy one.
+
+### Not run — and why
+
+| Block | Checks | Blocked on |
+|---|---|---|
+| Permissions and first run | 4 | `tccutil reset` modifies a privacy setting, and no TCC prompt can be answered without a person |
+| Recording, per source | 3 of 6 | Source removed *mid-recording* (app quits, mic unplugged), and mic unplugged while idle |
+| Auto-update | 7 of 8 | 3 interlock checks are runnable now; the rest need the release published |
+| Accessibility | 2 | VoiceOver |
+
+### Still unverified, in order of risk
+
+1. **Microphone at 44.1 kHz.** The fix above proves the *channel* path. The
+   sample-rate path is untouched by it, and a broken normalizer plays ~8.8%
+   fast: wrong, but not obviously wrong on a voice take.
+2. **The update interlock** — greyed while recording, re-enabled on stop, and
+   an in-flight check that must wait rather than relaunch. This is the part
+   that can cost someone a take, and it does not need the release published.
+3. **N-1 → N update**, including that TCC grants survive and no second
+   `Home Rec.app` appears in `/Applications`.
+4. **Tamper check.** A signature verifier nobody has watched *reject*
+   something is only known to accept.
+5. **Permissions on a clean machine**, and VoiceOver.
+
 ## v1.1.0 — partial, 2026-08-02 · `f467048`
 
 **7 of 32 checks verified. 25 outstanding, all requiring a human at the machine.**
