@@ -109,6 +109,44 @@ nonisolated final class AudioFormatNormalizer {
         return output
     }
 
+    /// Build a converter and give it an explicit channel map when reducing
+    /// channel count.
+    ///
+    /// ⚠️ Without this, a source with **more than two channels produces silence**
+    /// — full-length, correctly-timed, and reported as success (BL-150).
+    /// `AVAudioFormat` cannot be constructed above stereo without a channel
+    /// layout, and the only layout available for an interface's raw inputs is
+    /// `DiscreteInOrder`, which by definition asserts nothing about which
+    /// channel is left or right. `AVAudioConverter` therefore refuses to guess
+    /// and defaults `channelMap` to `[-1, -1]` — "no source channel for this
+    /// output" — emitting zeros while returning `error == nil` and a full
+    /// `frameLength`. Setting `downmix = true` does **not** rescue it.
+    ///
+    /// Measured on a Focusrite Scarlett 2i2 4th Gen: 4 channels in, peak 0.5;
+    /// out, peak 0.0. Every guard on the path passes, the encoder writes the
+    /// zeros, and the take has perfect duration — which is why a duration-based
+    /// hardware check reported success on a silent file.
+    ///
+    /// `[0, 1]` takes the first two channels, matching the device's own
+    /// `preferredChannelsForStereo`. That is deliberate rather than convenient:
+    /// on this interface channels 3–4 are **Loopback**, carrying whatever the
+    /// Mac is playing, so summing all four would fold system audio into a
+    /// microphone take — the one outcome `ScreenCaptureAudioManager` explicitly
+    /// rules out. A single mic on input 1 therefore lands hard left; centring it
+    /// is Force Mono's job, downstream, not a lossy default here.
+    ///
+    /// Only set when reducing: an upmix (mono → stereo) has a working default
+    /// that an explicit map would break.
+    private func configuredConverter(from inputFormat: AVAudioFormat) -> AVAudioConverter? {
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+            return nil
+        }
+        if inputFormat.channelCount > outputFormat.channelCount {
+            converter.channelMap = (0..<Int(outputFormat.channelCount)).map { NSNumber(value: $0) }
+        }
+        return converter
+    }
+
     /// The converter for `inputFormat`, built on first use and reused after that.
     ///
     /// Held across buffers deliberately: a converter rebuilt (or `reset()`) per
@@ -120,7 +158,7 @@ nonisolated final class AudioFormatNormalizer {
         if let converter, converterInputFormat == inputFormat {
             return converter
         }
-        guard let fresh = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+        guard let fresh = configuredConverter(from: inputFormat) else {
             return nil
         }
         converter = fresh

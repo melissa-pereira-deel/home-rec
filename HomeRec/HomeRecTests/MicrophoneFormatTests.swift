@@ -148,4 +148,76 @@ struct MicrophoneFormatTests {
         let pcm = try #require(AudioSampleConverter.makePCMBuffer(from: sample))
         #expect(pcm.frameLength == 256)
     }
+
+    // MARK: - Through the normalizer (BL-150, second half)
+    //
+    // ⚠️ Everything above stops at `makePCMBuffer`, and that is exactly where
+    // the first fix stopped being enough. Conversion succeeded — 4 channels,
+    // peak 0.5 — and then `AudioFormatNormalizer` turned it into silence,
+    // because `AVAudioConverter` defaults `channelMap` to `[-1, -1]` for a
+    // discrete layout and reports success while emitting zeros. A test that
+    // ends one stage early cannot see that. These do not.
+
+    /// The end-to-end assertion the earlier round was missing: audio in, audio
+    /// out. Fails on the pre-`channelMap` normalizer.
+    @Test("A 4-channel buffer survives normalization without becoming silence")
+    func multichannelSurvivesNormalization() throws {
+        let sample = SampleBufferFixtures.integer(
+            frames: 512, channels: 4, layout: .int24AlignedHigh
+        )
+        let converted = try #require(AudioSampleConverter.makePCMBuffer(from: sample))
+        #expect(try peak(converted) > 0.01, "precondition: conversion should already work")
+
+        let normalized = try #require(
+            AudioFormatNormalizer().normalize(converted),
+            "normalize returned nil for a 4-channel buffer"
+        )
+        #expect(normalized.format.channelCount == 2)
+        #expect(
+            try peak(normalized) > 0.01,
+            "normalized to digital silence — AVAudioConverter mapped no source channels, and reported success while doing it"
+        )
+    }
+
+    /// Channel counts a multi-input interface or an aggregate device might
+    /// present. A fix that handles only 4 would leave 6- and 8-channel devices
+    /// silently broken in exactly the same way.
+    @Test("Every channel count normalizes to audible stereo", arguments: [1, 2, 4, 6, 8] as [UInt32])
+    func everyChannelCountNormalizes(channels: UInt32) throws {
+        let sample = SampleBufferFixtures.integer(frames: 256, channels: channels, layout: .int16)
+        let converted = try #require(AudioSampleConverter.makePCMBuffer(from: sample))
+        let normalized = try #require(
+            AudioFormatNormalizer().normalize(converted),
+            "normalize returned nil for \(channels) channels"
+        )
+        #expect(normalized.format.channelCount == 2)
+        #expect(try peak(normalized) > 0.01, "\(channels) channels normalized to silence")
+    }
+
+    /// The map must take channels 1 and 2 specifically — not sum, and not some
+    /// other pair. On a Scarlett 2i2 channels 3–4 are Loopback, carrying what
+    /// the Mac is playing, so a take that folded them in would put system audio
+    /// into a microphone recording.
+    @Test("Normalization takes the first two channels, not a sum of all of them")
+    func normalizationTakesFirstTwoChannels() throws {
+        // Channels 0 and 1 carry distinct DC levels; 2 and 3 carry a much larger
+        // one, so summing or picking the wrong pair is unmistakable.
+        let sample = SampleBufferFixtures.integer(frames: 256, channels: 4, layout: .int16) { ch, _ in
+            switch ch {
+            case 0: return 0.10
+            case 1: return 0.20
+            default: return 0.80   // stand-in for loopback content
+            }
+        }
+        let converted = try #require(AudioSampleConverter.makePCMBuffer(from: sample))
+        let normalized = try #require(AudioFormatNormalizer().normalize(converted))
+        let data = try #require(normalized.floatChannelData)
+
+        // Sampled away from the edges: a resampler's first frames ramp up.
+        let left = data[0][128]
+        let right = data[1][128]
+        #expect(abs(left - 0.10) < 0.02, "left should be channel 1 (0.10), got \(left)")
+        #expect(abs(right - 0.20) < 0.02, "right should be channel 2 (0.20), got \(right)")
+        #expect(left < 0.5 && right < 0.5, "loopback content leaked into the take")
+    }
 }
