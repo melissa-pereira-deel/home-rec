@@ -24,11 +24,17 @@ This guide covers the per-release flow. One-time setup lives in
 
 Run all of this from the repo root.
 
-### 1. Decide the version
+### 1. Decide the version, and cut the CHANGELOG section
 
 Bump `MARKETING_VERSION` in `HomeRec/HomeRec.xcodeproj` (Xcode → target →
 General → Version) if this release contains code changes. The build script
 reads it and tags the release with it. Use [SemVer](https://semver.org).
+
+Then rename the `## [Unreleased]` heading to `## [$VERSION] - YYYY-MM-DD` and
+open a fresh empty `## [Unreleased]` above it. Step 5 reads the release notes
+out of that heading by name, so skipping this ships an **empty** GitHub release
+and an empty Sparkle update sheet — with no error, because there is nothing
+malformed about a changelog whose newest section is still called Unreleased.
 
 ### 2. Confirm `main` is clean and up to date
 
@@ -64,13 +70,33 @@ waits.
 
 ### 5. Publish the GitHub Release
 
+**Check what the notes will be before publishing** — an empty release is also an
+empty Sparkle update sheet, which is the last screen a user sees before
+accepting:
+
+```bash
+awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} f' \
+  CHANGELOG.md | sed '/^---$/d'
+```
+
+That must print the section body. If it prints nothing, the CHANGELOG still
+says `## [Unreleased]` and step 1 was skipped.
+
 ```bash
 gh release create "v$VERSION" \
   --title "Home Rec v$VERSION" \
-  --notes-file <(awk '/^## \['"$VERSION"'\]/,/^## \[/' CHANGELOG.md | sed '$d') \
+  --notes-file <(awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md | sed '/^---$/d') \
   dist/HomeRec.dmg \
   dist/HomeRec.dmg.sha256
 ```
+
+⚠️ The previous form here was `awk '/^## \[$VERSION\]/,/^## \[/' … | sed '$d'`,
+and it **could never work for any version**. A range expression ends on the
+first record matching the end pattern *including the record that started it*,
+and `## [1.1.0] - 2026-08-07` matches both `/^## \[1.1.0\]/` and `/^## \[/`. So
+the range was always exactly one line, `sed '$d'` deleted it, and the result was
+always empty. Verified against 1.0.2 as well. A flag is used instead of a range
+because it is the only form that survives a header matching both ends.
 
 If the CHANGELOG section isn't ready (release notes draft), pass `--notes "…"` inline instead.
 
