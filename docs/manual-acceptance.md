@@ -230,6 +230,67 @@ is the failure mode this file exists to prevent.
 Newest first. Record what was checked, what was *not*, and by what means — a run
 that doesn't say what it skipped is indistinguishable from a complete one.
 
+## v1.1.0 — update interlock, 2026-08-11 · `ff28b6b`
+
+**All three interlock checks pass, and the one that matters had never actually
+run before.** Gate 2 — the postponed relaunch — executed for the first time in
+the project's history during this session. It has no unit test (BL-154), so
+until now nothing had ever exercised it.
+
+### Passed — by a person at the machine
+
+| Check | Evidence |
+|---|---|
+| Greyed while recording | Confirmed three times: magnified screenshots of the row dimmed while its neighbours, including "Quit Home Rec" directly below, stayed bright; and independently by hand — "cannot check for update while recording, option appear as disabled" |
+| Live again once stopped | A check was started from the menu while idle after several takes |
+| **Postponed relaunch** | Both log lines, below |
+
+```
+19:59:44.288  Update ready but a recording is open; postponing relaunch
+20:00:41.631  Recording stopped
+20:00:41.631  Recording ended; releasing the postponed update relaunch
+```
+
+Clicking **Install and Relaunch** mid-take did nothing visible — which is the
+correct behaviour and worth writing down, because it reads as a broken button.
+There is no UI for a postponement. The app stayed alive on its original pid,
+kept recording, and the bundle was still 1.0.9. On stopping, the release fired
+in the **same millisecond** as the stop, and it relaunched as 1.1.0 build 10100.
+
+**The take survived**: 58,878,764 bytes, 306.66s of valid stereo PCM, playable,
+matching the 307s it was open. That is the guarantee the gate exists for.
+
+**Same-path relaunch, incidentally verified.** The update replaced the bundle in
+place — same path, same name, exactly one `Home Rec.app` and no second copy
+alongside. Previously recorded as not run. ⚠️ This was at `~/Desktop`, so the
+`/Applications` half of that check is still open.
+
+### The first attempt passed by accident, and that is the lesson
+
+The run before this one looked like a pass — download finished mid-take, no
+relaunch, installed after stopping — but **neither gate-2 line was logged**.
+Sparkle had stopped at "Ready to Install" waiting for a click, and the click
+came after the recording ended. The app was protected by Sparkle's consent
+prompt, not by the interlock. The delegate was consulted once, said "safe", and
+did nothing.
+
+**So the pass condition for this check is the two log lines, not the visible
+behaviour.** Nothing on screen distinguishes a working interlock from Sparkle
+politely waiting. Anyone re-running this must click **Install and Relaunch while
+still recording**, and must check the log.
+
+Note also that the obvious route is blocked: "Check for Updates…" is greyed
+during a take (gate 1, working as designed), so the check must be *started while
+idle* and the download must still be in flight when recording begins. This is
+what the throttled feed is for — unthrottled, the payload arrives in 4ms and the
+overlap cannot be created by hand.
+
+### Not established
+
+- **TCC survival across the update** was not tested. The bundle was replaced
+  while holding a Screen Recording grant, but no recording was attempted
+  afterwards to confirm the grant survived.
+
 ## v1.1.0 — auto-update path, 2026-08-10 · `cd56bf0`
 
 **The update path is now proven in both directions: it installs a correctly
