@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The menu-bar popover no longer cuts its own sentence off** — The status line read "Play something, then hit rec…", which reads as something broken rather than as a sentence. It now takes a second line when it needs one. The same fix covers the status lines you are more likely to meet in daily use: the popover names what you are capturing, and an app with a long name was being cut off the same way.
+
 ## [1.1.0] - 2026-08-07
 
 ### Added
