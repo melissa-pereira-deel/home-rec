@@ -285,11 +285,24 @@ idle* and the download must still be in flight when recording begins. This is
 what the throttled feed is for — unthrottled, the payload arrives in 4ms and the
 overlap cannot be created by hand.
 
-### Not established
+### TCC survived the update
 
-- **TCC survival across the update** was not tested. The bundle was replaced
-  while holding a Screen Recording grant, but no recording was attempted
-  afterwards to confirm the grant survived.
+Recorded from the **updated** bundle immediately after the relaunch: no prompt,
+no denial, `Capture started` 192ms after the take began, and a valid 15.84s
+stereo PCM file. ScreenCaptureKit cannot start without the grant, so a started
+capture *is* the proof — no need to interpret the absence of a prompt.
+
+This is the check that would have been quietly expensive to get wrong. TCC
+validates against the code requirement, and a shipped update replaces the whole
+bundle; if the grant did not carry across, every user updating would silently
+lose Screen Recording and discover it the next time they tried to record. It
+carries because the replacement is signed by the same Developer ID team
+(`S3J47F2UXA`) — which also means **a signing-identity change is the thing that
+would break it**, not a version bump. Re-run this check on any release where the
+signing identity changes.
+
+⚠️ Verified at `~/Desktop`. The `/Applications` case is not separately tested,
+though nothing in TCC's model makes the location the deciding factor here.
 
 ## v1.1.0 — auto-update path, 2026-08-10 · `cd56bf0`
 
