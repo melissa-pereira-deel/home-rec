@@ -43,8 +43,10 @@ struct PermissionProbeTests {
         let permissions = MockPermissionProviding(.denied)
         let viewModel = makeViewModel(permissions)
 
-        // Give any stray Task spawned during init a chance to run.
-        for _ in 0..<50 { await Task.yield() }
+        // Waiting on the preflight is what makes the `checkCount == 0` below
+        // mean anything: it proves the launch path ran before we assert which
+        // API it used.
+        await waitUntil("the launch probe to complete") { permissions.preflightCount == 1 }
 
         #expect(permissions.preflightCount == 1)
         #expect(permissions.checkCount == 0, "Launch must not call the probe that can prompt")
@@ -55,7 +57,9 @@ struct PermissionProbeTests {
     func grantedLaunchUsesPreflight() async {
         let permissions = MockPermissionProviding(.granted)
         let viewModel = makeViewModel(permissions)
-        for _ in 0..<50 { await Task.yield() }
+        await waitUntil("launch to reflect the granted status") {
+            viewModel.permissionStatus == .granted
+        }
 
         #expect(viewModel.permissionStatus == .granted)
         #expect(permissions.checkCount == 0)
@@ -80,11 +84,11 @@ struct PermissionProbeTests {
         watcher.onGranted = { granted = true }
 
         watcher.startPolling()
-        for _ in 0..<2000 where permissions.checkCount < 3 { await Task.yield() }
+        await waitUntil("the watcher's third probe") { permissions.checkCount >= 3 }
 
         // The system grants; preflight stays stale forever.
         permissions.status = .granted
-        for _ in 0..<2000 where !granted { await Task.yield() }
+        await waitUntil("the watcher to announce the grant") { granted }
 
         #expect(granted, "A latched preflight would never reach this")
         #expect(permissions.preflightCount == 0, "The loop must not use the silent API")
@@ -93,9 +97,13 @@ struct PermissionProbeTests {
     // MARK: - Activation re-probe
 
     /// Fires `didBecomeActiveNotification` and lets the observer's task settle.
+    ///
+    /// Unconditional by necessity: every caller asserts that the activation did
+    /// *not* probe, and there is no positive edge to wait on. Each such test
+    /// pairs this with a non-vacuity check that the launch path ran.
     private func activate() async {
         center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-        for _ in 0..<50 { await Task.yield() }
+        await settle()
     }
 
     /// `didBecomeActive` fires on launch too, and before this guard a fresh
@@ -107,7 +115,7 @@ struct PermissionProbeTests {
     func activationDoesNotProbeBeforeIntent() async {
         let permissions = MockPermissionProviding(.denied)
         let viewModel = makeViewModel(permissions)
-        for _ in 0..<50 { await Task.yield() }
+        await waitUntil("the launch probe to complete") { permissions.preflightCount == 1 }
 
         // Launch, then a switch away and back, then another. None is a request.
         await activate()
@@ -125,7 +133,9 @@ struct PermissionProbeTests {
     func activationSkipsProbeWhenGranted() async {
         let permissions = MockPermissionProviding(.granted)
         let viewModel = makeViewModel(permissions)
-        for _ in 0..<50 { await Task.yield() }
+        await waitUntil("launch to reflect the granted status") {
+            viewModel.permissionStatus == .granted
+        }
         let baseline = permissions.checkCount
 
         // Intent is set, so the *only* thing still holding the observer back is
@@ -146,13 +156,15 @@ struct PermissionProbeTests {
     func activationReprobesAfterSeekingPermission() async {
         let permissions = MockPermissionProviding(.denied)
         let viewModel = makeViewModel(permissions)
-        for _ in 0..<50 { await Task.yield() }
+        await waitUntil("the launch probe to complete") { permissions.preflightCount == 1 }
         #expect(viewModel.permissionStatus == .denied)
 
         await viewModel.requestPermission()   // sent to System Settings
         permissions.status = .granted        // granted while away
         await activate()                     // and back
-        for _ in 0..<2000 where viewModel.permissionStatus != .granted { await Task.yield() }
+        await waitUntil("the return probe to re-detect the grant") {
+            viewModel.permissionStatus == .granted
+        }
 
         #expect(viewModel.permissionStatus == .granted)
         #expect(permissions.checkCount >= 1)
@@ -185,7 +197,7 @@ struct PermissionProbeTests {
         let viewModel = makeSettingsViewModel(permissions, clock: NeverPollClock())
 
         viewModel.openSystemSettings()
-        for _ in 0..<200 where permissions.checkCount < 1 { await Task.yield() }
+        await waitUntil("the registering probe to start") { permissions.checkCount >= 1 }
 
         // Probe in flight, pane still shut.
         #expect(permissions.checkCount >= 1)
@@ -193,7 +205,9 @@ struct PermissionProbeTests {
 
         permissions.holdsChecks = false
         permissions.resumePendingChecks()
-        for _ in 0..<2000 where permissions.openSettingsCount == 0 { await Task.yield() }
+        await waitUntil("the pane to open once registration completes") {
+            permissions.openSettingsCount == 1
+        }
 
         #expect(permissions.openSettingsCount == 1)
     }
@@ -208,7 +222,9 @@ struct PermissionProbeTests {
         let viewModel = makeSettingsViewModel(permissions, clock: ImmediatePollClock())
 
         viewModel.openSystemSettings()
-        for _ in 0..<2000 where permissions.openSettingsCount == 0 { await Task.yield() }
+        await waitUntil("the deadline to open the pane without the probe") {
+            permissions.openSettingsCount == 1
+        }
 
         #expect(permissions.openSettingsCount == 1)
 
@@ -224,8 +240,10 @@ struct PermissionProbeTests {
         let viewModel = makeSettingsViewModel(permissions, clock: NeverPollClock())
 
         viewModel.openSystemSettings()
-        for _ in 0..<2000 where permissions.checkCount < 1 { await Task.yield() }
-        for _ in 0..<200 { await Task.yield() }
+        // The probe is the positive edge; the settle then covers the window in
+        // which a regression would have gone on to open the pane.
+        await waitUntil("the registering probe to complete") { permissions.checkCount >= 1 }
+        await settle()
 
         #expect(viewModel.permissionStatus == .granted)
         #expect(permissions.openSettingsCount == 0)
@@ -244,15 +262,66 @@ struct PermissionProbeTests {
         let viewModel = makeSettingsViewModel(permissions, clock: ImmediatePollClock())
 
         viewModel.openSystemSettings()
-        for _ in 0..<2000 where permissions.checkCount < 3 { await Task.yield() }
+        await waitUntil("the watcher's third poll") { permissions.checkCount >= 3 }
         #expect(viewModel.permissionStatus == .denied)
 
         // The user flips the toggle in System Settings. No clicks on Home Rec,
         // no activation — nothing but the state changing out from under us.
         permissions.status = .granted
-        for _ in 0..<2000 where viewModel.permissionStatus != .granted { await Task.yield() }
+        await waitUntil("the background poll to notice the grant") {
+            viewModel.permissionStatus == .granted
+        }
 
         #expect(viewModel.permissionStatus == .granted)
+    }
+
+    /// BL-156. The flake that turned CI red on a CHANGELOG-only commit was this
+    /// bug, not a slow test: intermittently the grant above was observed and then
+    /// *thrown away*.
+    ///
+    /// `openSystemSettings()` starts the watcher and the registration probe
+    /// together, and the registration probe deliberately outlives its own
+    /// deadline. So when the watcher sees the grant, that first probe is often
+    /// still in flight, holding the single-flight slot — the watcher's handoff
+    /// joined it instead of writing, and the probe then landed its pre-grant
+    /// `.denied` on top of the grant. The watcher stops the moment it fires, so
+    /// nothing asked again: stuck at "Almost ready" until relaunch, which is the
+    /// failure the watcher exists to prevent.
+    ///
+    /// Held deterministically here — the real thing needs a slow probe and an
+    /// unlucky interleaving, which is why it surfaced roughly one run in four.
+    @Test("A grant survives a slower probe that was issued before it")
+    func grantSurvivesAnOlderInFlightProbe() async {
+        let permissions = MockPermissionProviding(.denied)
+        permissions.answersWithStatusAtIssue = true
+        permissions.holdsChecks = true
+        let viewModel = makeSettingsViewModel(permissions, clock: ImmediatePollClock())
+
+        // A probe is issued while still denied and parked mid-flight, holding the
+        // single-flight slot exactly as the registration probe does. Starting it
+        // explicitly is what makes this deterministic: driven through
+        // `openSystemSettings()` alone, whether the slot is taken before the
+        // watcher fires is left to task ordering — which is the whole reason the
+        // original defect surfaced only about one run in four.
+        let older = Task { await viewModel.checkPermission() }
+        await waitUntil("the older probe to be in flight") { permissions.checkCount >= 1 }
+
+        // The user grants, and the watcher observes it while that probe is parked.
+        permissions.holdsChecks = false
+        permissions.status = .granted
+        viewModel.openSystemSettings()
+        await waitUntil("the watcher to observe the grant") {
+            viewModel.permissionStatus == .granted
+        }
+
+        // Now the older probe finally lands. It answers the question it was asked
+        // — "granted?" *before* the toggle — and must not overwrite the grant.
+        permissions.resumePendingChecks()
+        _ = await older.value
+        await settle()
+
+        #expect(viewModel.permissionStatus == .granted,
+                "A probe older than the grant must not un-grant the app")
     }
 
     /// BL-085 guard on the relocated loop: it must start only behind the user's
@@ -261,7 +330,7 @@ struct PermissionProbeTests {
     func watcherDoesNotPollBeforeIntent() async {
         let permissions = MockPermissionProviding(.denied)
         let viewModel = makeViewModel(permissions)
-        for _ in 0..<50 { await Task.yield() }
+        await waitUntil("the launch probe to complete") { permissions.preflightCount == 1 }
 
         await activate()
         await activate()

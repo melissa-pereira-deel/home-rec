@@ -81,26 +81,6 @@ jobs:
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Release build
-        # BLOCKING gate. Everything above is a Debug build, and Release is not
-        # the same compilation: whole-module, x86_64 as well as arm64, and
-        # `#if DEBUG` code is gone from it.
-        #
-        # That last difference shipped a defect. A `#Preview` in a vendored file
-        # referenced fixtures guarded by `#if DEBUG`; every Debug build and the
-        # whole test suite passed, and the archive failed with "cannot find
-        # 'GlassSampleWaveforms' in scope" — found by hand, mid-release, after
-        # the tag had been cut. A green suite said nothing about whether the
-        # product could be built at all.
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project HomeRec/HomeRec.xcodeproj \
-            -scheme HomeRec \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -110,3 +90,54 @@ jobs:
             TestResults.xcresult
             TestResults-functional.xcresult
           if-no-files-found: ignore
+
+  release-build:
+    name: Release build
+    # BLOCKING gate, and deliberately a SEPARATE JOB rather than a step after
+    # the tests (BL-156). Everything in `unit-tests` is a Debug build, and
+    # Release is not the same compilation: whole-module, x86_64 as well as
+    # arm64, and `#if DEBUG` code is gone from it.
+    #
+    # That last difference shipped a defect. A `#Preview` in a vendored file
+    # referenced fixtures guarded by `#if DEBUG`; every Debug build and the
+    # whole test suite passed, and the archive failed with "cannot find
+    # 'GlassSampleWaveforms' in scope" — found by hand, mid-release, after the
+    # tag had been cut. A green suite said nothing about whether the product
+    # could be built at all.
+    #
+    # As a trailing step it inherited that same blindness from the other side:
+    # any test failure — including a flaky one — skipped it, so exactly when
+    # the tree was in doubt, nobody learned whether it still built. That
+    # happened on `main` at 66d0702. A separate job has no `needs:`, so the two
+    # gates fail independently and both always report.
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Release build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project HomeRec/HomeRec.xcodeproj \
+            -scheme HomeRec \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
+
+# NOT ADDED, deliberately: a job running `scripts/check-docs.sh`.
+# It cannot pass on a clean checkout. Most of what it verifies lives in
+# CLAUDE.md, which is gitignored, so on CI the file is absent and the script
+# exits 1 on a missing-file error rather than on any disagreement about the
+# code. It already skips its private/tech-debt.md section when that file is
+# absent; the CLAUDE.md section needs the same treatment before this is worth a
+# job, and the residue that would actually run here is only the rot guards.
+# Adding it as-is would pin CI red permanently — the failure this file's other
+# changes exist to remove.

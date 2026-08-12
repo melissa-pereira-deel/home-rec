@@ -84,10 +84,10 @@ struct PermissionGrantWatcherTests {
         let watcher = makeWatcher(permissions)
 
         watcher.startPolling()
-        for _ in 0..<2000 where watcher.isPolling { await Task.yield() }
+        await waitUntil("the loop to stop on the grant") { !watcher.isPolling }
 
         let settled = permissions.checkCount
-        for _ in 0..<50 { await Task.yield() }
+        await settle()
         #expect(permissions.checkCount == settled)
     }
 
@@ -97,12 +97,12 @@ struct PermissionGrantWatcherTests {
         let watcher = makeWatcher(permissions)
 
         watcher.startPolling()
-        for _ in 0..<2000 where permissions.checkCount < 3 { await Task.yield() }
+        await waitUntil("the watcher's third probe") { permissions.checkCount >= 3 }
         watcher.stopPolling()
 
-        for _ in 0..<20 { await Task.yield() }
+        await settle()
         let settled = permissions.checkCount
-        for _ in 0..<50 { await Task.yield() }
+        await settle()
         #expect(permissions.checkCount == settled)
     }
 
@@ -113,12 +113,12 @@ struct PermissionGrantWatcherTests {
 
         watcher.startPolling()
         watcher.startPolling()
-        for _ in 0..<2000 where permissions.checkCount < 5 { await Task.yield() }
+        await waitUntil("the watcher's fifth probe") { permissions.checkCount >= 5 }
         watcher.stopPolling()
-        for _ in 0..<20 { await Task.yield() }
+        await settle()
 
         let first = permissions.checkCount
-        for _ in 0..<20 { await Task.yield() }
+        await settle()
         #expect(permissions.checkCount == first)
     }
 
@@ -128,11 +128,11 @@ struct PermissionGrantWatcherTests {
         do {
             let watcher = makeWatcher(permissions)
             watcher.startPolling()
-            for _ in 0..<2000 where permissions.checkCount < 2 { await Task.yield() }
+            await waitUntil("the watcher's second probe") { permissions.checkCount >= 2 }
         }
-        for _ in 0..<20 { await Task.yield() }
+        await settle()
         let settled = permissions.checkCount
-        for _ in 0..<50 { await Task.yield() }
+        await settle()
         #expect(permissions.checkCount == settled)
     }
 
@@ -144,10 +144,10 @@ struct PermissionGrantWatcherTests {
         let watcher = makeWatcher(permissions, maxProbes: 5)
 
         watcher.startPolling()
-        for _ in 0..<2000 where watcher.isPolling { await Task.yield() }
+        await waitUntil("the loop to stop at its budget") { !watcher.isPolling }
 
         #expect(permissions.checkCount == 5)
-        for _ in 0..<50 { await Task.yield() }
+        await settle()
         #expect(permissions.checkCount == 5, "Exhausting the budget must actually stop the loop")
     }
 
@@ -177,7 +177,7 @@ struct PermissionGrantWatcherTests {
         let watcher = makeWatcher(permissions)
 
         watcher.startPolling()
-        for _ in 0..<2000 where watcher.isPolling { await Task.yield() }
+        await waitUntil("the loop to stop on the grant") { !watcher.isPolling }
 
         #expect(watcher.holdsActivityAssertion == false)
     }
@@ -188,7 +188,7 @@ struct PermissionGrantWatcherTests {
         let watcher = makeWatcher(permissions, maxProbes: 3)
 
         watcher.startPolling()
-        for _ in 0..<2000 where watcher.isPolling { await Task.yield() }
+        await waitUntil("the loop to stop at its budget") { !watcher.isPolling }
 
         #expect(watcher.holdsActivityAssertion == false)
     }
@@ -209,11 +209,13 @@ struct PermissionGrantWatcherTests {
         )
 
         let first = Task { await viewModel.checkPermission() }
-        for _ in 0..<2000 where permissions.checkCount < 1 { await Task.yield() }
+        await waitUntil("the first probe to be in flight") { permissions.checkCount >= 1 }
 
         permissions.status = .granted
         let second = Task { await viewModel.checkPermission() }
-        for _ in 0..<10 { await Task.yield() }
+        // No positive edge to wait on: the point is that the second caller does
+        // *not* issue its own probe, so give it every chance to and check it did not.
+        await settle()
 
         permissions.holdsChecks = false
         permissions.resumePendingChecks()
@@ -237,7 +239,10 @@ struct PermissionGrantWatcherTests {
 
         let a = Task { await viewModel.checkPermission() }
         let b = Task { await viewModel.checkPermission() }
-        for _ in 0..<50 { await Task.yield() }
+        // Wait for the shared probe to start, then settle: a second probe, if
+        // the single-flight regressed, would be issued in that window.
+        await waitUntil("the shared probe to be in flight") { permissions.checkCount >= 1 }
+        await settle()
 
         permissions.holdsChecks = false
         permissions.resumePendingChecks()

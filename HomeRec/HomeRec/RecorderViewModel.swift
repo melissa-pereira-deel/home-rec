@@ -135,6 +135,10 @@ class RecorderViewModel: ObservableObject {
     /// Watches for a grant made in System Settings while the app runs (BL-088).
     /// Created on first use; started only from a user's own click.
     private var grantWatcher: PermissionGrantWatcher?
+    /// Bumped whenever an authoritative observation writes `permissionStatus`.
+    /// A probe that was issued before the bump answers an older question and is
+    /// discarded rather than applied on top of it.
+    private var permissionGeneration = 0
     private let installLocationProvider: InstallLocationProviding
     /// The install-location panel, created on first use for the same reason.
     private var installNoticePanel: FloatingPanelHost?
@@ -283,16 +287,40 @@ class RecorderViewModel: ObservableObject {
     /// UI insists permission is missing seconds after the user granted it. That is
     /// precisely the failure the guide exists to prevent, so it must not be
     /// reintroduced by the guide's own polling.
+    ///
+    /// Single-flighting alone does not order the *writes*, which is the other half
+    /// of the same failure (BL-156). A probe's answer describes the moment it ran,
+    /// and applying it later can put a pre-grant `.denied` on top of a grant that
+    /// has since been observed — so this guard drops any answer that a newer
+    /// authoritative observation has already superseded.
     func checkPermission() async {
         if let inFlight = permissionProbe {
             _ = await inFlight.value
             return
         }
+        let generation = permissionGeneration
         let probe = Task { await permissions.checkPermission() }
         permissionProbe = probe
         let status = await probe.value
         permissionProbe = nil
+        guard generation == permissionGeneration else { return }
         permissionStatus = status
+    }
+
+    /// Record a grant the watcher observed directly.
+    ///
+    /// The watcher only fires after an authoritative probe came back `.granted`,
+    /// which is newer than anything still in flight — so this is the freshest
+    /// answer available and it must win. Routing it back through
+    /// `checkPermission()` did the opposite: the registration probe deliberately
+    /// outlives its own deadline, so it is often still in flight here, and the
+    /// call would *join* it and return without writing anything — leaving the
+    /// stale `.denied` to land afterwards. The watcher stops the instant it fires,
+    /// so nothing ever asked again and the app sat at "Almost ready" until
+    /// relaunch: the exact failure the watcher exists to prevent.
+    private func applyObservedGrant() {
+        permissionGeneration += 1
+        permissionStatus = .granted
     }
 
     /// Request permission
@@ -538,7 +566,7 @@ class RecorderViewModel: ObservableObject {
             let watcher = PermissionGrantWatcher(permissions: permissions, clock: pollClock)
             watcher.onGranted = { [weak self] in
                 // Mirror into the app's own state so every surface updates.
-                Task { @MainActor in await self?.checkPermission() }
+                self?.applyObservedGrant()
             }
             grantWatcher = watcher
         }

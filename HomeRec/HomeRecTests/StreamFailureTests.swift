@@ -45,9 +45,7 @@ struct StreamFailureTests {
             #expect(viewModel.state == .error(.streamFailed("Screen Recording permission revoked")))
 
             // Let the (main-actor) finalize task run to completion.
-            while mockWriter.stopCount == 0 {
-                await Task.yield()
-            }
+            await waitUntil("the writer to be stopped") { mockWriter.stopCount > 0 }
         }
 
         #expect(mockWriter.stopCount == 1)

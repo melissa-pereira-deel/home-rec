@@ -111,13 +111,23 @@ final class MockPermissionProviding: PermissionProviding {
         return preflightStatus ?? status
     }
 
+    /// Answer with the status as it was when the probe was *issued* rather than
+    /// when it is released.
+    ///
+    /// The real API's answer describes the moment the system call ran, so a probe
+    /// taken before a grant reports `.denied` however late its result is applied.
+    /// A held probe otherwise answers with a value that did not exist when it was
+    /// taken, which cannot reproduce a stale-write race at all.
+    var answersWithStatusAtIssue = false
+
     func checkPermission(_ kind: PermissionKind = .screenCapture) async -> PermissionStatus {
         checkCount += 1
         requestedKinds.append(kind)
+        let atIssue = status
         if holdsChecks {
             await withCheckedContinuation { pending.append($0) }
         }
-        return status
+        return answersWithStatusAtIssue ? atIssue : status
     }
 
     func requestPermission(_ kind: PermissionKind = .screenCapture) async -> Bool { status == .granted }

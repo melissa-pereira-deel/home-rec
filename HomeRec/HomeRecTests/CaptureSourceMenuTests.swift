@@ -321,9 +321,9 @@ struct CaptureSourceMenuTests {
 
         let menu = NSMenu()
         delegate.menuNeedsUpdate(menu)
-        // The refresh, if one were wrongly scheduled, is a `Task` — yield so it
+        // The refresh, if one were wrongly scheduled, is a `Task` — settle so it
         // would have had the chance to run before we assert it did not.
-        await Task.yield()
+        await settle()
 
         #expect(probe.availableAppsCallCount == 0)
         #expect(menu.items.contains { $0.title == "Allow Screen Recording…" })
