@@ -157,7 +157,7 @@ struct RecorderViewModelTests {
         viewModel.performRecovery()
         // Opening Settings is now async: it waits for the registering probe first
         // so the pane doesn't render a list Home Rec isn't in yet (BL-087).
-        for _ in 0..<2000 where permission.openSettingsCount == 0 { await Task.yield() }
+        await waitUntil("recovery to open System Settings") { permission.openSettingsCount == 1 }
 
         #expect(permission.openSettingsCount == 1)
         #expect(viewModel.showError == false)
@@ -315,9 +315,7 @@ struct RecorderViewModelTests {
 
             #expect(viewModel.state == .error(.streamFailed("display went to sleep")))
 
-            while controller.finalizeCount == 0 {
-                await Task.yield()
-            }
+            await waitUntil("the controller to finalize") { controller.finalizeCount > 0 }
         }
 
         #expect(controller.finalizeCount == 1)

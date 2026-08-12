@@ -204,14 +204,14 @@ struct InstallLocationTests {
             installNoticePresenter: {},
             notificationCenter: center
         )
-        for _ in 0..<50 { await Task.yield() }
+        await settle()
         let baseline = permissions.checkCount
 
         // Two activations: the first is launch (swallowed for everyone); the
         // second is the one that would probe — and must not, when translocated.
         for _ in 0..<2 {
             center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-            for _ in 0..<50 { await Task.yield() }
+            await settle()
         }
 
         #expect(permissions.checkCount == baseline,
