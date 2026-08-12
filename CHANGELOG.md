@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Granting Screen Recording permission no longer occasionally fails to register** — If you granted permission in System Settings while Home Rec sat in the background, it could stay on "Almost ready to record" as though nothing had happened, and stay there until you quit and reopened the app. Home Rec was asking the system twice at once, and the answer to the earlier question — asked before you flipped the toggle, and so still "not granted" — could arrive last and overwrite the grant it had just seen. It now keeps the newer answer. Whether you hit this came down to timing, so it may have looked like the grant simply didn't take.
 - **The menu-bar popover no longer cuts its own sentence off** — The status line read "Play something, then hit rec…", which reads as something broken rather than as a sentence. It now takes a second line when it needs one. The same fix covers the status lines you are more likely to meet in daily use: the popover names what you are capturing, and an app with a long name was being cut off the same way.
 
 ## [1.1.0] - 2026-08-07
