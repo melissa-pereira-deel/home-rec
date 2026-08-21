@@ -30,7 +30,15 @@ struct RecorderViewModelTests {
             controller: controller ?? MockRecordingControlling(),
             permissions: MockPermissionProviding(permission),
             clock: clock ?? ManualClock(),
-            saveLocation: saveLocation
+            saveLocation: saveLocation,
+            // Pinned, not defaulted. Without this the view model builds a real
+            // `AudioSourceManager` and reads the *developer's* UserDefaults, so
+            // the suite's behaviour depends on whichever source was last chosen
+            // in the running app (TEST_HOST is the app itself). That went
+            // unnoticed while a mic denial was silently swallowed; the moment
+            // it stopped being swallowed, a machine with a microphone selected
+            // failed a test about System Settings.
+            audioSource: MockAudioSourceProviding(selectedSource: .systemAll)
         )
     }
 
@@ -144,6 +152,7 @@ struct RecorderViewModelTests {
             controller: controller,
             permissions: permission,
             clock: ManualClock(),
+            audioSource: MockAudioSourceProviding(selectedSource: .systemAll),
             pollClock: ImmediatePollClock(),
             registrationTimeout: 0
         )
@@ -570,6 +579,135 @@ struct CaptureSourceErrorTests {
         #expect(RecorderError.microphoneDenied.recovery == .openMicrophoneSettings)
         #expect(RecorderError.microphoneDenied.recovery != .tryAgain)
         #expect(RecorderError.microphoneDenied.message.contains("microphone"))
+    }
+
+    @Test("A denied microphone reaches the user instead of vanishing")
+    func micDenialReachesTheUser() async {
+        // BL-161, shipped in v1.1.0. The mic gate ran *before* the move to
+        // `.starting`, so the denial was raised from `.idle` — and
+        // `(.idle → .error)` is not a legal transition, so `transition(to:)`
+        // rejected it and returned. `presentError` sits after that guard, so
+        // nothing was ever shown: state stayed `.idle`, the status line still
+        // read "Ready to record", and the button did nothing. For ever.
+        //
+        // Fails without the fix: `state` is `.idle` and `showError` is false.
+        let controller = MockRecordingControlling()
+        let source = MockAudioSourceProviding(selectedSource: .mic(deviceUID: "scarlett-2i2"))
+        let permission = MockPermissionProviding(.granted)
+        permission.micStatus = .denied
+        let viewModel = RecorderViewModel(
+            controller: controller,
+            permissions: permission,
+            clock: ManualClock(),
+            audioSource: source
+        )
+
+        await viewModel.startRecording()
+
+        #expect(viewModel.state == .error(.microphoneDenied))
+        #expect(viewModel.showError)
+        #expect(viewModel.errorMessage?.contains("microphone") == true)
+        #expect(viewModel.recoverySuggestion == .openMicrophoneSettings)
+        // The denial must stop the recording, not merely be reported alongside it.
+        #expect(controller.startCount == 0)
+    }
+
+    @Test("The mic denial is not reported as the generic start failure")
+    func micDenialKeepsItsOwnCopy() async {
+        // The same class f9517a3 fixed for `AudioSourceError`: "Make sure some
+        // audio is playing, then try again" is nonsense advice for a mic, and
+        // `.tryAgain` is a loop because a denied `requestAccess` returns false
+        // immediately without prompting.
+        let source = MockAudioSourceProviding(selectedSource: .mic(deviceUID: "scarlett-2i2"))
+        let permission = MockPermissionProviding(.granted)
+        permission.micStatus = .denied
+        let viewModel = RecorderViewModel(
+            controller: MockRecordingControlling(),
+            permissions: permission,
+            clock: ManualClock(),
+            audioSource: source
+        )
+
+        await viewModel.startRecording()
+
+        #expect(viewModel.errorMessage?.contains("audio is playing") == false)
+        #expect(viewModel.recoverySuggestion != .tryAgain)
+    }
+
+    @Test("The mic grant is asked for through the permission seam")
+    func micAccessGoesThroughThePermissionSeam() async {
+        // The view model used to call `AVCaptureDevice.requestAccess` directly,
+        // which no test could mock — the reason the branch above shipped
+        // unexercised. Asserting the seam is used keeps it reachable.
+        let source = MockAudioSourceProviding(selectedSource: .mic(deviceUID: "scarlett-2i2"))
+        let permission = MockPermissionProviding(.granted)
+        permission.micStatus = .denied
+        let viewModel = RecorderViewModel(
+            controller: MockRecordingControlling(),
+            permissions: permission,
+            clock: ManualClock(),
+            audioSource: source
+        )
+
+        await viewModel.startRecording()
+
+        #expect(permission.requestedPermissionKinds == [.microphone])
+    }
+
+    @Test("Pressing record again after a denial says so again")
+    func micDenialRepeatsOnASecondPress() async {
+        // The failure mode a design review flagged for the *other* candidate
+        // fix: if the denial is raised while still `.idle`, then after the
+        // first error the state is `.error`, and `.error → .error` is illegal
+        // too — so the second press goes silent again and the user is back to
+        // "the button does nothing", permanently.
+        //
+        // Raising it from `.starting` avoids that: `.error → .starting` and
+        // `.starting → .error` are both legal, so every press reports. This
+        // test is what keeps that property from being refactored away.
+        let source = MockAudioSourceProviding(selectedSource: .mic(deviceUID: "scarlett-2i2"))
+        let permission = MockPermissionProviding(.granted)
+        permission.micStatus = .denied
+        let viewModel = RecorderViewModel(
+            controller: MockRecordingControlling(),
+            permissions: permission,
+            clock: ManualClock(),
+            audioSource: source
+        )
+
+        await viewModel.startRecording()
+        #expect(viewModel.state == .error(.microphoneDenied))
+
+        // The user dismisses the alert and tries again.
+        viewModel.showError = false
+        await viewModel.startRecording()
+
+        #expect(viewModel.state == .error(.microphoneDenied))
+        #expect(viewModel.showError)
+        #expect(permission.requestedPermissionKinds == [.microphone, .microphone])
+    }
+
+    @Test("A granted microphone still records")
+    func micGrantedStillRecords() async {
+        // The control. Without it the denial test above could pass simply
+        // because the mic path never runs at all — the BL-150 trap, where every
+        // test stopped one stage before the thing that was broken.
+        let controller = MockRecordingControlling()
+        let source = MockAudioSourceProviding(selectedSource: .mic(deviceUID: "scarlett-2i2"))
+        let permission = MockPermissionProviding(.granted)
+        permission.micStatus = .granted
+        let viewModel = RecorderViewModel(
+            controller: controller,
+            permissions: permission,
+            clock: ManualClock(),
+            audioSource: source
+        )
+
+        await viewModel.startRecording()
+
+        #expect(viewModel.state == .recording)
+        #expect(controller.startCount == 1)
+        #expect(!viewModel.showError)
     }
 
     @Test("Microphone recovery opens the Microphone pane, not Screen Recording")
