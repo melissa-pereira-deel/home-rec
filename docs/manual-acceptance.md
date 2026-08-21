@@ -54,8 +54,36 @@ layer reveals more underneath.
 - [ ] **Per-app** — play audio in the selected app *and* another app
       simultaneously; the file contains **only** the selected one
 - [ ] **Microphone** — record; correct pitch and speed
-      *(a 44.1 kHz interface into a 48 kHz-declared file is the real test of the
-      normalizer; broken, it plays ~8.8% fast)*
+- [ ] **Microphone at 44.1 kHz** — the *sample-rate* path. BL-150 fixed the
+      channel path and explicitly did not cover this one, and 44.1 kHz is the
+      likely majority configuration for the hardware this app targets.
+
+      Every encoder guards the rate (`WAVWriter:118`, `M4AEncoder:116`, FLAC's
+      full-format equality), so a 44.1 kHz buffer *reaching* an encoder fails
+      loudly and is not the risk. The risk is the inverse: 44.1 kHz audio
+      **labelled** 48 kHz passes all three guards — they compare the label, not
+      the content — and lands ~8.8% fast, with real audio, plausible duration
+      and no error. Ears do not reliably settle 1.5 semitones. A tone does.
+
+      1. Audio MIDI Setup → the interface → Format → **44 100 Hz**
+      2. Confirm it took. At 48 kHz this check proves nothing:
+         `system_profiler SPAudioDataType | grep -A8 <device> | grep "Current SampleRate"`
+      3. `scripts/verify-mic-rate.sh --tone /tmp/ref.wav && afplay /tmp/ref.wav`
+      4. Record ~60 s from the mic, stop, then
+         `scripts/verify-mic-rate.sh <take> 60`
+
+      **Pass conditions — all four. "It sounded fine" is not one of them:**
+      - [ ] dominant frequency **1000 Hz ±1%**; **~1088 Hz is 48000/44100** — the bug
+      - [ ] peak above **−60 dBFS** — guards the BL-150 silent-file class
+      - [ ] duration within **2%** of wall clock — catches resampler frame drift,
+            which moves duration without moving pitch
+      - [ ] **no** `Dropping buffers` line in
+            `log stream --predicate 'subsystem == "com.mdebritto.homerec"' --level debug`
+
+      A single input lands hard left under the `[0, 1]` channel map. That is
+      correct, not a fault. The script is validated against four fixtures
+      (clean, 8.8%-fast, silent, tone-under-louder-noise) so it cannot pass
+      everything — run them if you doubt it.
 - [ ] Selected app quits mid-recording → partial file plays, banner shown
 - [ ] Mic unplugged mid-recording → partial file plays, banner shown
 - [ ] Mic unplugged while idle → menu shows "(not connected)", checked, disabled
