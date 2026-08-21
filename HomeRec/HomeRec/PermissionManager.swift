@@ -87,7 +87,25 @@ class PermissionManager: PermissionProviding {
     /// recovery action. The view model owns every decision to open Settings, so
     /// that every one of them is registered, guided, and granted-gated.
     func requestPermission(_ kind: PermissionKind = .screenCapture) async -> Bool {
-        await checkPermission(kind) == .granted
+        switch kind {
+        case .screenCapture:
+            return await checkPermission(kind) == .granted
+        case .microphone:
+            // `checkPermission(.microphone)` is deliberately a silent read, so
+            // it can never raise the prompt. Requesting is a different act:
+            // unlike Screen Recording, macOS will genuinely re-prompt for the
+            // microphone while the status is `.notDetermined`.
+            //
+            // This lives here rather than in the view model so the whole branch
+            // sits behind `PermissionProviding` and a test can reach it — the
+            // reason BL-161 shipped is that the view model called
+            // `AVCaptureDevice` directly and no test could get near it.
+            //
+            // ⚠️ Once TCC has denied, `requestAccess` returns false immediately
+            // and shows nothing. The caller must surface that, not retry.
+            if preflight(.microphone) == .granted { return true }
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        }
     }
 
     /// Open System Settings at the pane for `kind`.

@@ -360,6 +360,8 @@ class RecorderViewModel: ObservableObject {
             }
         }
 
+        transition(to: .starting)
+
         // Recording a microphone needs its own grant, and it is a *different*
         // flow rather than the same one parameterised (BL-130): unlike Screen
         // Recording, macOS will genuinely re-prompt for this, so asking is the
@@ -368,14 +370,22 @@ class RecorderViewModel: ObservableObject {
         // ⚠️ Requesting this without `NSMicrophoneUsageDescription` in the built
         // bundle is an immediate TCC *termination*, not a denial. `InfoPlistTests`
         // asserts the key is in the product for exactly this reason.
+        //
+        // 🔴 This gate runs *after* the move to `.starting`, and the order is
+        // load-bearing (BL-161). Raising the denial from `.idle` looked correct
+        // and shipped in v1.1.0, but `(.idle → .error)` is not a legal
+        // transition, so `transition(to:)` rejected it and returned — leaving
+        // the state `.idle`, the status line still reading "Ready to record",
+        // `showError` false, and both error surfaces gated on a state that
+        // never changed. The user got a button that did nothing, for ever, with
+        // one log line as the only trace. `.starting → .error` is legal, so the
+        // error now reaches `presentError`. Do not move this back above.
         if case .mic = audioSource.selectedSource {
             guard await requestMicrophoneAccess() else {
                 transition(to: .error(.microphoneDenied))
                 return
             }
         }
-
-        transition(to: .starting)
 
         do {
             // Wire waveform callback
@@ -498,8 +508,10 @@ class RecorderViewModel: ObservableObject {
     /// flow here is simply to ask.
     /// - Returns: whether access is granted.
     func requestMicrophoneAccess() async -> Bool {
-        if permissions.preflight(.microphone) == .granted { return true }
-        return await AVCaptureDevice.requestAccess(for: .audio)
+        // Routed through `PermissionProviding` rather than calling
+        // `AVCaptureDevice` here. The direct call was unmockable, so the denial
+        // branch had no test — which is how BL-161 reached users.
+        await permissions.requestPermission(.microphone)
     }
 
     /// Change the capture source (BL-111).
@@ -755,7 +767,15 @@ class RecorderViewModel: ObservableObject {
     /// entering an error state.
     private func transition(to next: RecordingState) {
         guard state.canTransition(to: next) else {
-            Log.recorder.error("Rejected illegal recording-state transition")
+            // Name both ends. The bare literal this replaced could not tell you
+            // *which* error had been thrown away, which is a large part of why
+            // BL-161 survived in a shipped build with the log line firing on
+            // every single press.
+            Log.recorder.error("""
+                Rejected illegal recording-state transition: \
+                \(String(describing: self.state), privacy: .public) → \
+                \(String(describing: next), privacy: .public)
+                """)
             return
         }
         state = next

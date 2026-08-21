@@ -43,9 +43,25 @@ layer reveals more underneath.
 - [ ] `tccutil reset ScreenCapture com.mdebritto.HomeRec`, then launch:
       **no dialog** on opening the menu, and **none on hovering `App ▶`**
       *(run `tccutil` yourself — it modifies a privacy setting)*
-- [ ] First mic recording prompts, and the app is **not killed** — a missing
-      usage string is a TCC *termination*, not a denial
-- [ ] Declining the mic prompt shows "Open settings", never "Try again"
+- [ ] First mic recording **prompts at all** — and the app is **not killed** (a
+      missing usage string is a TCC *termination*, not a denial). No prompt at
+      all is the BL-161 signature: under the hardened runtime, a missing
+      `com.apple.security.device.audio-input` makes TCC refuse *without asking*
+- [ ] Declining the mic prompt shows **an error at all** — then check it offers
+      "Open settings" and never "Try again".
+      ⚠️ Order matters. Worded the other way round this item is unfalsifiable
+      against the failure that shipped: a tester who saw *nothing* could tick
+      "never Try again" truthfully, and did
+- [ ] **Dismiss that error and press record again — it comes back.** The second
+      press is a different code path from the first, and the shipped bug's
+      nearest alternative fix would have gone silent again here
+- [ ] **Mic already denied in System Settings before launch** → pressing record
+      reports it. No prompt appears in this case, by design
+- [ ] The **packaged** app carries the microphone entitlement:
+      `codesign -d --entitlements :- "/Applications/Home Rec.app"` lists
+      `com.apple.security.device.audio-input`.
+      ⚠️ A Debug build has no hardened runtime and works regardless — checking
+      one proves nothing about the release
 - [ ] Onboarding copy still describes what the app actually does
 
 ## Recording, per source

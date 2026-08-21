@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required to record from the microphone under the hardened runtime.
+
+	     Not optional and not a formality: the release build is signed with
+	     `--options runtime` (scripts/build-dmg.sh) for notarization, and under
+	     the hardened runtime TCC refuses kTCCServiceMicrophone outright when
+	     this entitlement is absent — it will not even show the prompt, so
+	     AVCaptureDevice.requestAccess returns false immediately, for ever.
+	     That is how v1.1.0 shipped advertising microphone capture that could
+	     never work (BL-161).
+
+	     ENABLE_APP_SANDBOX = NO does NOT exempt this. The sandbox and the
+	     hardened runtime are separate mechanisms with separate checks, and
+	     this entitlement is read by both. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

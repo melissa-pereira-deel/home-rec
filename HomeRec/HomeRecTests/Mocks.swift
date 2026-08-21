@@ -108,6 +108,7 @@ final class MockPermissionProviding: PermissionProviding {
 
     func preflight(_ kind: PermissionKind = .screenCapture) -> PermissionStatus {
         preflightCount += 1
+        if kind == .microphone, let micStatus { return micStatus }
         return preflightStatus ?? status
     }
 
@@ -130,7 +131,24 @@ final class MockPermissionProviding: PermissionProviding {
         return answersWithStatusAtIssue ? atIssue : status
     }
 
-    func requestPermission(_ kind: PermissionKind = .screenCapture) async -> Bool { status == .granted }
+    /// Answer for `.microphone` only, when the two kinds must differ — the mic
+    /// branch is only reachable once Screen Recording is already `.granted`, so
+    /// a single `status` cannot express "screen yes, mic no" at all.
+    var micStatus: PermissionStatus?
+
+    private func status(for kind: PermissionKind) -> PermissionStatus {
+        kind == .microphone ? (micStatus ?? status) : status
+    }
+
+    /// Kinds passed to `requestPermission`, in order. Deliberately separate from
+    /// `requestedKinds`, which records `checkPermission` — merging them would
+    /// make the existing probe assertions answer a different question.
+    private(set) var requestedPermissionKinds: [PermissionKind] = []
+
+    func requestPermission(_ kind: PermissionKind = .screenCapture) async -> Bool {
+        requestedPermissionKinds.append(kind)
+        return status(for: kind) == .granted
+    }
     func openSystemPreferences(for kind: PermissionKind = .screenCapture) { openSettingsCount += 1 }
 
     /// Release every held probe.
