@@ -16,6 +16,7 @@
 
 import Testing
 import Foundation
+import Security
 @testable import HomeRec
 
 @MainActor
@@ -128,6 +129,68 @@ struct InfoPlistTests {
         // The reverse guard: nothing the app cannot justify. NSAppleEventsUsageDescription
         // was carried in the dead file for months with no AppleEvents code anywhere.
         #expect(string("NSAppleEventsUsageDescription") == nil)
+    }
+
+    /// Whether the host bundle carries a *real* signature rather than the
+    /// linker's ad-hoc one.
+    ///
+    /// CI builds with `CODE_SIGNING_ALLOWED=NO`, which produces
+    /// `flags=0x20002(adhoc,linker-signed)` and no entitlements at all — there
+    /// the entitlement check would fail for a reason that says nothing about
+    /// the entitlement. Gating on ad-hoc rather than on "are there any
+    /// entitlements" is deliberate: the case that actually matters is a
+    /// Developer-ID build with the entitlement dropped, and that build is not
+    /// ad-hoc, so it still fails loudly instead of quietly skipping.
+    nonisolated private static var hostCarriesARealSignature: Bool {
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess,
+              let staticCode else { return false }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(), &info) == errSecSuccess,
+              let dict = info as? [String: Any],
+              let flags = dict[kSecCodeInfoFlags as String] as? UInt32 else { return false }
+        let adhoc: UInt32 = 0x0002
+        return (flags & adhoc) == 0
+    }
+
+    /// BL-161. The usage string above and this entitlement are a **pair**, and
+    /// only asserting one of them is what shipped a microphone feature that
+    /// could never work.
+    ///
+    /// The release build is signed `--options runtime` for notarization
+    /// (`scripts/build-dmg.sh`). Under the hardened runtime, TCC refuses
+    /// `kTCCServiceMicrophone` outright when this entitlement is absent — it
+    /// will not even show the prompt, so `AVCaptureDevice.requestAccess`
+    /// returns false immediately and permanently. v1.1.0 shipped that way: the
+    /// usage string was present and asserted, the entitlement was absent and
+    /// unasserted, and the app was denied before the user saw anything.
+    ///
+    /// ⚠️ `ENABLE_APP_SANDBOX = NO` does not exempt this. The sandbox and the
+    /// hardened runtime are separate mechanisms; this entitlement is read by
+    /// both, and reasoning from the sandbox setting is what made two reviews
+    /// dismiss the cause.
+    ///
+    /// Read from the **running task**, which is the host app, for the same
+    /// reason every other check here reads the product: an entitlements file in
+    /// the repo proves nothing about what got signed.
+    @Test(
+        "The microphone entitlement the hardened runtime requires is in the product",
+        .enabled(if: hostCarriesARealSignature)
+    )
+    func microphoneEntitlementIsInTheProduct() {
+        guard let task = SecTaskCreateFromSelf(nil) else {
+            Issue.record("Could not read the running task's entitlements")
+            return
+        }
+        let value = SecTaskCopyValueForEntitlement(
+            task,
+            "com.apple.security.device.audio-input" as CFString,
+            nil
+        )
+        #expect(
+            (value as? Bool) == true,
+            "com.apple.security.device.audio-input is missing from the built product; under the hardened runtime the microphone is denied without a prompt"
+        )
     }
 
     /// BL-034 (Sparkle). `SUFeedURL` and `SUPublicEDKey` are third-party keys with
