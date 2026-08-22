@@ -228,6 +228,58 @@ SIG_ATTRS="$("$SPARKLE_BIN" "$DMG")"
 ENCLOSURE_URL="https://github.com/melissa-pereira-deel/home-rec/releases/download/v$VERSION/$(basename "$DMG")"
 APPCAST_ITEM="$DIST_DIR/appcast-item-$VERSION.xml"
 
+# Release notes, rendered inline in the update dialog rather than linked.
+#
+# ⚠️ This was `<sparkle:releaseNotesLink>` pointing at the GitHub release page,
+# and Sparkle loads that URL in an embedded web view — so the dialog rendered
+# the whole of github.com, nav bar and **Sign in** button included, instead of
+# the notes (BL-168). The screen asking permission to replace an app on
+# someone's disk is the last place to show a third-party sign-in prompt, and
+# the carefully written CHANGELOG prose never appeared at all.
+#
+# Inline HTML also means the notes need no network to render.
+CHANGELOG="$(pwd)/CHANGELOG.md"
+RELEASE_NOTES_HTML="$(
+  awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} f' "$CHANGELOG" \
+  | sed '/^---$/d' \
+  | awk '# Convert the subset of Markdown the CHANGELOG actually uses into the HTML
+# Sparkle renders inline. Deliberately small: headings, bullets, bold, code.
+# Anything richer belongs in the release page, not in an update dialog.
+function inline(s,   b, c) {
+    while (match(s, /\*\*[^*]+\*\*/)) {
+        b = substr(s, RSTART + 2, RLENGTH - 4)
+        s = substr(s, 1, RSTART - 1) "<strong>" b "</strong>" substr(s, RSTART + RLENGTH)
+    }
+    while (match(s, /`[^`]+`/)) {
+        c = substr(s, RSTART + 1, RLENGTH - 2)
+        s = substr(s, 1, RSTART - 1) "<code>" c "</code>" substr(s, RSTART + RLENGTH)
+    }
+    return s
+}
+/^### / { if (inlist) { print "</ul>"; inlist = 0 } print "<h3>" inline(substr($0, 5)) "</h3>"; next }
+/^- /   { if (!inlist) { print "<ul>"; inlist = 1 } print "<li>" inline(substr($0, 3)) "</li>"; next }
+/^[[:space:]]*$/ { next }
+        { if (inlist) { print "</ul>"; inlist = 0 } print "<p>" inline($0) "</p>" }
+END     { if (inlist) print "</ul>" }'
+)"
+
+# An empty section is the failure this whole flow keeps circling: it produces an
+# empty update sheet with no error, because a changelog whose newest section is
+# still called Unreleased is not malformed. Fail here instead.
+if [ -z "${RELEASE_NOTES_HTML//[[:space:]]/}" ]; then
+  echo "error: CHANGELOG.md has no '## [$VERSION]' section, or it is empty." >&2
+  echo "       Rename '## [Unreleased]' to '## [$VERSION] - $(date -u +%Y-%m-%d)' first." >&2
+  exit 1
+fi
+
+case "$RELEASE_NOTES_HTML" in
+  *"]]>"*)
+    echo "error: release notes contain ']]>' which would terminate the CDATA block early." >&2
+    exit 1
+    ;;
+esac
+
+
 cat > "$APPCAST_ITEM" <<ITEM
     <item>
       <title>$VERSION</title>
@@ -235,7 +287,9 @@ cat > "$APPCAST_ITEM" <<ITEM
       <sparkle:version>$(defaults read "$APP/Contents/Info" CFBundleVersion)</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>$(defaults read "$APP/Contents/Info" LSMinimumSystemVersion)</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/melissa-pereira-deel/home-rec/releases/tag/v$VERSION</sparkle:releaseNotesLink>
+      <description><![CDATA[
+$RELEASE_NOTES_HTML
+      ]]></description>
       <enclosure url="$ENCLOSURE_URL" $SIG_ATTRS type="application/octet-stream" />
     </item>
 ITEM
