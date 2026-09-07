@@ -17,7 +17,7 @@ Native Mac app. Lossless WAV. One click. Free, forever.</p>
 ![macOS](https://img.shields.io/badge/macOS-15.0+-blue.svg)
 ![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)
-![Version](https://img.shields.io/badge/Version-1.1.1-informational.svg)
+![Version](https://img.shields.io/badge/Version-1.1.2-informational.svg)
 
 ## Overview
 
@@ -398,4 +398,4 @@ Home Rec is free, forever — no paid tier, no upsell, no premium hiding behind 
 
 ---
 
-**Version:** 1.1.1 &nbsp;·&nbsp; **Last updated:** 2026-09-07 &nbsp;·&nbsp; **Download:** [homerec.app](https://www.homerec.app)
+**Version:** 1.1.2 &nbsp;·&nbsp; **Last updated:** 2026-09-07 &nbsp;·&nbsp; **Download:** [homerec.app](https://www.homerec.app)
