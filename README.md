@@ -17,7 +17,7 @@ Native Mac app. Lossless WAV. One click. Free, forever.</p>
 ![macOS](https://img.shields.io/badge/macOS-15.0+-blue.svg)
 ![Swift](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![Status](https://img.shields.io/badge/Status-Active_Development-success.svg)
-![Version](https://img.shields.io/badge/Version-1.0-informational.svg)
+![Version](https://img.shields.io/badge/Version-1.1.1-informational.svg)
 
 ## Overview
 
@@ -64,7 +64,7 @@ Home Rec is designed for users who want the simplest possible path to recording 
 - macOS 15 (Sequoia) or later
 - Apple Silicon or Intel
 - Screen Recording permission (the app prompts on first record) — required by ScreenCaptureKit even for audio-only capture
-- Microphone permission, **only** if you record from a microphone. Unlike the Screen Recording prompt, macOS will ask again if you decline this one.
+- Microphone permission, **only** if you record from a microphone. macOS asks once: **if you decline, it will not ask again.** Home Rec says microphone access is missing and offers to open the Microphone pane in System Settings, where you can grant it by hand.
 
 For building from source: Xcode 16+ and a free Apple Developer account.
 
@@ -302,7 +302,6 @@ _Note: Test coverage is a work in progress._
 - MP3 export (via AVAssetExportSession post-stop)
 - Pause/resume within a single recording
 - Preferences window + customizable keyboard shortcuts
-- Sparkle auto-update
 
 **Shipped in v1.1** *(see [CHANGELOG.md](CHANGELOG.md) for the full list):*
 
@@ -399,4 +398,4 @@ Home Rec is free, forever — no paid tier, no upsell, no premium hiding behind 
 
 ---
 
-**Version:** 1.0 &nbsp;·&nbsp; **Last updated:** 2026-06-04 &nbsp;·&nbsp; **Download:** [homerec.app](https://www.homerec.app)
+**Version:** 1.1.1 &nbsp;·&nbsp; **Last updated:** 2026-09-07 &nbsp;·&nbsp; **Download:** [homerec.app](https://www.homerec.app)
