@@ -1,0 +1,586 @@
+{
+  "schemaVersion": 1,
+  "status": "proposed app-owned Library aliases; inherited source values verified 2026-09-05",
+  "scope": "Single fixed450\u00d7450 content window with Recorder, Library and Naming routes. Inherited visual values unchanged. Recorder visible appearance remains exactly as shipped; nonvisual lifecycle ownership may move to the stable host.",
+  "source": {
+    "colors": "home-rec/HomeRec/HomeRec/DesignSystem/Vendor/Tokens/GlassColors.swift",
+    "theme": "home-rec/HomeRec/HomeRec/DesignSystem/Vendor/Tokens/GlassTheme.swift",
+    "metrics": "home-rec/HomeRec/HomeRec/DesignSystem/Vendor/Tokens/GlassMetrics.swift",
+    "typography": "home-rec/HomeRec/HomeRec/DesignSystem/Vendor/Tokens/GlassTypography.swift",
+    "motion": "home-rec/HomeRec/HomeRec/DesignSystem/Vendor/Tokens/GlassMotion.swift",
+    "adoption": "home-rec/docs/design-system.md",
+    "ground": "home-rec/HomeRec/HomeRec/DesignSystem/Adapters/GlassWindowGround.swift"
+  },
+  "colorSpace": "sRGB",
+  "inherited": {
+    "standard": {
+      "ground": {
+        "hex": "#0D1119",
+        "alpha": 1
+      },
+      "groundRaised": {
+        "hex": "#21243F",
+        "alpha": 1
+      },
+      "surfacePanel": {
+        "hex": "#1A1C22",
+        "alpha": 0.55
+      },
+      "surfaceCard": {
+        "hex": "#1C1C1E",
+        "alpha": 1
+      },
+      "surfaceInset": {
+        "hex": "#FFFFFF",
+        "alpha": 0.06
+      },
+      "surfaceScrim": {
+        "hex": "#000000",
+        "alpha": 0.45
+      },
+      "line": {
+        "hex": "#FFFFFF",
+        "alpha": 0.08
+      },
+      "lineStrong": {
+        "hex": "#FFFFFF",
+        "alpha": 0.18
+      },
+      "textPrimary": {
+        "hex": "#FFFFFF",
+        "alpha": 0.92
+      },
+      "textSecondary": {
+        "hex": "#FFFFFF",
+        "alpha": 0.65
+      },
+      "textTertiary": {
+        "hex": "#8E8E93",
+        "alpha": 1
+      },
+      "textOnAccent": {
+        "hex": "#FFFFFF",
+        "alpha": 1
+      },
+      "textAccent": {
+        "hex": "#FF6B6B",
+        "alpha": 1
+      },
+      "accent": {
+        "hex": "#F23A3A",
+        "alpha": 1
+      },
+      "accentStrong": {
+        "hex": "#C72121",
+        "alpha": 1
+      },
+      "accentMuted": {
+        "hex": "#F23A3A",
+        "alpha": 0.45
+      },
+      "statusDanger": {
+        "hex": "#F23A3A",
+        "alpha": 1
+      },
+      "statusWarning": {
+        "hex": "#EBA82E",
+        "alpha": 1
+      },
+      "statusSuccess": {
+        "hex": "#30D158",
+        "alpha": 1
+      },
+      "statusNeutral": {
+        "hex": "#FFFFFF",
+        "alpha": 0.25
+      },
+      "controlPrimaryNeutral": {
+        "hex": "#F2F2F5",
+        "alpha": 1
+      },
+      "controlSecondary": {
+        "hex": "#C2C2CA",
+        "alpha": 1
+      },
+      "textOnNeutralControl": {
+        "hex": "#0D0D0F",
+        "alpha": 1
+      }
+    },
+    "highContrast": {
+      "ground": {
+        "hex": "#0D1119",
+        "alpha": 1
+      },
+      "groundRaised": {
+        "hex": "#21243F",
+        "alpha": 1
+      },
+      "surfacePanel": {
+        "hex": "#1A1C22",
+        "alpha": 0.55
+      },
+      "surfaceCard": {
+        "hex": "#1C1C1E",
+        "alpha": 1
+      },
+      "surfaceInset": {
+        "hex": "#FFFFFF",
+        "alpha": 0.06
+      },
+      "surfaceScrim": {
+        "hex": "#000000",
+        "alpha": 0.45
+      },
+      "line": {
+        "hex": "#FFFFFF",
+        "alpha": 0.16
+      },
+      "lineStrong": {
+        "hex": "#FFFFFF",
+        "alpha": 0.3
+      },
+      "textPrimary": {
+        "hex": "#FFFFFF",
+        "alpha": 0.92
+      },
+      "textSecondary": {
+        "hex": "#FFFFFF",
+        "alpha": 0.78
+      },
+      "textTertiary": {
+        "hex": "#AEAEB2",
+        "alpha": 1
+      },
+      "textOnAccent": {
+        "hex": "#FFFFFF",
+        "alpha": 1
+      },
+      "textAccent": {
+        "hex": "#FF6B6B",
+        "alpha": 1
+      },
+      "accent": {
+        "hex": "#C72121",
+        "alpha": 1
+      },
+      "accentStrong": {
+        "hex": "#C72121",
+        "alpha": 1
+      },
+      "accentMuted": {
+        "hex": "#F23A3A",
+        "alpha": 0.45
+      },
+      "statusDanger": {
+        "hex": "#F23A3A",
+        "alpha": 1
+      },
+      "statusWarning": {
+        "hex": "#EBA82E",
+        "alpha": 1
+      },
+      "statusSuccess": {
+        "hex": "#30D158",
+        "alpha": 1
+      },
+      "statusNeutral": {
+        "hex": "#FFFFFF",
+        "alpha": 0.25
+      },
+      "controlPrimaryNeutral": {
+        "hex": "#F2F2F5",
+        "alpha": 1
+      },
+      "controlSecondary": {
+        "hex": "#C2C2CA",
+        "alpha": 1
+      },
+      "textOnNeutralControl": {
+        "hex": "#0D0D0F",
+        "alpha": 1
+      }
+    }
+  },
+  "library": {
+    "proposedTypeName": "RecordingLibraryPalette",
+    "ground": "ground",
+    "card": "surfaceCard",
+    "cardOpacity": 1,
+    "title": "textPrimary",
+    "body": "textSecondary",
+    "metadataRest": "textTertiary",
+    "metadataHoverPressedSelected": "textSecondary",
+    "separator": "line",
+    "edge": "lineStrong",
+    "play": {
+      "fill": "controlPrimaryNeutral",
+      "glyph": "textOnNeutralControl",
+      "diameter": 32,
+      "sourceMetric": "GlassMetrics.controlHeightSmall",
+      "hoverOverlay": {
+        "hex": "#000000",
+        "alpha": 0.06
+      },
+      "pressedOverlay": {
+        "hex": "#000000",
+        "alpha": 0.08
+      },
+      "note": "Opaque disc; never use artwork as glyph background. Neutral in every playback state."
+    },
+    "secondaryAction": {
+      "fill": "controlSecondary",
+      "label": "textOnNeutralControl"
+    },
+    "focus": {
+      "color": "textPrimary",
+      "width": 2,
+      "offset": 2,
+      "gapColor": "ground",
+      "note": "Proposed app-local focus geometry, not vendor hairline. Draw on dark exterior plate, never directly over art or white controls."
+    },
+    "selection": {
+      "color": "textSecondary",
+      "width": 1,
+      "note": "Persistent boundary and selected accessibility trait accompany selected fill; focus remains distinct outside it."
+    },
+    "states": {
+      "rest": {
+        "overlay": {
+          "hex": "#FFFFFF",
+          "alpha": 0
+        },
+        "compositeOnCard": "#1C1C1E"
+      },
+      "hover": {
+        "overlay": {
+          "hex": "#FFFFFF",
+          "alpha": 0.06
+        },
+        "compositeOnCard": "#2A2A2C",
+        "source": "surfaceInset numerical reuse; card-hover role is new"
+      },
+      "pressed": {
+        "overlay": {
+          "hex": "#FFFFFF",
+          "alpha": 0.08
+        },
+        "compositeOnCard": "#2E2E30",
+        "source": "new app-local fill role; not alias to line, whose high-contrast value changes"
+      },
+      "selected": {
+        "overlay": {
+          "hex": "#FFFFFF",
+          "alpha": 0.12
+        },
+        "compositeOnCard": "#373739",
+        "source": "new app-local fill role"
+      },
+      "precedence": "selected > pressed > hover > rest; do not stack overlays",
+      "highContrast": "same opaque base/state fills; inherited higher text/line values; retain neutral focus and selection outlines",
+      "inactiveWindow": "keep readable text and selected fill; remove keyboard-focus ring when Library is not key, retain selected outline",
+      "disabled": "use textTertiary at 0.5 opacity for disabled action glyph only; no whole-card dimming; keep explanatory text readable"
+    },
+    "artwork": {
+      "version": 1,
+      "sourceReference": {
+        "top": "#F4AFD6",
+        "bottom": "#D774D8",
+        "note": "Visual-reference inspiration only; muted proposals below are not measured samples or inherited tokens."
+      },
+      "families": {
+        "rose": [
+          "#D6A0BB",
+          "#AF739E"
+        ],
+        "iris": [
+          "#ABA5CC",
+          "#797394"
+        ],
+        "mist": [
+          "#AAC0BF",
+          "#729197"
+        ],
+        "sand": [
+          "#D0BD9D",
+          "#A28A71"
+        ]
+      },
+      "direction": "top-leading to bottom-trailing",
+      "labelsOnArtwork": false,
+      "assignment": "sum the 16 canonical UUID bytes modulo 4; family order rose, iris, mist, sand; never Swift Hasher()",
+      "reducedTransparency": "gradients already opaque; unchanged",
+      "increasedContrast": "unchanged decorative gradients; meaningful control and focus contrasts come from opaque plates",
+      "semantics": "Decorative stable identity only; never status, format, date or selection"
+    },
+    "accessibility": {
+      "reduceTransparency": "Apply new Library/Name opaque-ground content composition without changing existing Recorder material or vendored renderer.",
+      "reduceMotion": "press and hover changes instant; other appearance opacity at most0.15s; no artwork movement",
+      "noWholeCardOpacity": true
+    },
+    "reservedSemanticRed": {
+      "roles": [
+        "accent",
+        "accentStrong",
+        "accentMuted",
+        "statusDanger",
+        "textAccent"
+      ],
+      "use": "existing recording state or actual errors only; never playback, sorting, focus or decorative artwork",
+      "errorText": "textAccent; actual red status glyph additionally requires icon/word"
+    },
+    "root": {
+      "renderer": "existing GlassWindowGround()",
+      "scope": "Existing shared root once outside route switch and rapid recording observations; new Library/Name routes use inherited colors, unchanged Recorder visible material.",
+      "note": "Single-window docs supersede all prior separate-window/panel geometry. Opaque Library scrolling canvas remains the readability plane."
+    },
+    "canvas": {
+      "fill": "ground",
+      "opacity": 1,
+      "scope": "scrolling collection content only"
+    }
+  },
+  "reuse": {
+    "typography": {
+      "libraryHeading": {
+        "role": "title",
+        "family": "Inter",
+        "size": 14,
+        "weight": 500
+      },
+      "cardTitle": {
+        "role": "bodyEmphasized",
+        "family": "Inter",
+        "size": 13,
+        "weight": 500
+      },
+      "supporting": {
+        "role": "caption",
+        "family": "Inter",
+        "size": 12,
+        "weight": 400
+      },
+      "controls": {
+        "role": "controlCompact",
+        "family": "Inter",
+        "size": 12,
+        "weight": 600
+      },
+      "metadata": {
+        "role": "meta",
+        "family": "system monospaced",
+        "size": 10,
+        "weight": 400
+      },
+      "note": "New Library uses native theme typography and Dynamic Type scaling; JSON sizes are default points. Existing recorder/menu Archivo and Color.red exceptions are frozen, not normalized."
+    },
+    "spacing": {
+      "xxs": 2,
+      "xs": 4,
+      "sm": 6,
+      "s": 8,
+      "m": 10,
+      "md": 12,
+      "l": 14,
+      "xl": 18,
+      "xxl": 22,
+      "xxxl": 28
+    },
+    "radii": {
+      "window": 12,
+      "panel": 22,
+      "cardLarge": 14,
+      "card": 12,
+      "inner": 10,
+      "control": 6,
+      "pill": "capsule"
+    },
+    "geometry": {
+      "minimumHitTarget": 28,
+      "hairline": 1,
+      "cardRadius": "GlassRadius.card",
+      "cardPlateRadius": 12,
+      "artworkRadius": 22,
+      "artworkRadiusNote": "Explicit Library media exception numerically reusing GlassRadius.panel; does not redefine the shared token.",
+      "tileShellPadding": 0,
+      "contentGap": "GlassSpacing.md",
+      "internalComponentPadding": "GlassSpacing.md when applicable; never an extra padded tile shell",
+      "gridGap": "GlassSpacing.xl",
+      "windowInset": "GlassSpacing.xxl"
+    },
+    "motion": {
+      "press": {
+        "seconds": 0.1,
+        "curve": "easeOut",
+        "reduced": "instant"
+      },
+      "hover": {
+        "seconds": 0.12,
+        "curve": "easeOut",
+        "reduced": "instant"
+      },
+      "quick": {
+        "seconds": 0.15,
+        "curve": "easeOut",
+        "reduced": "opacity only"
+      },
+      "reveal": {
+        "seconds": 0.2,
+        "curve": "easeOut",
+        "reducedSeconds": 0.15,
+        "note": "opacity only under Reduce Motion"
+      }
+    },
+    "note": "Reuse existing native tokens; this JSON is a design handoff, not a new runtime theme loader."
+  },
+  "contrast": {
+    "method": "Encoded-sRGB source-over composite before WCAG sRGB linearization; ratios use unrounded channels, displayed hex rounded to 8-bit; opaque Library only. No screenshot/rendered accessibility certification.",
+    "rows": [
+      {
+        "surface": "ground",
+        "composite": "#0D1119",
+        "primary": {
+          "composite": "#ECECED",
+          "contrast": 15.99
+        },
+        "secondary": {
+          "composite": "#AAACAF",
+          "contrast": 8.29
+        },
+        "tertiary": {
+          "composite": "#8E8E93",
+          "contrast": 5.8
+        },
+        "secondaryHC": {
+          "composite": "#CACBCC",
+          "contrast": 11.6
+        },
+        "tertiaryHC": {
+          "composite": "#AEAEB2",
+          "contrast": 8.55
+        }
+      },
+      {
+        "surface": "card",
+        "composite": "#1C1C1E",
+        "primary": {
+          "composite": "#EDEDED",
+          "contrast": 14.51
+        },
+        "secondary": {
+          "composite": "#B0B0B0",
+          "contrast": 7.81
+        },
+        "tertiary": {
+          "composite": "#8E8E93",
+          "contrast": 5.22
+        },
+        "secondaryHC": {
+          "composite": "#CDCDCE",
+          "contrast": 10.71
+        },
+        "tertiaryHC": {
+          "composite": "#AEAEB2",
+          "contrast": 7.69
+        }
+      },
+      {
+        "surface": "hover",
+        "composite": "#2A2A2C",
+        "primary": {
+          "composite": "#EEEEEE",
+          "contrast": 12.41
+        },
+        "secondary": {
+          "composite": "#B4B4B5",
+          "contrast": 6.97
+        },
+        "tertiary": {
+          "composite": "#8E8E93",
+          "contrast": 4.42
+        },
+        "secondaryHC": {
+          "composite": "#D0D0D0",
+          "contrast": 9.34
+        },
+        "tertiaryHC": {
+          "composite": "#AEAEB2",
+          "contrast": 6.51
+        }
+      },
+      {
+        "surface": "pressed",
+        "composite": "#2E2E30",
+        "primary": {
+          "composite": "#EEEEEE",
+          "contrast": 11.69
+        },
+        "secondary": {
+          "composite": "#B6B6B7",
+          "contrast": 6.67
+        },
+        "tertiary": {
+          "composite": "#8E8E93",
+          "contrast": 4.15
+        },
+        "secondaryHC": {
+          "composite": "#D1D1D1",
+          "contrast": 8.86
+        },
+        "tertiaryHC": {
+          "composite": "#AEAEB2",
+          "contrast": 6.12
+        }
+      },
+      {
+        "surface": "selected",
+        "composite": "#373739",
+        "primary": {
+          "composite": "#EFEFEF",
+          "contrast": 10.3
+        },
+        "secondary": {
+          "composite": "#B9B9BA",
+          "contrast": 6.04
+        },
+        "tertiary": {
+          "composite": "#8E8E93",
+          "contrast": 3.63
+        },
+        "secondaryHC": {
+          "composite": "#D3D3D3",
+          "contrast": 7.91
+        },
+        "tertiaryHC": {
+          "composite": "#AEAEB2",
+          "contrast": 5.35
+        }
+      },
+      {
+        "fill": "#F2F2F5",
+        "label": "#0D0D0F",
+        "contrast": "17.38"
+      },
+      {
+        "fill": "#C2C2CA",
+        "label": "#0D0D0F",
+        "contrast": "10.97"
+      },
+      {
+        "fill": "#F23A3A",
+        "label": "#FFFFFF",
+        "contrast": "3.86"
+      },
+      {
+        "fill": "#C72121",
+        "label": "#FFFFFF",
+        "contrast": "5.73"
+      }
+    ]
+  },
+  "inheritedRecorderException": {
+    "standardWhiteOnAccent": 3.86,
+    "highContrastWhiteOnAccentStrong": 5.73,
+    "note": "Existing standard recorder label ratio below4.5; documented inherited exception. Recorder frozen: no color, control or view change authorized by this palette."
+  }
+}
