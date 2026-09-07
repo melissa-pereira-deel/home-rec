@@ -118,6 +118,36 @@ real force-quit is a claim, not a fact.
 - [ ] Recovery never lists the recording currently in progress
 - [ ] Recovery never touches a file that finished normally
 
+## Quit durability — one ⌘Q per format (BL-174)
+
+**The inverse of the block above, and the distinction is the whole point.** A
+force-quit *should* leave a file that needs recovery. **Pressing Quit should
+not.** Until BL-174 there was no `applicationShouldTerminate`, so an ordinary
+⌘Q severed the take exactly like a crash — and recovery, which exists for
+power cuts, was catching a deliberate user action.
+
+So the pass condition here is the opposite of the crash block's: the file must
+open **without** repair, and Recovery must not offer it afterwards.
+
+- [ ] **WAV** — record, ⌘Q mid-take, file opens and reports its true length
+- [ ] **M4A** — record, ⌘Q mid-take, file opens (a severed M4A has no `moov`
+      atom and would not)
+- [ ] **FLAC** — record, ⌘Q mid-take, file opens **without** Recover Recordings.
+      This is the sharpest of the three: FLAC is the one format that cannot be
+      played at all when severed, so if quit is still cutting the file, this is
+      where it shows
+- [ ] Recovery lists **nothing** on the next launch after any of the above
+- [ ] The same for the **app menu's** Quit, the **overflow menu's** Quit row,
+      and the **Dock icon's** Quit — they are four different code paths into one
+      delegate method, and only the last was ever named in the backlog
+- [ ] Quitting while **idle** is still instant — no added delay on the common case
+
+⚠️ **Not mechanically testable, and not a formality.** The unit suite drives a
+fake drain; it cannot exercise AppKit's termination reply or a real encoder's
+finalize. The 5-second bound also cannot rescue a finalize that blocks the main
+thread (TD-014) — if ⌘Q ever appears to hang, that is the cause, and it is a
+known deferral rather than a regression in this work.
+
 ## Auto-update (BL-034) — first shipped in 1.1.0
 
 ⚠️ **Nothing in the suite can reach this.** Building an `SPUUpdater` touches the

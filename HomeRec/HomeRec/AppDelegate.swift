@@ -12,6 +12,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     var menuBarController: MenuBarController?
 
+    /// Decides whether a quit may proceed, and finishes the open take if not
+    /// (BL-174). Wired alongside `menuBarController`.
+    var terminationCoordinator: TerminationCoordinator?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The design system is dark-only by intent — it has no light palette and
         // is not getting one — so the app stops following the system setting.
@@ -34,5 +38,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
+    }
+
+    /// Finish the open take before quitting (BL-174).
+    ///
+    /// This is the only place that catches *every* way out: ⌘Q, the app menu's
+    /// Quit, the overflow menu's Quit row, the Dock menu, and logout. Fixing only
+    /// the overflow row would have left the keystroke — the common path — still
+    /// severing the file, because SwiftUI's stock `.appTermination` command group
+    /// is intact and never routes through our menu.
+    ///
+    /// AppKit calls this on the main thread; `assumeIsolated` states that rather
+    /// than hopping, which would return after the reply was already needed. Same
+    /// pattern as `OverflowMenu`'s menu callbacks.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            // No coordinator means we cannot tell whether a take is open. Quit
+            // rather than hang: an app that will not quit is a worse failure than
+            // a take that needed recovery, and this is the branch a wiring
+            // mistake lands on.
+            guard let terminationCoordinator else { return .terminateNow }
+            return terminationCoordinator.shouldTerminate()
+        }
     }
 }

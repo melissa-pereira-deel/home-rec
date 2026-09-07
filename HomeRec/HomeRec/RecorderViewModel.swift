@@ -433,6 +433,42 @@ class RecorderViewModel: ObservableObject {
     }
 
     /// Stop recording
+    /// Finish whatever is open so the process can end, for BL-174's quit path.
+    ///
+    /// The states are **not** interchangeable, and treating them as one case is
+    /// the way to get this wrong:
+    ///
+    /// - `.starting` — `stopRecording()` is a **silent no-op** here, because
+    ///   `canTransition(.starting → .stopping)` is false. Calling it would drain
+    ///   nothing and let the app quit mid-start. Wait for the state to resolve,
+    ///   then decide again.
+    /// - `.stopping` — a finalize is already in flight. Calling `stopRecording()`
+    ///   would hit the same guard and return immediately; the only correct action
+    ///   is to wait for it to land.
+    /// - `.recording`, `.recovering` — both hold an open encoder. Stop normally.
+    /// - `.idle`, `.error` — nothing open, nothing to do.
+    ///
+    /// Unbounded on purpose: `TerminationCoordinator` owns the bound, so that
+    /// there is one deadline for the whole quit rather than several that
+    /// interact.
+    func finishForTermination() async {
+        // `.starting` cannot be stopped — wait it out first.
+        while state == .starting {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        switch state {
+        case .recording, .recovering:
+            await stopRecording()
+        case .stopping:
+            while state == .stopping {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        case .idle, .error, .starting:
+            return
+        }
+    }
+
     func stopRecording() async {
         guard state.canTransition(to: .stopping) else { return }
 

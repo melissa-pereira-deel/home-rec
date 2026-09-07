@@ -61,6 +61,23 @@ struct HomeRecApp: App {
                     if appDelegate.menuBarController == nil {
                         appDelegate.menuBarController = MenuBarController(viewModel: viewModel)
                     }
+                    // And the quit gate (BL-174). Both predicates are read at the
+                    // moment AppKit asks, not captured now, because this object
+                    // outlives many takes.
+                    if appDelegate.terminationCoordinator == nil {
+                        appDelegate.terminationCoordinator = TerminationCoordinator(
+                            isSafeToQuit: { [weak viewModel] in
+                                // `true` when the view model is gone — see
+                                // AppDelegate. Deliberately the opposite default
+                                // from UpdaterController, which must answer
+                                // "don't replace the binary" when unsure.
+                                viewModel?.state.allowsUpdateInstall ?? true
+                            },
+                            drain: { [weak viewModel] in
+                                await viewModel?.finishForTermination()
+                            }
+                        )
+                    }
                 }
                 // `.background` rather than a ZStack sibling, and the distinction
                 // is load-bearing twice over. A background is sized *by* its
