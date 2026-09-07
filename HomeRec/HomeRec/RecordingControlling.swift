@@ -14,6 +14,8 @@ protocol RecordingControlling: AnyObject {
     var onWaveformData: (([Float]) -> Void)? { get set }
     /// Called when the underlying capture stream fails unexpectedly mid-recording.
     var onStreamError: (@MainActor (String) -> Void)? { get set }
+    /// Called when a buffer cannot be written mid-recording (BL-173).
+    var onWriteError: (@MainActor (String) -> Void)? { get set }
     var isRecording: Bool { get }
     var recordingURL: URL? { get }
     /// Start recording in the given output `format` (BL-015), returning the file URL.

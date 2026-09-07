@@ -31,6 +31,9 @@ class RecordingController: RecordingControlling {
     /// Forwarded from the capture manager when the stream fails mid-recording.
     var onStreamError: (@MainActor (String) -> Void)?
 
+    /// Forwarded from the recorder when a buffer cannot be written (BL-173).
+    var onWriteError: (@MainActor (String) -> Void)?
+
     // MARK: - Initialization
 
     init(
@@ -45,6 +48,9 @@ class RecordingController: RecordingControlling {
         self.audioSource = audioSource ?? AudioSourceManager()
         self.captureManager.onStreamError = { [weak self] message in
             self?.onStreamError?(message)
+        }
+        self.audioRecorder.onWriteError = { [weak self] message in
+            self?.onWriteError?(message)
         }
     }
 

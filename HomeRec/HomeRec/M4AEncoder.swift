@@ -32,7 +32,9 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
         switch self {
         case .setupFailed:     return "Failed to set up the M4A encoder"
         case .notOpen:         return "M4A file is not open for writing"
-        case .writeFailed:     return "Failed to finalize the M4A file"
+        // Thrown from `writeBuffer` as well as `finalize` since BL-112, so the
+        // copy can no longer name finalizing specifically.
+        case .writeFailed:     return "Failed to write audio to the M4A file"
         case .formatMismatch:  return "Audio format changed mid-recording"
         }
     }
