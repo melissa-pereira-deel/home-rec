@@ -9,6 +9,20 @@
 
 import Foundation
 
+/// Why a buffer could not be written, carried from the encoder to the view model.
+///
+/// Typed rather than a `String` because the two cases need opposite copy: one
+/// says the audio could not be saved, the other says it was saved *completely*
+/// and simply reached the format's ceiling. Telling someone their six-hour take
+/// failed when it is sitting complete on disk would be the same class of
+/// dishonesty as the changelog claim BL-173 had to make true.
+enum WriteFailure: Sendable, Equatable {
+    /// The WAV container's 4 GiB ceiling (BL-170). The file is complete.
+    case sizeLimitReached
+    /// Anything else — a full disk, an ejected volume, a refused append.
+    case other(String)
+}
+
 /// A recoverable failure surfaced to the user during recording.
 enum RecorderError: Error, Equatable, Sendable {
     case startFailed(String)
@@ -32,6 +46,9 @@ enum RecorderError: Error, Equatable, Sendable {
     /// The encoder refused a buffer mid-take, so the file stopped growing while
     /// the recording still looked healthy (BL-173).
     case writeFailed(String)
+    /// The take reached the largest size a WAV file can hold (BL-170). Unlike
+    /// every other case here, **nothing went wrong** — the file is complete.
+    case sizeLimitReached
     case diskFull
     case saveLocationUnavailable
 
@@ -42,6 +59,8 @@ enum RecorderError: Error, Equatable, Sendable {
         case .startFailed(let detail), .stopFailed(let detail), .streamFailed(let detail),
              .writeFailed(let detail):
             return detail
+        case .sizeLimitReached:
+            return "WAV data chunk reached its 4 GiB maximum"
         case .sourceUnavailable(let error):
             return error.errorDescription ?? "capture source unavailable"
         case .microphoneDenied:
@@ -73,6 +92,12 @@ enum RecorderError: Error, Equatable, Sendable {
             // full disk from an ejected drive or a revoked folder permission,
             // and guessing wrong sends the user to fix the wrong thing.
             return "Home Rec stopped recording because it couldn't save the audio. What was captured up to that point is still in your save folder."
+        case .sizeLimitReached:
+            // Deliberately not phrased as a failure. The recording is complete
+            // and valid; it met a limit of the WAV format itself, and the other
+            // two formats genuinely do not have one — so naming them is a real
+            // remedy rather than an apology.
+            return "This recording reached the largest size a WAV file can be (about 6 hours). It has been saved complete. For longer recordings, choose M4A or FLAC in settings."
         case .diskFull:
             return "There isn't enough free space to start recording. Free up some disk space and try again."
         case .saveLocationUnavailable:
@@ -96,7 +121,7 @@ enum RecorderError: Error, Equatable, Sendable {
             return .openSettings
         case .saveLocationUnavailable:
             return .chooseFolder
-        case .stopFailed, .diskFull:
+        case .stopFailed, .diskFull, .sizeLimitReached:
             return nil
         case .writeFailed:
             // No `.tryAgain`: whatever stopped the write — a full disk, a

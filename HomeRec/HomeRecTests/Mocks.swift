@@ -52,7 +52,7 @@ final class MockAudioCapturing: AudioCapturing {
 @MainActor
 final class MockAudioFileWriting: AudioFileWriting {
     var onWaveformData: (([Float]) -> Void)?
-    var onWriteError: (@MainActor (String) -> Void)?
+    var onWriteError: (@MainActor (WriteFailure) -> Void)?
     private(set) var recording = false
     private(set) var startCount = 0
     private(set) var stopCount = 0
@@ -73,8 +73,8 @@ final class MockAudioFileWriting: AudioFileWriting {
     func processAudioSample(_ pcmBuffer: AVAudioPCMBuffer) {}
 
     /// Simulate the encoder refusing a buffer mid-take (BL-173).
-    func emitWriteError(_ message: String) {
-        onWriteError?(message)
+    func emitWriteError(_ reason: WriteFailure = .other("write failed")) {
+        onWriteError?(reason)
     }
 
     func stopRecording() throws {
@@ -299,7 +299,7 @@ final class ManualClock: DurationClock {
 final class MockRecordingControlling: RecordingControlling {
     var onWaveformData: (([Float]) -> Void)?
     var onStreamError: (@MainActor (String) -> Void)?
-    var onWriteError: (@MainActor (String) -> Void)?
+    var onWriteError: (@MainActor (WriteFailure) -> Void)?
     private(set) var isRecording = false
     private(set) var recordingURL: URL?
 
@@ -346,7 +346,7 @@ final class MockRecordingControlling: RecordingControlling {
     }
 
     /// Simulate a buffer being refused by the encoder (BL-173).
-    func emitWriteError(_ message: String) {
-        onWriteError?(message)
+    func emitWriteError(_ reason: WriteFailure = .other("write failed")) {
+        onWriteError?(reason)
     }
 }

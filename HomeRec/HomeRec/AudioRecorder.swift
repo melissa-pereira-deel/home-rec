@@ -59,7 +59,7 @@ class AudioRecorder: AudioFileWriting {
     /// queue, so the queue never reads a property the main actor is writing.
     /// This is the confinement TD-009 exists about, applied to a new callback
     /// rather than repeated as a new instance of the same bug.
-    private var activeWriteErrorHandler: (@MainActor (String) -> Void)?
+    private var activeWriteErrorHandler: (@MainActor (WriteFailure) -> Void)?
 
     /// How an encoder is built for a format. Injectable so tests can drive the
     /// stop path with an encoder that fails to finalize (BL-016) — the real app
@@ -77,7 +77,7 @@ class AudioRecorder: AudioFileWriting {
     var onWaveformData: (([Float]) -> Void)?
 
     /// Called once when the encoder refuses a buffer (BL-173).
-    var onWriteError: (@MainActor (String) -> Void)?
+    var onWriteError: (@MainActor (WriteFailure) -> Void)?
 
     // Processing queue for writing to disk
     private let processingQueue = DispatchQueue(
@@ -180,12 +180,20 @@ class AudioRecorder: AudioFileWriting {
             try encoder.writeBuffer(pcmBuffer)
         } catch {
             writeFailed = true
-            let message = error.localizedDescription
+            // Classified here rather than downstream, because this is the only
+            // place that still has the typed error. A size ceiling is not a
+            // failure — the file is complete — and it must not inherit the
+            // "couldn't save the audio" copy (BL-170).
+            let reason: WriteFailure = (error as? WAVWriterError) == .sizeLimitReached
+                ? .sizeLimitReached
+                : .other(error.localizedDescription)
             // The one log this hot path is allowed: it happens once per take, on
             // the way out, not once per buffer.
-            Log.recorder.error("Write failed mid-recording: \(message, privacy: .public)")
+            Log.recorder.error(
+                "Write stopped mid-recording: \(error.localizedDescription, privacy: .public)"
+            )
             if let handler = activeWriteErrorHandler {
-                Task { @MainActor in handler(message) }
+                Task { @MainActor in handler(reason) }
             }
             return
         }

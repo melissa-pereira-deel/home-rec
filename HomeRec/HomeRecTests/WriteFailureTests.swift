@@ -159,7 +159,7 @@ struct WriteFailureTests {
         await viewModel.startRecording()
         #expect(viewModel.state == .recording)
 
-        mockWriter.emitWriteError("No space left on device")
+        mockWriter.emitWriteError(.other("No space left on device"))
 
         // Published synchronously on the failure callback, like .streamFailed.
         #expect(viewModel.state == .error(.writeFailed("No space left on device")))
@@ -167,6 +167,34 @@ struct WriteFailureTests {
 
         await waitUntil("the partial recording to be finalized") { mockWriter.stopCount > 0 }
         #expect(mockWriter.stopCount == 1)
+    }
+
+    @Test("Reaching the WAV size ceiling is not reported as a failure to save")
+    func sizeLimitGetsItsOwnMessage() async {
+        let mockCapturer = MockAudioCapturing()
+        let mockWriter = MockAudioFileWriting()
+        let controller = RecordingController(
+            captureManager: mockCapturer,
+            audioRecorder: mockWriter,
+            audioSource: MockAudioSourceProviding()
+        )
+        let viewModel = RecorderViewModel(
+            controller: controller,
+            permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(),
+            audioSource: MockAudioSourceProviding()
+        )
+
+        await viewModel.startRecording()
+        mockWriter.emitWriteError(.sizeLimitReached)
+
+        // Not `.writeFailed` — the file is complete, and saying otherwise would
+        // tell someone their six-hour take was lost when it is on disk (BL-170).
+        #expect(viewModel.state == .error(.sizeLimitReached))
+        #expect(viewModel.errorMessage?.contains("saved complete") == true)
+        #expect(viewModel.recoverySuggestion == nil)
+
+        await waitUntil("the take to be finalized") { mockWriter.stopCount > 0 }
     }
 
     @Test("A write error while idle is ignored (no spurious error state)")
@@ -186,7 +214,7 @@ struct WriteFailureTests {
         )
 
         #expect(viewModel.state == .idle)
-        mockWriter.emitWriteError("spurious")
+        mockWriter.emitWriteError(.other("spurious"))
         // `(.idle, .error)` is not a legal transition and `transition` rejects
         // illegal moves *silently* — BL-161's lesson. The guard is what makes
         // that safe rather than lossy.
