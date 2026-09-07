@@ -210,8 +210,8 @@ class RecorderViewModel: ObservableObject {
         self.controller.onStreamError = { [weak self] message in
             self?.handleStreamFailure(message)
         }
-        self.controller.onWriteError = { [weak self] message in
-            self?.handleWriteFailure(message)
+        self.controller.onWriteError = { [weak self] reason in
+            self?.handleWriteFailure(reason)
         }
         refreshSaveLocationDisplay()
         // Re-probe permission whenever the app regains focus, so granting Screen
@@ -763,11 +763,16 @@ class RecorderViewModel: ObservableObject {
     /// load-bearing rather than defensive — `(.idle, .error)` is not a legal
     /// transition and `transition` rejects illegal moves *silently*, which is
     /// exactly how BL-161's microphone error went missing.
-    private func handleWriteFailure(_ message: String) {
+    private func handleWriteFailure(_ reason: WriteFailure) {
         guard state == .recording else { return }
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
-        transition(to: .error(.writeFailed(message)))
+        switch reason {
+        case .sizeLimitReached:
+            transition(to: .error(.sizeLimitReached))
+        case .other(let message):
+            transition(to: .error(.writeFailed(message)))
+        }
         Task { [weak self] in
             await self?.controller.finalizeAfterFailure()
         }

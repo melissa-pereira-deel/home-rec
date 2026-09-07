@@ -32,7 +32,7 @@ class RecordingController: RecordingControlling {
     var onStreamError: (@MainActor (String) -> Void)?
 
     /// Forwarded from the recorder when a buffer cannot be written (BL-173).
-    var onWriteError: (@MainActor (String) -> Void)?
+    var onWriteError: (@MainActor (WriteFailure) -> Void)?
 
     // MARK: - Initialization
 

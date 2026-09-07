@@ -135,10 +135,32 @@ extension WAVWriter: AudioFileRecovering {
         try RecoveryIO.size(of: url) > headerByteCount
     }
 
+    /// The `data` chunk size to stamp when repairing a file of `totalBytes`.
+    ///
+    /// Clamps rather than narrows (BL-170). `UInt32(total - headerByteCount)`
+    /// **traps** on a file larger than 4 GiB — so the tool that exists to rescue
+    /// an interrupted take would crash on exactly the oversized file the old
+    /// writer could produce. Nothing creates such a file any more, but ones
+    /// already on disk outlive the fix.
+    ///
+    /// Clamping repairs to a valid 4 GiB WAV rather than refusing: audio past the
+    /// RIFF ceiling is unaddressable by the format regardless, and a playable
+    /// file holding the first ~6 hours beats an unreadable one holding
+    /// everything.
+    ///
+    /// Split out from `repair` so the boundary is testable without a 4 GiB
+    /// fixture — `RecoveryIO.atomicallyPatch` reads the whole file into memory,
+    /// so one could not be used here anyway.
+    static func repairableDataSize(totalBytes: Int) -> UInt32 {
+        let payload = UInt64(max(0, totalBytes - headerByteCount))
+        return UInt32(min(payload, UInt64(WAVWriter.maximumDataBytes)))
+    }
+
+
     static func repair(at url: URL) throws {
         let total = try RecoveryIO.size(of: url)
         guard total > headerByteCount else { throw AudioFileRecoveryError.notRepairable }
-        let dataSize = UInt32(total - headerByteCount)
+        let dataSize = Self.repairableDataSize(totalBytes: total)
 
         try RecoveryIO.atomicallyPatch(url) { bytes in
             func put(_ value: UInt32, at offset: Int) {
@@ -147,6 +169,8 @@ extension WAVWriter: AudioFileRecovering {
                 bytes[offset + 2] = UInt8((value >> 16) & 0xFF)
                 bytes[offset + 3] = UInt8((value >> 24) & 0xFF)
             }
+            // Safe: `dataSize` is clamped to maximumDataBytes, which is derived
+            // so that `36 + dataSize` fits UInt32.
             put(dataSize + 36, at: 4)    // RIFF chunk size
             put(dataSize, at: 40)        // data chunk size
         }

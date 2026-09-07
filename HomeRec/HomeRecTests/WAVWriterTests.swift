@@ -223,6 +223,143 @@ struct WAVWriterTests {
         #expect(samples == expected)
     }
 
+    // MARK: - Size ceiling (BL-170)
+
+    // WAV cannot exceed 4 GiB, and that is the *format's* limit, not ours: the
+    // RIFF chunk size and data chunk size are both UInt32 fields. Before BL-170
+    // the writer counted bytes in a UInt32 and incremented it unguarded, so
+    // reaching the ceiling was not a truncated file — `+=` traps in Swift, so it
+    // was a **crash in the middle of a take**, at 6h12m49s of 48kHz stereo.
+    //
+    // These drive the boundary through an injected cap rather than by writing
+    // 4 GiB. Note a red run here does not look like a normal failure: an
+    // overflow trap takes the test host down with it.
+
+    @Test("Writing up to the cap succeeds and the header reports the true size")
+    func writesUpToTheCap() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        // 512 stereo frames = 2048 bytes; two of them exactly fill a 4096 cap.
+        let writer = WAVWriter(maxDataBytes: 4096)
+        try writer.createFile(at: url, sampleRate: 48000, channels: 2)
+        let buffer = makeFloatBuffer(channels: 2, frames: 512) { _, _ in 0 }
+
+        try writer.writeBuffer(buffer)
+        try writer.writeBuffer(buffer)
+        try writer.finalize()
+
+        let bytes = [UInt8](try Data(contentsOf: url))
+        #expect(readUInt32LE(bytes, 40) == 4096, "data chunk size")
+        #expect(readUInt32LE(bytes, 4) == 36 + 4096, "RIFF chunk size")
+        #expect(bytes.count == 44 + 4096)
+    }
+
+    @Test("The buffer that would exceed the cap is refused, and nothing is written")
+    func bufferPastTheCapIsRefused() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let writer = WAVWriter(maxDataBytes: 4096)
+        try writer.createFile(at: url, sampleRate: 48000, channels: 2)
+        let buffer = makeFloatBuffer(channels: 2, frames: 512) { _, _ in 0 }
+
+        try writer.writeBuffer(buffer)
+        try writer.writeBuffer(buffer)
+
+        #expect(throws: WAVWriterError.sizeLimitReached) {
+            try writer.writeBuffer(buffer)
+        }
+
+        // Refused, not truncated: a partial frame would be silent corruption, so
+        // the take keeps exactly what fit.
+        try writer.finalize()
+        let bytes = [UInt8](try Data(contentsOf: url))
+        #expect(readUInt32LE(bytes, 40) == 4096)
+        #expect(bytes.count == 44 + 4096)
+    }
+
+    @Test("A buffer that only partly fits is refused whole")
+    func partiallyFittingBufferIsRefusedWhole() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        // Cap deliberately not a multiple of the 2048-byte buffer.
+        let writer = WAVWriter(maxDataBytes: 3000)
+        try writer.createFile(at: url, sampleRate: 48000, channels: 2)
+        let buffer = makeFloatBuffer(channels: 2, frames: 512) { _, _ in 0 }
+
+        try writer.writeBuffer(buffer)   // 2048 ≤ 3000, fits
+        #expect(throws: WAVWriterError.sizeLimitReached) {
+            try writer.writeBuffer(buffer)   // 4096 > 3000, refused whole
+        }
+
+        try writer.finalize()
+        let bytes = [UInt8](try Data(contentsOf: url))
+        #expect(readUInt32LE(bytes, 40) == 2048, "no partial frame was written")
+    }
+
+    @Test("The real ceiling is the RIFF field's, block-aligned")
+    func realCeilingIsDerivedNotGuessed() {
+        // 36 + dataSize must fit UInt32, so dataSize ≤ 2³² − 37; and dataSize must
+        // be a whole number of frames, so round down to a multiple of the block
+        // align (4 bytes for 16-bit stereo).
+        #expect(WAVWriter.maximumDataBytes == 4_294_967_256)
+        #expect(WAVWriter.maximumDataBytes % 4 == 0, "must be a whole number of stereo frames")
+
+        // The header arithmetic that used to trap 36 bytes before the counter did.
+        let riff = UInt64(36) + UInt64(WAVWriter.maximumDataBytes)
+        #expect(riff <= UInt64(UInt32.max), "36 + dataSize must not overflow")
+
+        // And the duration that implies, which is what the user actually meets.
+        let seconds = Double(WAVWriter.maximumDataBytes) / 192_000.0
+        #expect(seconds > 22_369.0 && seconds < 22_370.0, "≈ 6h12m49s at 48kHz stereo")
+    }
+
+    @Test("An unsafe cap is clamped, so the header arithmetic cannot be made to trap")
+    func unsafeCapIsClamped() {
+        // The 36-byte window `36 + dataSize` used to overflow in is the top of
+        // UInt32, and the counter's 4096-byte stride steps over it — which is why
+        // the crash lands on the counter and not the header ~99% of the time.
+        // Rather than try to write 4 GiB to reach it, close the window by
+        // construction: no caller can set a cap that would let `dataSize` enter
+        // it, including a caller that passes UInt32.max outright.
+        #expect(WAVWriter(maxDataBytes: .max).effectiveMaxDataBytes == WAVWriter.maximumDataBytes)
+        #expect(WAVWriter(maxDataBytes: UInt32.max - 20).effectiveMaxDataBytes == WAVWriter.maximumDataBytes)
+
+        // A safe cap is honoured as given.
+        #expect(WAVWriter(maxDataBytes: 4096).effectiveMaxDataBytes == 4096)
+
+        // The invariant the clamp buys: for every reachable dataSize, the RIFF
+        // field fits without narrowing.
+        for candidate: UInt32 in [0, 4096, WAVWriter.maximumDataBytes] {
+            #expect(UInt64(36) + UInt64(candidate) <= UInt64(UInt32.max))
+        }
+    }
+
+    @Test("Repairing an oversized orphan clamps instead of trapping")
+    func repairClampsOversizedFile() {
+        let header = WAVWriter.headerByteCount
+
+        // Ordinary files: payload is just total minus the header.
+        #expect(WAVWriter.repairableDataSize(totalBytes: header) == 0)
+        #expect(WAVWriter.repairableDataSize(totalBytes: header + 4096) == 4096)
+
+        // A file at exactly the ceiling stays exact.
+        let atCeiling = header + Int(WAVWriter.maximumDataBytes)
+        #expect(WAVWriter.repairableDataSize(totalBytes: atCeiling) == WAVWriter.maximumDataBytes)
+
+        // And past it — the case that used to take the whole app down, because
+        // `UInt32(total - headerByteCount)` traps rather than saturating. These
+        // are the sizes an old build could leave behind after a crash.
+        #expect(WAVWriter.repairableDataSize(totalBytes: atCeiling + 1) == WAVWriter.maximumDataBytes)
+        #expect(WAVWriter.repairableDataSize(totalBytes: 8_000_000_000) == WAVWriter.maximumDataBytes)
+
+        // Degenerate input must not underflow into a huge size either.
+        #expect(WAVWriter.repairableDataSize(totalBytes: 0) == 0)
+        #expect(WAVWriter.repairableDataSize(totalBytes: 10) == 0)
+    }
+
     // MARK: - Error paths
 
     @Test("writeBuffer before createFile throws .fileNotOpen")
