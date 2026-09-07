@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-07
+
 ### Fixed
 
 - **A very long recording no longer crashes the app** — WAV files cannot exceed about 4 GB; that is a limit of the format itself, not of Home Rec. Reaching it took roughly six hours of recording — a rehearsal, a DJ set, a conference day left running — and when it happened, Home Rec **crashed outright**, taking the whole take with it. Home Rec now stops the recording cleanly just before the limit, saves it complete and playable, and tells you what happened and why. If you need longer than about six hours in one file, choose M4A or FLAC in settings: neither has a comparable limit. The same overflow existed in Recover Recordings, which meant the tool meant to rescue an interrupted take would itself crash on an oversized one; it now repairs those files instead. (BL-170)
