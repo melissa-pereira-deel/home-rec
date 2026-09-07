@@ -22,19 +22,31 @@ final class MockAudioCapturing: AudioCapturing {
     private(set) var lastSource: AudioSource?
     private var audioCallback: ((AVAudioPCMBuffer) -> Void)?
 
+    /// Injected failures, one per stage, so a failed start can be driven at the
+    /// exact point it breaks (BL-171a). Independent knobs on purpose: the
+    /// resources held differ at each stage.
+    var setupError: Error?
+    var startCaptureError: Error?
+    var stopCaptureError: Error?
+
     func setupCapture(source: AudioSource, audioCallback: @escaping (AVAudioPCMBuffer) -> Void) async throws {
         setupCount += 1
         lastSource = source
         self.audioCallback = audioCallback
+        if let setupError { throw setupError }
     }
 
     func startCapture() async throws {
         startCount += 1
+        if let startCaptureError { throw startCaptureError }
         capturing = true
     }
 
     func stopCapture() async throws {
         stopCount += 1
+        // Thrown before clearing `capturing`, mirroring the real manager, where
+        // `isCapturing = false` sits after the `try`.
+        if let stopCaptureError { throw stopCaptureError }
         capturing = false
     }
 
@@ -63,14 +75,24 @@ final class MockAudioFileWriting: AudioFileWriting {
     /// If set, `stopRecording()` throws this — models a finalize failure so the
     /// controller's teardown-before-rethrow ordering can be asserted (BL-016).
     var stopError: Error?
+    /// If set, `startRecording(to:format:)` throws this — models the encoder
+    /// failing to open its file (BL-171a).
+    var startError: Error?
 
     func startRecording(to fileURL: URL, format: AudioFormat) throws {
         startCount += 1
         lastStartFormat = format
+        if let startError { throw startError }
         recording = true
     }
 
-    func processAudioSample(_ pcmBuffer: AVAudioPCMBuffer) {}
+    /// Counts buffers that actually reached the encoder, so a test can assert
+    /// none did on a failed start (BL-171a).
+    private(set) var processedBufferCount = 0
+
+    func processAudioSample(_ pcmBuffer: AVAudioPCMBuffer) {
+        processedBufferCount += 1
+    }
 
     /// Simulate the encoder refusing a buffer mid-take (BL-173).
     func emitWriteError(_ reason: WriteFailure = .other("write failed")) {
