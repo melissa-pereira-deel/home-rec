@@ -274,6 +274,74 @@ is the failure mode this file exists to prevent.
 Newest first. Record what was checked, what was *not*, and by what means — a run
 that doesn't say what it skipped is indistinguishable from a complete one.
 
+## v1.1.1 — ⚠️ RECONSTRUCTED, not a contemporaneous pass, 2026-08-22 · `c877b37`
+
+**This entry was written on 2026-09-07, sixteen days after the release, because
+there was no entry at all.** v1.1.1 shipped — the release that fixed microphone
+recording — and the run log stopped at v1.1.0. It is reconstructed from the
+release session's own records and from artifacts that can still be checked
+today. **It is evidence of what was done, not evidence that the checklist was
+followed.** Treat it as a gap that has been documented, not closed.
+
+That gap is why `scripts/check-docs.sh` now fails when the newest run-log entry
+does not match `MARKETING_VERSION` (BL-179). An unenforced checklist gets
+skipped exactly when the release feels urgent, which is exactly when this
+project's history says it is needed: **the automated suite has passed while a
+shipped feature was broken three separate times.**
+
+### Re-verified on 2026-09-07, independently
+
+| Check | Result |
+|---|---|
+| Appcast entry matches the published asset | ✅ `length="2667020"` equals the real `HomeRec.dmg` byte size from the GitHub releases API |
+| Live feed reachable | ✅ `https://homerec.app/appcast.xml` returns 200 |
+| Release notes render as our own copy | ✅ the 1.1.1 item carries inline `<description><![CDATA[…]]></description>`, not `releaseNotesLink` |
+| Tag resolves to the released source | ✅ `v1.1.1` → `c877b37` |
+
+### Recorded at release time — from the session, not re-checked here
+
+- Notarized artifact reported 1.1.1 / 10101, with
+  `com.apple.security.device.audio-input` present, stapled, and Gatekeeper
+  reporting "Notarized Developer ID". Checked on the **notarized** artifact
+  rather than a Debug build, which is the only form of this check that means
+  anything.
+- Checksum verified end to end from build to published asset.
+- Microphone capture verified on hardware 2026-08-21: with the interface
+  confirmed at 44.1 kHz *before* the take, the recording landed at exactly
+  1000.0 Hz — 1.0000×, no resampling error.
+- BL-168 confirmed by observation: v1.1.0 reinstalled, the update re-run, Home
+  Rec's own notes rendered in the dialog, installed to 1.1.1 with the
+  entitlement present.
+
+### ⚠️ Not run — and still not run
+
+Nothing below has been performed against the v1.1.1 build. This is the honest
+list, not a formality:
+
+- **The "Every release" block at the top of this file.** `check-docs.sh`, the
+  Swift 6 error count, and the site-parity check have no record for this release.
+- **The 25-state reskin sweep**, and in particular **glass over a light
+  desktop** — the highest-value single check, and one the snapshot harness
+  structurally cannot perform: it renders on a deterministic flat backing while
+  `GlassWindowGround` samples the real desktop.
+- **Recording, per source** — the full matrix. Microphone was exercised; system
+  audio and per-app capture were not re-checked on this build.
+- **Crash durability — one force-quit per format.** FLAC is the sharpest gap:
+  it is the one format that *needs* repair to open at all, and the end-to-end
+  force-quit → Recover → plays path has never been exercised.
+- **Source removed mid-recording.**
+- **Accessibility**, on any surface.
+
+### The lesson, recorded so it is not relearned
+
+The release with the most consequential user-facing fix in the product's history
+was the one that skipped the gate. Not through carelessness — the fix was
+verified thoroughly on hardware, and the release chain was checked end to end.
+**What was skipped was everything the fix did not touch**, on the assumption
+that a narrow change has narrow consequences. That assumption is what BL-156
+disproved: a CHANGELOG-only commit turned CI red and the cause was a real
+shipped defect.
+
 ## v1.1.0 — update interlock, 2026-08-11 · `ff28b6b`
 
 **All three interlock checks pass, and the one that matters had never actually

@@ -44,6 +44,23 @@ git pull --ff-only
 git status --short    # should be empty
 ```
 
+### 2b. Prove the docs and the release evidence agree — **before the tag**
+
+```bash
+scripts/check-docs.sh
+```
+
+This must exit 0. Among other things it now refuses a release whose
+`MARKETING_VERSION` has no matching entry in `docs/manual-acceptance.md`'s run
+log, and one whose README still advertises an older version (BL-179).
+
+**Why it sits before the tag rather than after the build.** v1.1.1 shipped on
+2026-08-22 with no run-log entry at all — the release that fixed microphone
+recording, and the checklist that would have covered everything the fix did not
+touch was skipped. A tag is the point of no return for the appcast, so the gate
+belongs before it. If the run log has no entry for this version, **go and do the
+manual pass**; do not write an entry to make the check go green.
+
 ### 3. Tag the release
 
 ```bash

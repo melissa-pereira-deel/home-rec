@@ -36,6 +36,11 @@ VERSION="$(awk -F' = ' '/MARKETING_VERSION/ {gsub(/[;\" ]/, "", $2); print $2; e
 : "${VERSION:=0.0.0}"
 DIST_DIR="$(pwd)/dist"
 ARCHIVE="$DIST_DIR/$BUILT_APP_NAME.xcarchive"
+# Build-local DerivedData (BL-177). The Sparkle signing tools are resolved from
+# here and nowhere else, so the binary handed the private key provably comes from
+# the dependency THIS build resolved — see the signing section below. Costs a
+# clean SPM resolve per release; a release build should be clean anyway.
+DERIVED_DIR="$DIST_DIR/DerivedData"
 EXPORT_DIR="$DIST_DIR/export"
 APP="$EXPORT_DIR/$APP_NAME.app"   # after the rename below
 # DMG filename is versionless (`HomeRec.dmg`) so the GitHub "releases/latest/download"
@@ -70,6 +75,7 @@ xcodebuild archive \
   -configuration "$CONFIG" \
   -destination "generic/platform=macOS" \
   -archivePath "$ARCHIVE" \
+  -derivedDataPath "$DERIVED_DIR" \
   DEVELOPMENT_TEAM="$TEAM_ID" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="Developer ID Application" \
@@ -168,17 +174,39 @@ echo "==> Emitting SHA-256 sidecar…"
 # ---------------------------------------------------------------------------
 echo "==> Signing the DMG for Sparkle…"
 
-# `sign_update` ships inside the resolved Sparkle package. Set SPARKLE_BIN to
-# override; otherwise take the copy Xcode has already checked out.
+# `sign_update` ships inside the resolved Sparkle package.
+#
+# ⚠️ This used to search **$HOME-wide** and take `head -1`:
+#
+#     find "$HOME/Library/Developer/Xcode/DerivedData" \
+#       -path "*/artifacts/sparkle/Sparkle/bin/sign_update" | (take the first hit)
+#
+# That severed the link between the locked dependency and the binary trusted with
+# the EdDSA private key. Any other project's checkout of any other Sparkle version
+# could win the race, and nothing would say so. Resolve from **this build's**
+# DerivedData only, and refuse to guess if there is more than one (BL-177).
+#
+# Deliberately no `mapfile`/`readarray` here: macOS ships bash 3.2, where they do
+# not exist, and this script must not fail for the first time on release day.
 if [[ -z "${SPARKLE_BIN:-}" ]]; then
-  SPARKLE_BIN="$(find "$HOME/Library/Developer/Xcode/DerivedData" \
-    -path "*/artifacts/sparkle/Sparkle/bin/sign_update" -type f 2>/dev/null | head -1)"
+  SPARKLE_FOUND="$(find "$DERIVED_DIR" \
+    -path "*/artifacts/sparkle/Sparkle/bin/sign_update" -type f 2>/dev/null | sort)"
+  SPARKLE_COUNT="$(printf '%s' "$SPARKLE_FOUND" | grep -c . || true)"
+  if [[ "$SPARKLE_COUNT" -gt 1 ]]; then
+    echo "error: $SPARKLE_COUNT copies of sign_update under $DERIVED_DIR:" >&2
+    printf '%s\n' "$SPARKLE_FOUND" | sed 's/^/       /' >&2
+    echo "       Refusing to guess which one signs this release. Set SPARKLE_BIN." >&2
+    exit 1
+  fi
+  SPARKLE_BIN="$(printf '%s' "$SPARKLE_FOUND" | sed -n '1p')"
 fi
 [[ -x "${SPARKLE_BIN:-}" ]] || {
-  echo "error: sign_update not found. Build once so SPM resolves Sparkle," >&2
-  echo "       or set SPARKLE_BIN=/path/to/sign_update." >&2
+  echo "error: sign_update not found under $DERIVED_DIR." >&2
+  echo "       The archive step should have resolved Sparkle there. If you are" >&2
+  echo "       running the signing section alone, set SPARKLE_BIN explicitly." >&2
   exit 1
 }
+echo "    sign_update: $SPARKLE_BIN"
 
 # --- The keypair-identity check ---------------------------------------------
 # The unit suite proves SUPublicEDKey is a well-formed Ed25519 key, but it runs
@@ -212,8 +240,17 @@ if [[ -x "$GENERATE_KEYS" ]]; then
     exit 1
   fi
 else
-  echo "warning: generate_keys not found — skipping the keypair-identity check." >&2
-  echo "         Confirm by hand that SUPublicEDKey matches your signing key." >&2
+  # ⚠️ This used to warn and continue. The one check that can prove the shipped
+  # SUPublicEDKey matches the key about to sign this release was therefore
+  # skippable by a missing file — and the failure it guards against is silent and
+  # permanent. A guard that can be skipped by the absence of a file is not a
+  # guard. Fail closed (BL-177).
+  echo "error: generate_keys not found next to sign_update." >&2
+  echo "       Expected: $GENERATE_KEYS" >&2
+  echo "       Without it the shipped SUPublicEDKey cannot be checked against the" >&2
+  echo "       key that would sign this release, and a mismatch strands every" >&2
+  echo "       install on this version permanently. Refusing to sign." >&2
+  exit 1
 fi
 
 # Reads the EdDSA private key from the login Keychain, where generate_keys put
