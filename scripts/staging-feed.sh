@@ -69,6 +69,67 @@ if [ -n "$ITEM_LEN" ] && [ "$ITEM_LEN" != "$REAL_LEN" ]; then
   exit 1
 fi
 
+# ⚠️ The enclosure URL has to be rewritten, and for a long time it was not.
+#
+# `build-dmg.sh` writes the item with a **GitHub** enclosure URL — deliberately,
+# because a published appcast entry is permanent and must point at the exact file
+# its signature was computed over. This script used to `cat` that item verbatim,
+# so the feed it served told Sparkle to download from github.com. The local DMG
+# was copied into the staging directory and never fetched.
+#
+# That silently disabled the whole point of this script. The throttling documented
+# at the top is what makes the update-interlock check possible — the download has
+# to still be running when recording starts — and over the internet, unthrottled,
+# that window is whatever the network gives you rather than the ~30s this script
+# promises. Worse, the length cross-check above still passed, because it is the
+# same file at the same size, so nothing looked wrong.
+#
+# Rewrite **only** the enclosure URL. The signature covers the DMG bytes, not the
+# feed, so the entry stays valid and the tamper rehearsal still means something.
+# (BL-177. The historical results in docs/manual-acceptance.md stand — that run
+# used a hand-edited local enclosure, which is what this now does automatically.)
+ITEM_LOCAL="$STAGING_DIR/item.xml"
+DMG_NAME="$(basename "$DMG")"
+python3 - "$ITEM" "$ITEM_LOCAL" "http://127.0.0.1:$PORT/$DMG_NAME" <<'REWRITE' || exit 1
+import re, sys
+
+src, dst, local_url = sys.argv[1], sys.argv[2], sys.argv[3]
+xml = open(src, encoding="utf-8").read()
+
+# Mask CDATA and comments before looking for the enclosure. The release notes are
+# arbitrary HTML generated from the CHANGELOG, so a note that happens to contain
+# something shaped like "<enclosure ...>" would otherwise be counted as one — and
+# this script would refuse a perfectly good item. Found by a fixture that put
+# exactly that in the notes.
+masked = list(xml)
+for pat in (re.compile(r"<!\[CDATA\[.*?\]\]>", re.S), re.compile(r"<!--.*?-->", re.S)):
+    for m in pat.finditer(xml):
+        masked[m.start():m.end()] = " " * (m.end() - m.start())
+masked = "".join(masked)
+
+matches = list(re.finditer(r"<enclosure\b[^>]*>", masked))
+if len(matches) != 1:
+    sys.stderr.write(
+        "error: expected exactly 1 <enclosure> in %s, found %d.\n"
+        "       Refusing to guess which one the rehearsal should serve.\n"
+        % (src, len(matches))
+    )
+    sys.exit(1)
+
+start, end = matches[0].span()
+tag = xml[start:end]
+if not re.search(r'\surl="[^"]*"', tag):
+    sys.stderr.write("error: <enclosure> in %s has no url attribute.\n" % src)
+    sys.exit(1)
+
+# Escape for XML attribute context. The URL is ours and contains no & or <, but
+# building a URL into markup without escaping is how the next one breaks.
+safe = (local_url.replace("&", "&amp;").replace("<", "&lt;")
+                 .replace(">", "&gt;").replace('"', "&quot;"))
+new_tag = re.sub(r'(\surl=")[^"]*(")', lambda m: m.group(1) + safe + m.group(2), tag, count=1)
+open(dst, "w", encoding="utf-8").write(xml[:start] + new_tag + xml[end:])
+REWRITE
+
 # The channel wrapper is the live feed's, minus the commentary — the point is to
 # serve something structurally identical to production, so a failure here means
 # the entry is wrong rather than the scaffolding.
@@ -80,7 +141,7 @@ fi
   echo "    <link>http://127.0.0.1:$PORT/appcast.xml</link>"
   echo '    <description>Local rehearsal feed. Not served to anyone.</description>'
   echo '    <language>en</language>'
-  cat "$ITEM"
+  cat "$ITEM_LOCAL"
   echo '  </channel>'
   echo '</rss>'
 } > "$FEED"
