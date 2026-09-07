@@ -141,9 +141,20 @@ nonisolated class WAVWriter: AudioFileEncoder {
             }
         }
 
-        // Write to file
+        // Write to file.
+        //
+        // ⚠️ `write(contentsOf:)`, not `write(_:)`. The nonthrowing `write(_:)`
+        // signals a failed write — a full disk, an ejected volume — by raising an
+        // ObjC `NSException`, which Swift cannot catch. So WAV could not detect an
+        // IO failure at all: the take carried on, the file stopped growing, and
+        // nothing anywhere found out. `write(contentsOf:)` throws instead, and
+        // `AudioRecorder` now listens (BL-173).
         let data = Data(bytes: int16Data, count: int16Data.count * MemoryLayout<Int16>.size)
-        fileHandle.write(data)
+        do {
+            try fileHandle.write(contentsOf: data)
+        } catch {
+            throw WAVWriterError.fileWriteFailed
+        }
         bytesWritten += UInt32(data.count)
 
         // Periodically rewrite the header so the file is playable even if the

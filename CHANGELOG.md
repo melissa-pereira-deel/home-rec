@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A recording that has stopped saving no longer looks like it is still working** — If Home Rec could not write audio to the file part-way through a take — a disk that filled up, a drive that was disconnected, a save folder that stopped accepting writes — it carried on as though nothing had happened. The waveform kept moving, the timer kept counting, and the file quietly stopped growing. There was nothing to notice at the time and nothing to find afterwards except a recording that ended early. Home Rec now stops the take the moment a write fails, tells you it has stopped, and keeps everything captured up to that point in your save folder. The waveform stops with it, because a moving waveform over a file that is no longer being written to is the app telling you something that is not true. **This also completes a fix that was announced but only half delivered:** 1.1.0's notes said a refused write was "reported when it happens", and the encoders did start reporting — but nothing was listening, so the report never reached you. It does now, for all three formats. WAV in particular could not detect a write failure at all, and can now. (BL-173)
+
 ## [1.1.1] - 2026-08-21
 
 ### Fixed

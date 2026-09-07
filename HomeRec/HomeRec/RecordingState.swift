@@ -29,6 +29,9 @@ enum RecorderError: Error, Equatable, Sendable {
     case microphoneDenied
     case stopFailed(String)
     case streamFailed(String)
+    /// The encoder refused a buffer mid-take, so the file stopped growing while
+    /// the recording still looked healthy (BL-173).
+    case writeFailed(String)
     case diskFull
     case saveLocationUnavailable
 
@@ -36,7 +39,8 @@ enum RecorderError: Error, Equatable, Sendable {
     /// Retained for logs/diagnostics — never shown directly to the user.
     nonisolated var detail: String {
         switch self {
-        case .startFailed(let detail), .stopFailed(let detail), .streamFailed(let detail):
+        case .startFailed(let detail), .stopFailed(let detail), .streamFailed(let detail),
+             .writeFailed(let detail):
             return detail
         case .sourceUnavailable(let error):
             return error.errorDescription ?? "capture source unavailable"
@@ -64,6 +68,11 @@ enum RecorderError: Error, Equatable, Sendable {
             return "Home Rec couldn't finish saving the recording. The audio captured so far may still be on your Desktop."
         case .streamFailed:
             return "Recording stopped unexpectedly. This usually means Screen Recording permission was turned off, or another app took over audio capture."
+        case .writeFailed:
+            // Names the outcome, not the cause: at this point we cannot tell a
+            // full disk from an ejected drive or a revoked folder permission,
+            // and guessing wrong sends the user to fix the wrong thing.
+            return "Home Rec stopped recording because it couldn't save the audio. What was captured up to that point is still in your save folder."
         case .diskFull:
             return "There isn't enough free space to start recording. Free up some disk space and try again."
         case .saveLocationUnavailable:
@@ -88,6 +97,11 @@ enum RecorderError: Error, Equatable, Sendable {
         case .saveLocationUnavailable:
             return .chooseFolder
         case .stopFailed, .diskFull:
+            return nil
+        case .writeFailed:
+            // No `.tryAgain`: whatever stopped the write — a full disk, a
+            // disconnected volume — is still true a second later, so retrying
+            // fails identically. Same reasoning as `.sourceUnavailable`.
             return nil
         }
     }

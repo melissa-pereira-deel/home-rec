@@ -210,6 +210,9 @@ class RecorderViewModel: ObservableObject {
         self.controller.onStreamError = { [weak self] message in
             self?.handleStreamFailure(message)
         }
+        self.controller.onWriteError = { [weak self] message in
+            self?.handleWriteFailure(message)
+        }
         refreshSaveLocationDisplay()
         // Re-probe permission whenever the app regains focus, so granting Screen
         // Recording in System Settings takes effect without a relaunch (BL-040).
@@ -753,6 +756,23 @@ class RecorderViewModel: ObservableObject {
     /// Handle an unexpected capture-stream failure mid-recording: surface the
     /// error state immediately, then finalize the partial recording so the
     /// audio captured before the failure is preserved.
+    /// A buffer could not be written, so the file has stopped growing (BL-173).
+    ///
+    /// Deliberately the same shape as `handleStreamFailure`: stop the timer, zero
+    /// the waveform, enter `.error`, finalize what was captured. The guard is
+    /// load-bearing rather than defensive — `(.idle, .error)` is not a legal
+    /// transition and `transition` rejects illegal moves *silently*, which is
+    /// exactly how BL-161's microphone error went missing.
+    private func handleWriteFailure(_ message: String) {
+        guard state == .recording else { return }
+        stopTimer()
+        waveformSamples = Array(repeating: 0, count: 200)
+        transition(to: .error(.writeFailed(message)))
+        Task { [weak self] in
+            await self?.controller.finalizeAfterFailure()
+        }
+    }
+
     private func handleStreamFailure(_ message: String) {
         guard state == .recording else { return }
         stopTimer()
