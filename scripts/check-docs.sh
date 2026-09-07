@@ -125,6 +125,45 @@ lines=$(wc -l < CLAUDE.md)
   || bad "CLAUDE.md is $lines lines — over the 200-line target, which reduces instruction adherence"
 
 echo
+
+# --- release evidence (BL-179) -----------------------------------------------
+# v1.1.1 shipped on 2026-08-22 with no manual-acceptance entry: the run log
+# stopped at v1.1.0. That is the release which fixed microphone recording, and
+# this project's own standing lesson is that the automated suite has passed
+# while a shipped feature was broken three separate times — the manual pass is
+# the only gate that has ever caught those. An unenforced checklist is a
+# checklist that gets skipped exactly when the release is urgent.
+echo "Release evidence:"
+
+VERSION="$(awk -F' = ' '/MARKETING_VERSION/ {gsub(/[;" ]/, "", $2); print $2; exit}' \
+             HomeRec/HomeRec.xcodeproj/project.pbxproj)"
+
+if [ -z "$VERSION" ]; then
+  bad "could not read MARKETING_VERSION from the Xcode project"
+else
+  # Newest run-log entry. Headings look like: "## v1.1.0 — <what>, <date> · \`sha\`"
+  RUNLOG="$(grep -m1 -o '^## v[0-9][0-9.]*' docs/manual-acceptance.md 2>/dev/null | sed 's/^## v//')"
+  if [ -z "$RUNLOG" ]; then
+    bad "no run-log entries found in docs/manual-acceptance.md"
+  elif [ "$RUNLOG" = "$VERSION" ]; then
+    ok "Manual-acceptance run log covers v$VERSION"
+  else
+    bad "MARKETING_VERSION is $VERSION but the newest run-log entry is v$RUNLOG — docs/manual-acceptance.md has no record that this build was tested by a person"
+  fi
+
+  # The README is the shop window and has drifted before: it claimed 1.0 while
+  # 1.1.1 was shipping, and listed already-shipped Sparkle under "Next up".
+  if grep -q "badge/Version-$VERSION-" README.md; then
+    ok "README version badge matches v$VERSION"
+  else
+    bad "README version badge does not say $VERSION"
+  fi
+  grep -q "\*\*Version:\*\* $VERSION " README.md \
+    && ok "README footer matches v$VERSION" \
+    || bad "README footer does not say $VERSION"
+fi
+
+echo
 if [ "$fail" -eq 0 ]; then
   echo "All documented facts still hold."
 else
