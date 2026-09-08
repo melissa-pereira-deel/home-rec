@@ -304,6 +304,99 @@ is the failure mode this file exists to prevent.
 Newest first. Record what was checked, what was *not*, and by what means — a run
 that doesn't say what it skipped is indistinguishable from a complete one.
 
+## v1.1.2 — partial, 2026-09-07 · `abe306e`
+
+**Run against a locally built, Developer ID signed app — not the notarized DMG.**
+1.1.2 / build 10102, team S3J47F2UXA, hardened runtime, with
+`com.apple.security.device.audio-input` present. Bundle identifier is the real
+one, so TCC behaviour is genuine. **Nothing here covers notarization, stapling,
+Gatekeeper, or install-location behaviour**, all of which need the DMG.
+
+### Passed — by a person at the machine
+
+**The full crash/quit durability matrix, six for six.** This is the first time
+either half has been run end to end, and the two halves are deliberate
+opposites: a force-quit *should* leave a file needing repair; pressing Quit
+should not.
+
+| | ⌘Q, plays as found | Force-quit |
+|---|---|---|
+| **FLAC** | ✅ | ✅ unplayable as found, Recover repairs it, plays |
+| **WAV** | ✅ | ✅ plays as found |
+| **M4A** | ✅ (twice) | ✅ plays as found |
+
+Evidence, at byte level rather than by impression:
+
+- **FLAC force-quit → Recover → plays.** `recording_2026-09-07_18-41-15.flac`
+  went from a fully zeroed STREAMINFO and no decodable duration, to blocklen
+  `0x22` / blocksize `0x1200` / 48 kHz, `afinfo` reporting 41.376 s. A second
+  file, `_18-48-32.flac`, repaired independently to 59.100 s. **The payload was
+  intact throughout; only the 38 header bytes were missing**, exactly as
+  `AudioFileRecovery` documents.
+- **FLAC ⌘Q.** `_18-52-54.flac`, 826,886 bytes: real STREAMINFO *and* a
+  non-zero MD5 signature, which only `finalize()` writes. 4.360 s.
+- **WAV ⌘Q.** `_18-54-38.wav`: header claims 2,496,000 data bytes and the file
+  holds exactly 2,496,000. 13.000 s.
+- **WAV force-quit.** `_19-57-40.wav`: header claims 2,949,120 while the file
+  holds 3,025,920 — **76,800 bytes behind, precisely 0.400 s** at 192,000 B/s.
+  Plays as found, 15.360 s. That lag is the header rewrite every 32 buffers
+  (~0.68 s) behaving as designed: a hard kill loses only the audio since the
+  last rewrite. This is why a severed WAV plays where a severed FLAC does not.
+- **M4A ⌘Q, twice.** `_19-16-22.m4a` (6.360 s) and `_19-17-32.m4a` (6.640 s),
+  both flat `ftyp mdat moov` with **no `moof`** — the structure only a completed
+  `finishWriting` produces.
+- **M4A force-quit.** `_19-18-35.m4a`, 549,282 bytes: `ftyp mdat moov` plus
+  **15 `moof` fragments**, playing as found at 15.974 s. Fifteen fragments for
+  ~16 s matches `movieFragmentInterval` = 1 s exactly. Before BL-016 there were
+  no fragments and no `moov` until the end, so a force-quit lost the whole take.
+
+### Passed — mechanically
+
+- Full unit suite: **332 tests, 331 passed, 0 failed, 1 skipped** (the skip is
+  `microphoneEntitlementIsInTheProduct`, expected on an unsigned test host).
+- Release build passes.
+- Swift 6 error count has not grown: **1** (`PermissionGrantWatcher`), a name
+  already in the baseline set. Per TD-008 this count is a floor, not a total, so
+  it is read as "not grown" and never as "improved".
+- `MARKETING_VERSION` verified against the **built product's**
+  `CFBundleShortVersionString`: 1.1.2, `CFBundleVersion` 10102.
+- `CHANGELOG.md` describes what the user experiences: four entries.
+- README describes the app that is shipping: badge and footer at 1.1.2.
+- Site parity: the appcast advertises 1.1.1 and `releases/latest` resolves to
+  v1.1.1. Correct pre-release state. **Recheck after publishing.**
+
+### ⚠️ Open question, not resolved
+
+**Recover Recordings listed three files when only one qualified.** At the time,
+the only file meeting `isUnfinalized` was `_19-18-35.m4a`; the two FLACs had
+already been repaired earlier in the session and had populated STREAMINFO, so
+`FLACEncoder.isUnfinalized` (`head[4..<42].allSatisfy { $0 == 0 }`) returns
+false for both and the scanner should skip them.
+
+Two candidate explanations, not distinguished:
+
+1. The Recovery window is a shared singleton and refreshes on `.onAppear`, so
+   reopening it may show rows from an earlier scan. A display-refresh bug.
+2. The scanner is genuinely offering already-repaired files, which would break
+   the "Recovery never touches a file that finished normally" invariant on this
+   very page.
+
+The cheap test is to reopen the window and count the rows: one is correct, three
+is not. **This was not run.** Related in family to BL-140a, already filed: the
+handled-set is session-scoped, so a recovered file reappears after relaunch.
+
+### Not run
+
+- **Permissions and first run** — `tccutil reset`, the prompt, and the denial
+  paths.
+- **Recording per source** — system audio, per-app, microphone.
+- **Accessibility**, on any surface.
+- **The reskin over a light desktop** — the highest-value visual check, and the
+  one the snapshot harness structurally cannot perform: it renders on a
+  deterministic flat backing while `GlassWindowGround` samples the real desktop.
+- **Every signed-product check** — notarization, stapling, Gatekeeper, install
+  location, and the update rehearsal. These need the notarized DMG.
+
 ## v1.1.1 — ⚠️ RECONSTRUCTED, not a contemporaneous pass, 2026-08-22 · `c877b37`
 
 **This entry was written on 2026-09-07, sixteen days after the release, because
