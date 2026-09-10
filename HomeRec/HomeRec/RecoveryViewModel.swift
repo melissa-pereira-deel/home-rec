@@ -23,7 +23,7 @@ final class RecoveryViewModel: ObservableObject {
     private let scanner: RecoveryScanning
     /// The file being written right now, if any. A live recording is unfinalized
     /// by definition and must never be offered for recovery.
-    private let inProgressURL: () -> URL?
+    private let inProgressURL: @MainActor () -> URL?
 
     /// Files the user has already dealt with this session.
     ///
@@ -34,7 +34,7 @@ final class RecoveryViewModel: ObservableObject {
     /// Requirement 7 is about the user's action, not the file's state.
     private var handled: Set<URL> = []
 
-    init(scanner: RecoveryScanning, inProgressURL: @escaping () -> URL? = { nil }) {
+    init(scanner: RecoveryScanning, inProgressURL: @escaping @MainActor () -> URL? = { nil }) {
         self.scanner = scanner
         self.inProgressURL = inProgressURL
     }
@@ -48,6 +48,7 @@ final class RecoveryViewModel: ObservableObject {
     }
 
     func recover(_ recording: RecoverableRecording) {
+        guard canModify(recording) else { return }
         do {
             try RecoveryScanner.recover(recording)
             handled.insert(recording.url.standardizedFileURL)
@@ -62,12 +63,25 @@ final class RecoveryViewModel: ObservableObject {
     }
 
     func moveToTrash(_ recording: RecoverableRecording) {
+        guard canModify(recording) else { return }
         do {
             try FileManager.default.trashItem(at: recording.url, resultingItemURL: nil)
             refresh()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Recheck stale rows immediately before touching disk. This check and the
+    /// synchronous file operation share MainActor with session acquisition, so
+    /// a new recording cannot claim the file between them.
+    private func canModify(_ recording: RecoverableRecording) -> Bool {
+        guard recording.url.standardizedFileURL != inProgressURL()?.standardizedFileURL else {
+            errorMessage = "This recording is still in use. Wait until it finishes before recovering it or moving it to Trash."
+            refresh()
+            return false
+        }
+        return true
     }
 
     // MARK: - Display helpers

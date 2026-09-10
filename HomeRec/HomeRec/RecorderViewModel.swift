@@ -29,6 +29,8 @@ class RecorderViewModel: ObservableObject {
     @Published var showLongRecordingWarning = false
     /// Whether the first-run onboarding sheet should be shown.
     @Published var showOnboarding = false
+    /// Last successfully started take, retained for Reveal in Finder after stop.
+    /// Active file ownership belongs to the controller's session.
     @Published var lastRecordingURL: URL?
     @Published var permissionStatus: PermissionStatus = .notDetermined
     @Published var waveformSamples: [Float] = Array(repeating: 0, count: 200)
@@ -58,6 +60,12 @@ class RecorderViewModel: ObservableObject {
 
     /// Whether a recording is actively capturing. Derived from `state`.
     var isRecording: Bool { state == .recording }
+
+    /// A live read of session ownership for recovery, independent of UI state.
+    /// Retains the owner for as long as the recovery window can act on its files.
+    var recordingURLProvider: @MainActor () -> URL? {
+        { [controller] in controller.recordingURL }
+    }
 
     /// Whether the settings shelf (save location, format, capture source) is shown.
     ///

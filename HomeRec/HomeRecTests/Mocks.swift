@@ -28,22 +28,30 @@ final class MockAudioCapturing: AudioCapturing {
     var setupError: Error?
     var startCaptureError: Error?
     var stopCaptureError: Error?
+    /// Suspension hooks for inspecting session ownership across capture awaits.
+    var onSetup: (() async -> Void)?
+    var onStartCapture: (() async -> Void)?
+    var onStopCapture: (() async -> Void)?
+    var onCleanup: (() async -> Void)?
 
     func setupCapture(source: AudioSource, audioCallback: @escaping (AVAudioPCMBuffer) -> Void) async throws {
         setupCount += 1
         lastSource = source
         self.audioCallback = audioCallback
+        await onSetup?()
         if let setupError { throw setupError }
     }
 
     func startCapture() async throws {
         startCount += 1
+        await onStartCapture?()
         if let startCaptureError { throw startCaptureError }
         capturing = true
     }
 
     func stopCapture() async throws {
         stopCount += 1
+        await onStopCapture?()
         // Thrown before clearing `capturing`, mirroring the real manager, where
         // `isCapturing = false` sits after the `try`.
         if let stopCaptureError { throw stopCaptureError }
@@ -52,6 +60,7 @@ final class MockAudioCapturing: AudioCapturing {
 
     func cleanup() async {
         cleanupCount += 1
+        await onCleanup?()
     }
 
     /// Simulate the capture stream dying unexpectedly.
@@ -78,10 +87,13 @@ final class MockAudioFileWriting: AudioFileWriting {
     /// If set, `startRecording(to:format:)` throws this — models the encoder
     /// failing to open its file (BL-171a).
     var startError: Error?
+    /// Runs at the file-creation boundary, before a possible encoder failure.
+    var onStart: ((URL) throws -> Void)?
 
     func startRecording(to fileURL: URL, format: AudioFormat) throws {
         startCount += 1
         lastStartFormat = format
+        try onStart?(fileURL)
         if let startError { throw startError }
         recording = true
     }

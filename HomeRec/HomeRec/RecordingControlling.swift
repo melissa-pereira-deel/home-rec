@@ -17,6 +17,7 @@ protocol RecordingControlling: AnyObject {
     /// Called when a buffer cannot be written mid-recording (BL-173).
     var onWriteError: (@MainActor (WriteFailure) -> Void)? { get set }
     var isRecording: Bool { get }
+    /// Owned output, including start, stop and failure cleanup; nil after release.
     var recordingURL: URL? { get }
     /// Start recording in the given output `format` (BL-015), returning the file URL.
     /// The format is captured here, at start, and fixed for the recording.

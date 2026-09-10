@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Recovery protects recordings while they start and finish** - Recover Recordings now checks the recording session's output file when scanning, repairing, and moving files to Trash. A take stays protected from before file creation until finalization and cleanup finish, even if a recovery row was listed earlier. (BL-171b)
+
 ## [1.1.2] - 2026-09-07
 
 ### Fixed
