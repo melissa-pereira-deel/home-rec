@@ -337,9 +337,12 @@ enum OverflowMenu {
 
     /// Why "Check for Updates…" is greyed, or `nil` when it is live.
     ///
-    /// A pure function so the precedence between the two independent reasons is
+    /// A pure function so the precedence between independent reasons is
     /// assertable rather than buried in a ternary inside a row builder.
     static func updateRowTooltip(_ context: OverflowContext) -> String? {
+        if let explanation = context.installLocation.updateBlockExplanation {
+            return explanation
+        }
         if !context.allowsUpdateInstall {
             return "Installing an update restarts Home Rec, which would end the recording."
         }
@@ -378,10 +381,9 @@ enum OverflowMenu {
             .action(OverflowAction(
                 id: "checkForUpdates",
                 title: "Check for Updates…",
-                // Recording wins the explanation when both apply: it is the one
-                // the user caused and the one that clears on its own.
                 toolTip: updateRowTooltip(context),
-                isEnabled: context.allowsUpdateInstall && context.updaterIsUsable,
+                isEnabled: !context.installLocation.blocksUpdates
+                    && context.allowsUpdateInstall && context.updaterIsUsable,
                 perform: { onCheckForUpdates() }
             )),
             .separator,

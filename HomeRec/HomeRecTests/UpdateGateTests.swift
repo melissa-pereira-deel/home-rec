@@ -100,6 +100,138 @@ struct UpdateGateTests {
 
     // MARK: - The updater must not run in a test host
 
+    @Test("Blocked installs never construct or start Sparkle, and commands refuse", arguments: [
+        InstallLocation.translocated, .readOnlyVolume
+    ])
+    func blockedInstallNeverStarts(location: InstallLocation) throws {
+        let checker = TestUpdateChecker()
+        var constructions = 0
+        let updater = UpdaterController(
+            installLocation: location,
+            isSafeToInstall: { true },
+            environment: [:],
+            makeUpdater: { _ in
+                constructions += 1
+                return checker
+            }
+        )
+        #expect(updater.unavailable == .blockedInstallLocation)
+        #expect(!updater.isUsable)
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+
+        let previous = OverflowMenu.onCheckForUpdates
+        defer { OverflowMenu.onCheckForUpdates = previous }
+        OverflowMenu.onCheckForUpdates = { updater.checkForUpdates() }
+        let row = try #require(updateRow(OverflowContext(installLocation: location)))
+        row.perform()
+
+        #expect(constructions == 0)
+        #expect(checker.starts == 0)
+        #expect(checker.checks == 0)
+    }
+
+    @Test("Allowed locations start the updater and retain live recording gates", arguments: [
+        InstallLocation.applications, .developerBuild,
+        .elsewhere(URL(fileURLWithPath: "/Volumes/External/Home Rec.app"))
+    ])
+    func allowedInstallStarts(location: InstallLocation) {
+        let checker = TestUpdateChecker()
+        var constructions = 0
+        let updater = UpdaterController(
+            installLocation: location,
+            isSafeToInstall: { checker.isSafeToInstall },
+            environment: [:],
+            makeUpdater: { _ in
+                constructions += 1
+                return checker
+            }
+        )
+        #expect(constructions == 1)
+        #expect(checker.starts == 1)
+        #expect(updater.isUsable)
+        #expect(updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 1)
+
+        checker.isSafeToInstall = false
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 1)
+        checker.isSafeToInstall = true
+        checker.canCheckForUpdates = false
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 1)
+    }
+
+    @Test("A test-host preflight also prevents construction")
+    func testHostPreventsConstruction() {
+        var constructions = 0
+        let updater = UpdaterController(
+            installLocation: .applications,
+            isSafeToInstall: { true },
+            environment: ["XCTestConfigurationFilePath": ""],
+            makeUpdater: { _ in
+                constructions += 1
+                return TestUpdateChecker()
+            }
+        )
+        #expect(updater.unavailable == .notRunInTestHost)
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(constructions == 0)
+    }
+
+    @Test("A failed startup still refuses manual checks even if Sparkle says it can check")
+    func startupFailureRefusesCommands() {
+        let checker = TestUpdateChecker()
+        checker.startError = CocoaError(.fileReadUnknown)
+        let updater = UpdaterController(
+            installLocation: .applications,
+            isSafeToInstall: { true },
+            environment: [:],
+            makeUpdater: { _ in checker }
+        )
+        #expect(checker.starts == 1)
+        #expect(updater.unavailable == .startFailed)
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 0)
+    }
+
+    @Test("Blocked install rows use canonical copy before recording or startup failures", arguments: [
+        InstallLocation.translocated, .readOnlyVolume
+    ])
+    func blockedLocationMenu(location: InstallLocation) throws {
+        for canInstall in [true, false] {
+            for usable in [true, false] {
+                let context = OverflowContext(
+                    allowsUpdateInstall: canInstall,
+                    updaterIsUsable: usable,
+                    installLocation: location
+                )
+                let row = try #require(updateRow(context))
+                #expect(!row.isEnabled)
+                #expect(row.toolTip == location.explanation)
+                let menu = OverflowMenu.makeNSMenu(context)
+                let item = try #require(menu.items.first { $0.title == row.title })
+                #expect(!item.isEnabled)
+                #expect(item.toolTip == location.explanation)
+            }
+        }
+    }
+
+    @Test("Writable external and developer installs keep the update menu available", arguments: [
+        InstallLocation.applications, .developerBuild,
+        .elsewhere(URL(fileURLWithPath: "/Volumes/External/Home Rec.app"))
+    ])
+    func allowedLocationMenu(location: InstallLocation) throws {
+        let row = try #require(updateRow(OverflowContext(installLocation: location)))
+        #expect(row.isEnabled)
+        #expect(row.toolTip == nil)
+    }
+
     @Test("A test host runs no updater at all")
     func testHostRunsNoUpdater() {
         // This is the regression guard for a CI break that cost a full run.
@@ -157,5 +289,24 @@ struct UpdateGateTests {
         #expect(try #require(error.errorDescription).isEmpty == false)
         let suggestion = try #require(error.recoverySuggestion)
         #expect(suggestion.localizedCaseInsensitiveContains("stop recording"))
+    }
+}
+
+/// Counts construction-independent updater effects without running Sparkle.
+@MainActor
+private final class TestUpdateChecker: UpdateChecking {
+    var isSafeToInstall = true
+    var canCheckForUpdates = true
+    var startError: Error?
+    private(set) var starts = 0
+    private(set) var checks = 0
+
+    func start() throws {
+        starts += 1
+        if let startError { throw startError }
+    }
+
+    func checkForUpdates() {
+        checks += 1
     }
 }

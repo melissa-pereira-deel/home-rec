@@ -35,52 +35,48 @@ final class UpdaterController {
 
     /// Retained because `SPUStandardUpdaterController` holds its delegate weakly.
     private let gate: UpdaterGate
-    /// `nil` in a unit-test host, where the app must not run an updater at all.
-    private let controller: SPUStandardUpdaterController?
+    /// `nil` in a test host or blocked install, before any Sparkle side effects.
+    private let controller: (any UpdateChecking)?
+    private let installLocation: InstallLocation
 
     /// Why the updater cannot be used, or `nil` when it started cleanly.
     private(set) var unavailable: UpdaterUnavailable?
 
     /// - Parameters:
+    ///   - installLocation: The launch snapshot, consulted before constructing Sparkle.
     ///   - isSafeToInstall: Answers "is it safe to terminate this process right
     ///     now?" — read at the moment Sparkle asks, never cached, because
     ///     recording starts and stops long after this object is built.
     ///   - environment: Injected so the test-host rule stays assertable.
+    ///   - makeUpdater: Constructs the updater only after preflight permits it.
     init(
+        installLocation: InstallLocation,
         isSafeToInstall: @escaping @MainActor () -> Bool,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        makeUpdater: @MainActor (any SPUUpdaterDelegate) -> any UpdateChecking = {
+            SparkleUpdateChecker(delegate: $0)
+        }
     ) {
+        self.installLocation = installLocation
         let gate = UpdaterGate(isSafeToInstall: isSafeToInstall)
         self.gate = gate
 
+        guard !installLocation.blocksUpdates else {
+            self.controller = nil
+            self.unavailable = .blockedInstallLocation
+            return
+        }
         guard Self.shouldRunUpdater(in: environment) else {
             self.controller = nil
             self.unavailable = .notRunInTestHost
             return
         }
 
-        // ⚠️ `startingUpdater: false` is load-bearing, and the two ways to start
-        // are a trap. `SPUStandardUpdaterController.startUpdater()` is
-        // non-throwing and, on failure, waits one second and then runs a modal
-        // `NSAlert` we do not control. The one we want is `SPUUpdater`'s, which
-        // throws and shows nothing — and which Swift imports as `start()`, not
-        // `startUpdater()`, so the obvious spelling silently resolves to the
-        // wrong object's method.
-        //
-        // That modal is not merely ugly. `TEST_HOST` makes this app its own test
-        // host, so a modal on the main thread races XCTest's startup: on a fast
-        // machine the runner wins and the suite passes, on CI's slower VM the
-        // alert wins and the whole run reports "Test runner never began
-        // executing tests after launching" with zero tests. Measured 2026-08-02.
-        let controller = SPUStandardUpdaterController(
-            startingUpdater: false,
-            updaterDelegate: gate,
-            userDriverDelegate: nil
-        )
+        let controller = makeUpdater(gate)
         self.controller = controller
 
         do {
-            try controller.updater.start()
+            try controller.start()
         } catch {
             // Deliberately quiet: a start failure means a misconfigured build,
             // which the user can do nothing about. Surfacing it well is BL-148.
@@ -117,13 +113,13 @@ final class UpdaterController {
     /// `checkForUpdates()` degrades to a silent no-op. Without this the row would
     /// look enabled and do nothing at all, which is worse than an honest error.
     var canCheckForUpdates: Bool {
-        guard let controller, isUsable else { return false }
-        return controller.updater.canCheckForUpdates && gate.isSafeToInstall()
+        guard !installLocation.blocksUpdates, isUsable, let controller else { return false }
+        return gate.isSafeToInstall() && controller.canCheckForUpdates
     }
 
     func checkForUpdates() {
-        guard let controller, isUsable else { return }
-        controller.updater.checkForUpdates()
+        guard canCheckForUpdates else { return }
+        controller?.checkForUpdates()
     }
 
     /// Releases an update that finished downloading during a take.
@@ -132,6 +128,45 @@ final class UpdaterController {
     /// forever — Sparkle has no timeout on the handler it gave us.
     func recordingDidEnd() {
         gate.releasePostponedRelaunch()
+    }
+}
+
+/// The Sparkle operations exercised after install-location preflight.
+/// Tests inject a checker without constructing Sparkle or reaching the network.
+@MainActor
+protocol UpdateChecking: AnyObject {
+    /// Whether another check can start.
+    var canCheckForUpdates: Bool { get }
+    /// Starts automatic update scheduling, throwing silently on misconfiguration.
+    func start() throws
+    /// Starts a user-initiated check.
+    func checkForUpdates()
+}
+
+/// Keeps Sparkle construction and startup behind the preflight factory.
+@MainActor
+private final class SparkleUpdateChecker: UpdateChecking {
+    private let controller: SPUStandardUpdaterController
+
+    init(delegate: any SPUUpdaterDelegate) {
+        controller = SPUStandardUpdaterController(
+            startingUpdater: false,
+            updaterDelegate: delegate,
+            userDriverDelegate: nil
+        )
+    }
+
+    var canCheckForUpdates: Bool { controller.updater.canCheckForUpdates }
+
+    func start() throws {
+        // Use SPUUpdater.start(), which throws silently. The similarly named
+        // controller.startUpdater() displays a modal on failure; in TEST_HOST
+        // that modal can prevent the test runner from starting (2026-08-02).
+        try controller.updater.start()
+    }
+
+    func checkForUpdates() {
+        controller.updater.checkForUpdates()
     }
 }
 
@@ -192,8 +227,10 @@ private final class UpdaterGate: NSObject, SPUUpdaterDelegate {
 /// Why the updater is unusable for this whole process run.
 ///
 /// Distinct from `UpdateDeferred`, which is temporary and clears when recording
-/// stops. These two do not: they last until the app is relaunched.
+/// stops. These last until the app is relaunched.
 enum UpdaterUnavailable: Equatable, Sendable {
+    /// The bundle must be moved before Sparkle may be constructed or started.
+    case blockedInstallLocation
     /// Running as a unit-test host. Not an error — the correct outcome.
     case notRunInTestHost
     /// `startUpdater()` threw. Always a misconfigured build (bad feed URL, bad

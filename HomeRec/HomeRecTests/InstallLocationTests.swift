@@ -51,13 +51,88 @@ struct InstallLocationTests {
         #expect(InstallLocation.classify(url) == .translocated)
     }
 
-    /// Running straight off the mounted image *without* quarantine (e.g. an image
-    /// the user built themselves) is not translocated — it is merely elsewhere.
-    /// The block is for the randomised path, not for the volume.
-    @Test("Bundle on a mounted volume classifies as elsewhere")
+    /// A mount path alone says nothing about writability or disk images.
+    @Test("An unknown mounted volume classifies as elsewhere")
     func mountedVolume() {
         let url = URL(fileURLWithPath: "/Volumes/Home Rec/Home Rec.app")
         #expect(InstallLocation.classify(url) == .elsewhere(url))
+    }
+
+    @Test("Read-only volumes block updates even under Applications or build paths", arguments: [
+        "/Volumes/Home Rec/Home Rec.app",
+        "/Applications/Home Rec.app",
+        "/tmp/custom-mount/Home Rec.app",
+        "/Volumes/External/Build/Products/Debug/HomeRec.app"
+    ])
+    nonisolated func readOnlyVolume(path: String) {
+        #expect(InstallLocation.classify(
+            URL(fileURLWithPath: path), volumeIsReadOnly: true
+        ) == .readOnlyVolume)
+    }
+
+    @Test("A writable external install is legitimate")
+    func writableExternalVolume() {
+        let url = URL(fileURLWithPath: "/Volumes/External/Apps/Home Rec.app")
+        let location = InstallLocation.classify(url, volumeIsReadOnly: false)
+        #expect(location == .elsewhere(url))
+        #expect(!location.blocksUpdates)
+        #expect(!location.blocksRecording)
+    }
+
+    @Test("Translocation keeps the recording block on a read-only volume")
+    func translocationWinsOverReadOnly() {
+        let url = URL(fileURLWithPath: "/private/var/AppTranslocation/UUID/d/Home Rec.app")
+        #expect(InstallLocation.classify(
+            url, volumeIsReadOnly: true, isDebugBuild: true
+        ) == .translocated)
+    }
+
+    // MARK: - Runtime trait mapping
+
+    @Test("The provider maps the actual URL volume resource flag", arguments: [true, false])
+    func providerMapsVolumeFlag(readOnly: Bool) {
+        let url = URL(fileURLWithPath: "/Volumes/External/Home Rec.app")
+        var reads = 0
+        let provider = BundleInstallLocation(bundleURL: url, isDebugBuild: false) { requestedURL in
+            reads += 1
+            #expect(requestedURL == url)
+            return readOnly
+        }
+        #expect(provider.location == (readOnly ? .readOnlyVolume : .elsewhere(url)))
+        #expect(reads == 1)
+    }
+
+    @Test("Missing or failed volume metadata preserves the path policy", arguments: [true, false])
+    func providerUnknownVolume(throwsError: Bool) {
+        let url = URL(fileURLWithPath: "/Volumes/External/Home Rec.app")
+        let provider = BundleInstallLocation(bundleURL: url, isDebugBuild: false) { _ in
+            if throwsError { throw CocoaError(.fileReadUnknown) }
+            return nil
+        }
+        #expect(provider.location == .elsewhere(url))
+    }
+
+    @Test("DEBUG exemptions cannot hide blocked runtime locations", arguments: [true, false])
+    func providerDebugPrecedence(readOnly: Bool) {
+        let url = URL(fileURLWithPath: "/tmp/Home Rec.app")
+        let provider = BundleInstallLocation(bundleURL: url, isDebugBuild: true) { _ in readOnly }
+        #expect(provider.location == (readOnly ? .readOnlyVolume : .developerBuild))
+
+        let translocated = BundleInstallLocation(
+            bundleURL: URL(fileURLWithPath: "/tmp/AppTranslocation/UUID/d/Home Rec.app"),
+            isDebugBuild: true,
+            volumeIsReadOnly: { _ in readOnly }
+        )
+        #expect(translocated.location == .translocated)
+    }
+
+    @Test("The default runtime reader agrees with the real bundle volume")
+    func runtimeReader() throws {
+        let url = Bundle.main.bundleURL
+        let values = try url.resourceValues(forKeys: [.volumeIsReadOnlyKey])
+        #expect(values.volumeIsReadOnly != nil)
+        let provider = BundleInstallLocation(bundleURL: url, isDebugBuild: false)
+        #expect(provider.location == InstallLocation.classify(url, volumeIsReadOnly: values.volumeIsReadOnly))
     }
 
     @Test("Bundle in ~/Downloads classifies as elsewhere")
@@ -96,6 +171,7 @@ struct InstallLocationTests {
     @Test("Only translocation blocks recording")
     func onlyTranslocationBlocks() {
         #expect(InstallLocation.translocated.blocksRecording)
+        #expect(InstallLocation.readOnlyVolume.blocksRecording == false)
         #expect(InstallLocation.applications.blocksRecording == false)
         #expect(InstallLocation.developerBuild.blocksRecording == false)
         #expect(InstallLocation.elsewhere(URL(fileURLWithPath: "/x/Home Rec.app")).blocksRecording == false)
@@ -123,6 +199,20 @@ struct InstallLocationTests {
         let location = InstallLocation.elsewhere(URL(fileURLWithPath: "/Users/someone/Downloads/Home Rec.app"))
         #expect(location.noticeIsDismissible)
         #expect(location.explanation != nil)
+    }
+
+    @Test("Read-only copy explains updates and shares the canonical move instruction")
+    func readOnlyCopy() throws {
+        let location = InstallLocation.readOnlyVolume
+        #expect(location.blocksUpdates)
+        #expect(location.noticeIsDismissible)
+        let explanation = try #require(location.explanation)
+        #expect(explanation.contains("can record"))
+        #expect(explanation.contains("can't update"))
+        let move = "Quit, drag it to your Applications folder, and open it from there."
+        #expect(explanation.hasSuffix(move))
+        #expect(InstallLocation.translocated.explanation?.hasSuffix(move) == true)
+        #expect(location.updateBlockExplanation == explanation)
     }
 
     // MARK: - View-model integration
@@ -327,6 +417,20 @@ struct InstallLocationTests {
         #expect(viewModel.installNotice == nil)
         #expect(viewModel.showsInstallLocationNotice == false)
 
+        await viewModel.startRecording()
+        #expect(viewModel.state == .recording)
+        #expect(controller.startCount == 1)
+    }
+
+    @Test("An ordinary read-only install still records after dismissing its note")
+    func readOnlyVolumeStillRecords() async {
+        let controller = MockRecordingControlling()
+        let viewModel = makeViewModel(.readOnlyVolume, controller: controller)
+        #expect(viewModel.canRecord)
+        #expect(!viewModel.showsInstallLocationNotice)
+        viewModel.dismissInstallLocationNotice()
+        #expect(viewModel.installNotice == nil)
+        #expect(viewModel.installLocation.blocksUpdates)
         await viewModel.startRecording()
         #expect(viewModel.state == .recording)
         #expect(controller.startCount == 1)

@@ -17,11 +17,13 @@
 import Foundation
 
 /// Where the running bundle lives, in the only terms that change behaviour.
-enum InstallLocation: Equatable, Sendable {
+nonisolated enum InstallLocation: Equatable, Sendable {
     /// Inside the system `/Applications` tree — the intended, TCC-stable home.
     case applications
     /// Gatekeeper path-randomised the bundle. Permission cannot persist. Hard block.
     case translocated
+    /// A disk image or other read-only volume. Recording works; updating cannot.
+    case readOnlyVolume
     /// A real, stable path that simply isn't `/Applications` (`~/Applications`, a
     /// custom folder). Legitimate, and TCC handles it fine — never a block.
     case elsewhere(URL)
@@ -55,23 +57,24 @@ enum InstallLocation: Equatable, Sendable {
 
     /// Classify a bundle URL.
     ///
-    /// Pure: a function of the URL's path and nothing else — no filesystem access,
-    /// no `Bundle.main`. That is what makes every branch table-testable without
-    /// mocks, hardware, or a real translocated bundle.
+    /// Pure: the provider supplies volume and build traits; no filesystem access
+    /// or `Bundle.main` here. An unknown volume trait preserves path-based policy.
     ///
-    /// Precedence is translocated → developerBuild → applications → elsewhere.
-    /// The first two are mutually exclusive in practice (a translocated bundle is
-    /// under `/private/var/folders`, never under DerivedData), but the order is
-    /// fixed explicitly rather than left to chance: translocation is the only
-    /// unrecoverable state, so if a path ever managed to look like both, the
-    /// blocking answer is the correct one to return.
-    static func classify(_ bundleURL: URL) -> InstallLocation {
+    /// Blocked locations take precedence over developer-build exemptions.
+    nonisolated static func classify(
+        _ bundleURL: URL,
+        volumeIsReadOnly: Bool? = nil,
+        isDebugBuild: Bool = false
+    ) -> InstallLocation {
         let path = bundleURL.path
 
         if path.contains(translocationMarker) {
             return .translocated
         }
-        if developerMarkers.contains(where: { path.contains($0) }) {
+        if volumeIsReadOnly == true {
+            return .readOnlyVolume
+        }
+        if isDebugBuild || developerMarkers.contains(where: { path.contains($0) }) {
             return .developerBuild
         }
         if path.hasPrefix(applicationsPrefix) {
@@ -88,6 +91,19 @@ enum InstallLocation: Equatable, Sendable {
     /// users to dismiss the one warning that actually matters.
     var blocksRecording: Bool {
         self == .translocated
+    }
+
+    /// Whether Sparkle must remain unconstructed, including background checks.
+    nonisolated var blocksUpdates: Bool {
+        self == .translocated || self == .readOnlyVolume
+    }
+
+    /// The physical fix shared by every install-location explanation.
+    private static let moveInstruction = "Quit, drag it to your Applications folder, and open it from there."
+
+    /// The canonical location explanation for a disabled update row.
+    var updateBlockExplanation: String? {
+        blocksUpdates ? explanation : nil
     }
 
     /// Whether the soft note can be dismissed and forgotten. The hard block cannot:
@@ -111,8 +127,9 @@ enum InstallLocation: Equatable, Sendable {
             // user reads one fact however they meet the block. "Quit" leads
             // because it is a load-bearing step, not decoration: the running copy
             // is the one that must die for the fix to take.
-            return "Home Rec can't record from the disk image. Quit, drag it to "
-                 + "your Applications folder, and open it from there."
+            return "Home Rec can't record from the disk image. " + Self.moveInstruction
+        case .readOnlyVolume:
+            return "Home Rec can record from this read-only volume, but it can't update. " + Self.moveInstruction
         case .elsewhere:
             return "Home Rec isn't in your Applications folder. It'll still record — this "
                  + "is just where it lives."
@@ -141,21 +158,36 @@ protocol InstallLocationProviding: AnyObject {
 final class BundleInstallLocation: InstallLocationProviding {
 
     let bundleURL: URL
+    private let isDebugBuild: Bool
+    private let volumeIsReadOnly: (URL) throws -> Bool?
 
-    init(bundleURL: URL = Bundle.main.bundleURL) {
+    /// Reads the actual volume flag, with an injectable trait lookup for tests.
+    init(
+        bundleURL: URL = Bundle.main.bundleURL,
+        isDebugBuild: Bool = BundleInstallLocation.isDebugConfiguration,
+        volumeIsReadOnly: @escaping (URL) throws -> Bool? = {
+            try $0.resourceValues(forKeys: [.volumeIsReadOnlyKey]).volumeIsReadOnly
+        }
+    ) {
         self.bundleURL = bundleURL
+        self.isDebugBuild = isDebugBuild
+        self.volumeIsReadOnly = volumeIsReadOnly
     }
 
     var location: InstallLocation {
+        let readOnly = try? volumeIsReadOnly(bundleURL)
+        return InstallLocation.classify(
+            bundleURL,
+            volumeIsReadOnly: readOnly,
+            isDebugBuild: isDebugBuild
+        )
+    }
+
+    nonisolated private static var isDebugConfiguration: Bool {
         #if DEBUG
-        // Belt to `classify`'s DerivedData match: a debug build is by definition
-        // not something a user installed, and a nag on every Xcode run is how this
-        // whole feature gets commented out. The check lives here, at the call
-        // site, rather than inside `classify` — the classifier stays a pure
-        // function of the URL so it can be table-tested from a debug test build.
-        return .developerBuild
+        true
         #else
-        return InstallLocation.classify(bundleURL)
+        false
         #endif
     }
 }
