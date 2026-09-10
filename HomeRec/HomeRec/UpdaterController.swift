@@ -80,6 +80,7 @@ final class UpdaterController {
         } catch {
             // Deliberately quiet: a start failure means a misconfigured build,
             // which the user can do nothing about. Surfacing it well is BL-148.
+            Diagnostics.recordUpdaterStartupFailure(error)
             self.unavailable = .startFailed
             Log.recorder.error(
                 "Sparkle updater failed to start: \(error.localizedDescription, privacy: .public)"

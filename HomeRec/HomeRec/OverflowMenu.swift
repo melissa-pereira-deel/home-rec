@@ -399,7 +399,11 @@ enum OverflowMenu {
     /// Recursing matters: the mid-recording lock and one-checkmark invariants are
     /// asserted over this, and a per-app row that stayed clickable would hide
     /// inside a submenu where a top-level-only walk could never see it.
-    static func actions(_ context: OverflowContext = OverflowContext()) -> [OverflowAction] {
+    static func actions() -> [OverflowAction] {
+        actions(OverflowContext())
+    }
+
+    static func actions(_ context: OverflowContext) -> [OverflowAction] {
         flatten(entries(context))
     }
 
@@ -484,7 +488,11 @@ extension OverflowMenu {
     /// now call this. They used to render the same list twice, once as `NSMenu`
     /// and once as a SwiftUI `Menu`, and parity between them was an assertion.
     /// It is now an identity.
-    static func makeNSMenu(_ context: OverflowContext = OverflowContext()) -> NSMenu {
+    static func makeNSMenu() -> NSMenu {
+        makeNSMenu(OverflowContext())
+    }
+
+    static func makeNSMenu(_ context: OverflowContext) -> NSMenu {
         let menu = NSMenu()
         populate(menu, with: entries(context))
         return menu

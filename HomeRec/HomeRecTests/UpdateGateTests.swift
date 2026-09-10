@@ -185,8 +185,15 @@ struct UpdateGateTests {
 
     @Test("A failed startup still refuses manual checks even if Sparkle says it can check")
     func startupFailureRefusesCommands() {
+        Diagnostics.clearUpdaterStartupFailure()
+        defer { Diagnostics.clearUpdaterStartupFailure() }
+
         let checker = TestUpdateChecker()
-        checker.startError = CocoaError(.fileReadUnknown)
+        checker.startError = NSError(
+            domain: "HomeRecUpdaterTests",
+            code: 42,
+            userInfo: [NSLocalizedDescriptionKey: "Synthetic updater startup failure"]
+        )
         let updater = UpdaterController(
             installLocation: .applications,
             isSafeToInstall: { true },
@@ -198,6 +205,12 @@ struct UpdateGateTests {
         #expect(!updater.canCheckForUpdates)
         updater.checkForUpdates()
         #expect(checker.checks == 0)
+
+        let report = Diagnostics.report()
+        #expect(report.contains("Updater startup failure:"))
+        #expect(report.contains("Domain: HomeRecUpdaterTests"))
+        #expect(report.contains("Code: 42"))
+        #expect(report.contains("Synthetic updater startup failure"))
     }
 
     @Test("Blocked install rows use canonical copy before recording or startup failures", arguments: [
