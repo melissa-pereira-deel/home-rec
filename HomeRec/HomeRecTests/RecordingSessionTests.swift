@@ -289,6 +289,54 @@ struct RecordingSessionTests {
         #expect(try WAVWriter.isUnfinalized(at: url) == false)
     }
 
+    /// BL-170's ceiling is the likeliest way a user meets a draining teardown:
+    /// the alert says the take saved complete, so pressing Record again is the
+    /// obvious next move, and `finalizeAfterFailure` is still running when they do.
+    @Test("A retry during failure teardown waits for it instead of blaming the user")
+    func retryDuringTeardownWaitsForIt() async throws {
+        let f = try Fixture()
+        defer { f.cleanup() }
+        let cleanupGate = Gate()
+        defer { cleanupGate.release() }
+        f.writer.onStart = { try writeInterruptedWAV(at: $0) }
+        await f.recorder.startRecording()
+        #expect(f.recorder.state == .recording)
+        let first = try #require(f.controller.recordingURL)
+
+        f.capture.onCleanup = { await cleanupGate.wait() }
+        f.writer.emitWriteError(.sizeLimitReached)
+        #expect(f.recorder.state == .error(.sizeLimitReached))
+        await waitUntil("failure teardown cleanup") { cleanupGate.isWaiting }
+
+        // The user presses Record for the next take, mid-teardown.
+        let retry = Task { await f.recorder.startRecording() }
+        await waitUntil("the retry to park in .starting") { f.recorder.state == .starting }
+        #expect(f.controller.recordingURL == first, "the draining take still owns its file")
+
+        cleanupGate.release()
+        await retry.value
+
+        #expect(f.recorder.state == .recording, "the retry must land once teardown finishes")
+        let second = try #require(f.controller.recordingURL)
+        #expect(second != first, "the new take must not reuse the finished file")
+        #expect(
+            f.recorder.errorMessage?.localizedCaseInsensitiveContains("audio is playing") != true,
+            "a take still finalizing is not a missing-audio problem"
+        )
+        await f.recorder.stopRecording()
+    }
+
+    /// The refusal still has to read honestly if it is ever reached: the generic
+    /// clause would send someone to check their speakers while Home Rec closed
+    /// a file.
+    @Test("A refused start names the real reason and offers the retry")
+    func refusedStartReadsHonestly() {
+        let error = RecorderError.stillFinishing
+        #expect(error.message.localizedCaseInsensitiveContains("still finishing"))
+        #expect(!error.message.localizedCaseInsensitiveContains("audio is playing"))
+        #expect(error.recovery == .tryAgain)
+    }
+
     /// Pins a filename so a scan-then-own race does not depend on the clock.
     @MainActor
     private final class FixedPathController: RecordingController {

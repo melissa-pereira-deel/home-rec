@@ -147,6 +147,13 @@ class RecorderViewModel: ObservableObject {
     /// A probe that was issued before the bump answers an older question and is
     /// discarded rather than applied on top of it.
     private var permissionGeneration = 0
+    /// Teardown for a take that ended in failure, while it is still draining.
+    ///
+    /// `handleWriteFailure` and `handleStreamFailure` enter `.error` *before*
+    /// finalizing, so the user can legally press Record again while the encoder
+    /// and the output file are still held (BL-171b). Retained so the next start
+    /// can wait for it instead of being refused.
+    private var failureTeardown: Task<Void, Never>?
     private let installLocationProvider: InstallLocationProviding
     /// The install-location panel, created on first use for the same reason.
     private var installNoticePanel: FloatingPanelHost?
@@ -373,6 +380,27 @@ class RecorderViewModel: ObservableObject {
 
         transition(to: .starting)
 
+        // Drain a failed take's teardown before asking for the file back.
+        //
+        // 🔴 Without this the retry loses a race it cannot see. BL-170's size
+        // limit is the common way in: the alert says the take "has been saved
+        // complete", so pressing Record again is the obvious next move, and it
+        // lands while `finalizeAfterFailure` is still inside `stopCapture` /
+        // `finishWriting` / `cleanup` — which is exactly when the controller
+        // still owns the session (BL-171b) and refuses. The user then reads
+        // "make sure some audio is playing", advice that has nothing to do with
+        // what happened and that they cannot act on.
+        //
+        // Waiting rather than reporting, because there is nothing to report:
+        // the condition is Home Rec's own teardown, it always clears, and it
+        // clears in the time it takes to close a file. `.starting` is already
+        // the state the UI shows for "working on it", and `finishForTermination`
+        // already knows to wait `.starting` out.
+        if let failureTeardown {
+            await failureTeardown.value
+            self.failureTeardown = nil
+        }
+
         // Recording a microphone needs its own grant, and it is a *different*
         // flow rather than the same one parameterised (BL-130): unlike Screen
         // Recording, macOS will genuinely re-prompt for this, so asking is the
@@ -426,6 +454,14 @@ class RecorderViewModel: ObservableObject {
         } catch RecordingControllerError.insufficientDiskSpace {
             Log.recorder.error("Refusing to record: insufficient disk space")
             transition(to: .error(.diskFull))
+        } catch RecordingControllerError.sessionInProgress {
+            // The drain above makes this unreachable for the paths that exist
+            // today. It stays mapped because the alternative is the generic
+            // clause, and the generic clause says "make sure some audio is
+            // playing" — a sentence that would send someone to check their
+            // speakers while Home Rec closed a file.
+            Log.recorder.error("Refusing to start: the previous take still owns its file")
+            transition(to: .error(.stillFinishing))
         } catch let sourceError as AudioSourceError {
             // Caught ahead of the generic clause on purpose. `AudioSourceError`
             // already writes accurate copy for its two cases — the app quit, the
@@ -817,7 +853,7 @@ class RecorderViewModel: ObservableObject {
         case .other(let message):
             transition(to: .error(.writeFailed(message)))
         }
-        Task { [weak self] in
+        failureTeardown = Task { [weak self] in
             await self?.controller.finalizeAfterFailure()
         }
     }
@@ -827,7 +863,7 @@ class RecorderViewModel: ObservableObject {
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
         transition(to: .error(.streamFailed(message)))
-        Task { [weak self] in
+        failureTeardown = Task { [weak self] in
             await self?.controller.finalizeAfterFailure()
         }
     }

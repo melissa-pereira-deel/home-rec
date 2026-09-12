@@ -42,6 +42,13 @@ enum RecorderError: Error, Equatable, Sendable {
     /// again" here is an infinite loop. Settings is the only way out.
     case microphoneDenied
     case stopFailed(String)
+    /// A start arrived while the previous take still owned its output file.
+    ///
+    /// Distinct from `.startFailed` because nothing is wrong and no diagnosis
+    /// applies: Home Rec is closing a file, and the only thing anyone can do is
+    /// the thing that already works a moment later. `.startFailed`'s copy —
+    /// "make sure some audio is playing" — is actively misleading here.
+    case stillFinishing
     case streamFailed(String)
     /// The encoder refused a buffer mid-take, so the file stopped growing while
     /// the recording still looked healthy (BL-173).
@@ -61,6 +68,8 @@ enum RecorderError: Error, Equatable, Sendable {
             return detail
         case .sizeLimitReached:
             return "WAV data chunk reached its 4 GiB maximum"
+        case .stillFinishing:
+            return "the previous take still owns its output file"
         case .sourceUnavailable(let error):
             return error.errorDescription ?? "capture source unavailable"
         case .microphoneDenied:
@@ -83,6 +92,8 @@ enum RecorderError: Error, Equatable, Sendable {
             return error.errorDescription ?? "The capture source you chose isn't available."
         case .microphoneDenied:
             return "Home Rec doesn't have permission to use the microphone."
+        case .stillFinishing:
+            return "Home Rec is still finishing the last recording. Try again in a moment."
         case .stopFailed:
             return "Home Rec couldn't finish saving the recording. The audio captured so far may still be on your Desktop."
         case .streamFailed:
@@ -108,7 +119,7 @@ enum RecorderError: Error, Equatable, Sendable {
     /// A suggested next step the user can take, if any.
     nonisolated var recovery: RecoverySuggestion? {
         switch self {
-        case .startFailed:
+        case .startFailed, .stillFinishing:
             return .tryAgain
         case .sourceUnavailable:
             // Deliberately not `.tryAgain`: the app is still closed and the mic is
