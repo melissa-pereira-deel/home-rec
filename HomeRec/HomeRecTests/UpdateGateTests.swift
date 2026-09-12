@@ -158,11 +158,14 @@ struct UpdateGateTests {
         #expect(!updater.canCheckForUpdates)
         updater.checkForUpdates()
         #expect(checker.checks == 1)
+        // Sparkle's own flag draws the row but does not refuse the command:
+        // the row cannot see it, so refusing here would be a dead click. See
+        // `enabledRowAlwaysReachesSparkle`.
         checker.isSafeToInstall = true
         checker.canCheckForUpdates = false
         #expect(!updater.canCheckForUpdates)
         updater.checkForUpdates()
-        #expect(checker.checks == 1)
+        #expect(checker.checks == 2)
     }
 
     @Test("A test-host preflight also prevents construction")
@@ -243,6 +246,34 @@ struct UpdateGateTests {
         let row = try #require(updateRow(OverflowContext(installLocation: location)))
         #expect(row.isEnabled)
         #expect(row.toolTip == nil)
+    }
+
+    /// The row's `isEnabled` is built from launch-time facts. Sparkle's own
+    /// `canCheckForUpdates` is not one of them, so gating the command on it
+    /// produces the exact outcome `canCheckForUpdates`' own comment calls worse
+    /// than an honest error: a live-looking row that does nothing when clicked.
+    @Test("An enabled update row never clicks into nothing")
+    func enabledRowAlwaysReachesSparkle() throws {
+        let checker = TestUpdateChecker()
+        let updater = UpdaterController(
+            installLocation: .applications,
+            isSafeToInstall: { true },
+            environment: [:],
+            makeUpdater: { _ in checker }
+        )
+        // Sparkle is busy with a check it started earlier — a session state, not
+        // a reason the row would ever have been drawn disabled.
+        checker.canCheckForUpdates = false
+
+        let row = try #require(updateRow(OverflowContext(
+            allowsUpdateInstall: true,
+            updaterIsUsable: updater.isUsable,
+            installLocation: .applications
+        )))
+        #expect(row.isEnabled, "every input the row reads still says it is live")
+
+        updater.checkForUpdates()
+        #expect(checker.checks == 1, "an enabled row must reach Sparkle, which fronts its window")
     }
 
     @Test("A test host runs no updater at all")

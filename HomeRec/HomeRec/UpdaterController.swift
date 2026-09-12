@@ -118,9 +118,22 @@ final class UpdaterController {
         return gate.isSafeToInstall() && controller.canCheckForUpdates
     }
 
+    /// Gated on everything `canCheckForUpdates` is *except* Sparkle's own flag.
+    ///
+    /// Sparkle's `canCheckForUpdates` is session state — false while a check is
+    /// already running or an update is on screen. The row does not read it (it
+    /// is built from launch-time facts plus the recording gate), so refusing on
+    /// it turns a live-looking row into a click that does nothing: the outcome
+    /// `canCheckForUpdates`' own comment calls worse than an honest error.
+    /// Sparkle answers a repeat call by fronting the window it already has,
+    /// which is what someone pressing an enabled row is asking for.
+    ///
+    /// The other three guards stay. A blocked location and a failed start are
+    /// permanent, and an open take is the reason BL-034 exists.
     func checkForUpdates() {
-        guard canCheckForUpdates else { return }
-        controller?.checkForUpdates()
+        guard !installLocation.blocksUpdates, isUsable, let controller else { return }
+        guard gate.isSafeToInstall() else { return }
+        controller.checkForUpdates()
     }
 
     /// Releases an update that finished downloading during a take.
