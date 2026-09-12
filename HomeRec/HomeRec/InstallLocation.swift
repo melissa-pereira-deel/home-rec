@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import os
 
 /// Where the running bundle lives, in the only terms that change behaviour.
 nonisolated enum InstallLocation: Equatable, Sendable {
@@ -188,7 +189,21 @@ final class BundleInstallLocation: InstallLocationProviding {
     }
 
     var location: InstallLocation {
-        let readOnly = try? volumeIsReadOnly(bundleURL)
+        var readOnly: Bool?
+        do {
+            readOnly = try volumeIsReadOnly(bundleURL)
+        } catch {
+            // Both "the key is unavailable" and "the read failed" fall back to
+            // path policy, which is the permissive answer — so the two have to
+            // be distinguishable afterwards. A `try?` made them the same `nil`,
+            // and the whole point of BL-148a is not handing Sparkle an install
+            // it cannot write to: a report saying "updates were allowed" needs
+            // to show whether that was a decision or a failed question.
+            Log.recorder.error(
+                "Could not read the bundle volume's read-only flag: \(error.localizedDescription, privacy: .public)"
+            )
+            readOnly = nil
+        }
         return InstallLocation.classify(
             bundleURL,
             volumeIsReadOnly: readOnly,
