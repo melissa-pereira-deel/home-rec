@@ -327,6 +327,22 @@ struct UpdateGateTests {
         let both = context(canInstall: false, updaterUsable: false)
         #expect(try #require(OverflowMenu.updateRowTooltip(both)).localizedCaseInsensitiveContains("recording"))
         #expect(OverflowMenu.updateRowTooltip(context()) == nil)
+
+        // ...but a blocked location outranks both (BL-148a). It outlives the
+        // take, so telling someone to stop recording would cost them the take
+        // and leave the row greyed anyway. Asserted rather than left to the
+        // default `installLocation`, which is what made this ordering
+        // incidental when BL-148a introduced it.
+        for location in [InstallLocation.translocated, .readOnlyVolume] {
+            let blocked = OverflowContext(
+                allowsUpdateInstall: false,
+                updaterIsUsable: false,
+                installLocation: location
+            )
+            let tip = try #require(OverflowMenu.updateRowTooltip(blocked))
+            #expect(tip == location.updateBlockExplanation)
+            #expect(!tip.localizedCaseInsensitiveContains("would end the recording"))
+        }
     }
 
     @Test("Blocking an update reads as a reason plus a way forward")

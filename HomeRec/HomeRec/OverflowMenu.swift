@@ -340,6 +340,14 @@ enum OverflowMenu {
     /// A pure function so the precedence between independent reasons is
     /// assertable rather than buried in a ternary inside a row builder.
     static func updateRowTooltip(_ context: OverflowContext) -> String? {
+        // Install location outranks recording, reversing BL-034's original
+        // precedence (BL-148a). That rule preferred the recording explanation
+        // because it was the one the user caused and the one that clears on its
+        // own — but both halves of that argument are what disqualify it here: a
+        // blocked location is neither, it outlives the take, and saying "stop
+        // recording" to someone who then stops and finds the row still greyed
+        // has cost them the take for nothing. `recordingTooltipTakesPrecedence`
+        // still pins the old ordering between the two reasons *below* this one.
         if let explanation = context.installLocation.updateBlockExplanation {
             return explanation
         }
