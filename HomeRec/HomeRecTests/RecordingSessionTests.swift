@@ -15,6 +15,10 @@ struct RecordingSessionTests {
 
         func wait() async {
             guard !released else { return }
+            // `cleanup()` runs on three controller paths plus `deinit`, so a
+            // gate can be entered twice. Overwriting would strand the first
+            // continuation and hang the test past any timeout.
+            precondition(continuation == nil, "Gate does not support concurrent waiters")
             await withCheckedContinuation {
                 continuation = $0
                 isWaiting = true
