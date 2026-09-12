@@ -62,9 +62,16 @@ class RecorderViewModel: ObservableObject {
     var isRecording: Bool { state == .recording }
 
     /// A live read of session ownership for recovery, independent of UI state.
-    /// Retains the owner for as long as the recovery window can act on its files.
+    ///
+    /// `weak`, because this closure is installed into `OverflowMenu`'s static and
+    /// copied into `RecoveryWindowController.shared` — both of which outlive
+    /// everything. A strong capture there would pin the controller for the
+    /// process and, with it, suppress the `deinit` teardown that is the last
+    /// thing standing between a dropped controller and a leaked encoder.
+    /// `nil` is the right answer once the controller is gone: no controller,
+    /// no session, nothing for recovery to protect.
     var recordingURLProvider: @MainActor () -> URL? {
-        { [controller] in controller.recordingURL }
+        { [weak controller] in controller?.recordingURL }
     }
 
     /// Whether the settings shelf (save location, format, capture source) is shown.
