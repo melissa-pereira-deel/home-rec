@@ -212,7 +212,22 @@ struct InstallLocationTests {
         let move = "Quit, drag it to your Applications folder, and open it from there."
         #expect(explanation.hasSuffix(move))
         #expect(InstallLocation.translocated.explanation?.hasSuffix(move) == true)
+        // Read-only is the one case where the recording sentence is already
+        // about updating, so the two surfaces share a string.
         #expect(location.updateBlockExplanation == explanation)
+
+        // Translocation is not: its `explanation` opens with the recording
+        // block, which says nothing on a Check for Updates tooltip.
+        let translocated = try #require(InstallLocation.translocated.updateBlockExplanation)
+        #expect(translocated != InstallLocation.translocated.explanation)
+        #expect(translocated.localizedCaseInsensitiveContains("can't update"))
+        #expect(translocated.hasSuffix(move))
+
+        // A location that does not block updates offers no reason at all.
+        for allowed in [InstallLocation.applications, .developerBuild,
+                        .elsewhere(URL(fileURLWithPath: "/x/Home Rec.app"))] {
+            #expect(allowed.updateBlockExplanation == nil)
+        }
     }
 
     // MARK: - View-model integration

@@ -101,9 +101,22 @@ nonisolated enum InstallLocation: Equatable, Sendable {
     /// The physical fix shared by every install-location explanation.
     private static let moveInstruction = "Quit, drag it to your Applications folder, and open it from there."
 
-    /// The canonical location explanation for a disabled update row.
+    /// Why the update row is greyed, or `nil` when the location is no reason.
+    ///
+    /// Not `explanation`. That sentence is written for the surfaces that are
+    /// about *recording*, and for `.translocated` it opens "Home Rec can't
+    /// record from the disk image" — which, on a tooltip attached to Check for
+    /// Updates, answers a question nobody asked. The fix is the same physical
+    /// move either way, so only the first clause changes.
     var updateBlockExplanation: String? {
-        blocksUpdates ? explanation : nil
+        switch self {
+        case .translocated:
+            return "Home Rec can't update from this location. " + Self.moveInstruction
+        case .readOnlyVolume:
+            return explanation
+        case .applications, .developerBuild, .elsewhere:
+            return nil
+        }
     }
 
     /// Whether the soft note can be dismissed and forgotten. The hard block cannot:

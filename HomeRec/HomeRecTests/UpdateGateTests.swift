@@ -229,11 +229,17 @@ struct UpdateGateTests {
                 )
                 let row = try #require(updateRow(context))
                 #expect(!row.isEnabled)
-                #expect(row.toolTip == location.explanation)
+                // The row's own reason, not the recording copy: a tooltip on
+                // Check for Updates has to be about updating.
+                #expect(row.toolTip == location.updateBlockExplanation)
+                let tip = try #require(row.toolTip)
+                #expect(tip.localizedCaseInsensitiveContains("update"))
+                #expect(!tip.localizedCaseInsensitiveContains("can't record"))
+                #expect(tip.hasSuffix("Quit, drag it to your Applications folder, and open it from there."))
                 let menu = OverflowMenu.makeNSMenu(context)
                 let item = try #require(menu.items.first { $0.title == row.title })
                 #expect(!item.isEnabled)
-                #expect(item.toolTip == location.explanation)
+                #expect(item.toolTip == row.toolTip)
             }
         }
     }
