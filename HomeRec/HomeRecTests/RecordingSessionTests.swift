@@ -341,6 +341,52 @@ struct RecordingSessionTests {
         #expect(error.recovery == .tryAgain)
     }
 
+    /// `standardizedFileURL` resolves `.` and `..` but not symlinks, so the two
+    /// sides of the ownership comparison agree only as long as they spell the
+    /// save folder the same way. Today they do — `contentsOfDirectory` keeps the
+    /// base URL it was given, and `SaveLocationManager` hands every instance the
+    /// same plain path out of `UserDefaults`. Pinned because both of those are
+    /// invisible: a move to security-scoped bookmarks would make the spellings
+    /// diverge, and the comparison fails *open*, offering a live take for repair.
+    @Test("A symlinked save folder does not defeat ownership")
+    func symlinkedSaveFolderKeepsOwnership() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("session-link-\(UUID().uuidString)", isDirectory: true)
+        let real = root.appendingPathComponent("real", isDirectory: true)
+        let link = root.appendingPathComponent("link", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // One provider, as the app wires it: the save folder is the linked path.
+        let location = MockSaveLocationProviding(directory: link)
+        let capture = MockAudioCapturing()
+        let writer = MockAudioFileWriting()
+        let controller = FixedPathController(
+            fileURL: link.appendingPathComponent("recording_live.wav"),
+            captureManager: capture, audioRecorder: writer,
+            saveLocation: location, audioSource: MockAudioSourceProviding()
+        )
+        let recovery = RecoveryViewModel(
+            scanner: RecoveryScanner(saveLocation: location),
+            inProgressURL: { controller.recordingURL }
+        )
+        writer.onStart = { try writeInterruptedWAV(at: $0) }
+        defer { writer.onStart = nil }
+        _ = try await controller.startRecording(format: .wav)
+        let live = try #require(controller.recordingURL)
+
+        recovery.refresh()
+        #expect(recovery.recordings.isEmpty, "the scan must exclude the owned file under any spelling")
+        if let offered = recovery.recordings.first {
+            recovery.recover(offered)
+            #expect(recovery.errorMessage != nil, "repairing an owned file must be refused")
+        }
+        #expect(try WAVWriter.isUnfinalized(at: live), "an owned file was finalized behind the recorder")
+
+        try await controller.stopRecording()
+    }
+
     /// Pins a filename so a scan-then-own race does not depend on the clock.
     @MainActor
     private final class FixedPathController: RecordingController {
