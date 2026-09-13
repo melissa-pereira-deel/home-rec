@@ -337,9 +337,20 @@ enum OverflowMenu {
 
     /// Why "Check for Updates…" is greyed, or `nil` when it is live.
     ///
-    /// A pure function so the precedence between the two independent reasons is
+    /// A pure function so the precedence between independent reasons is
     /// assertable rather than buried in a ternary inside a row builder.
     static func updateRowTooltip(_ context: OverflowContext) -> String? {
+        // Install location outranks recording, reversing BL-034's original
+        // precedence (BL-148a). That rule preferred the recording explanation
+        // because it was the one the user caused and the one that clears on its
+        // own — but both halves of that argument are what disqualify it here: a
+        // blocked location is neither, it outlives the take, and saying "stop
+        // recording" to someone who then stops and finds the row still greyed
+        // has cost them the take for nothing. `recordingTooltipTakesPrecedence`
+        // still pins the old ordering between the two reasons *below* this one.
+        if let explanation = context.installLocation.updateBlockExplanation {
+            return explanation
+        }
         if !context.allowsUpdateInstall {
             return "Installing an update restarts Home Rec, which would end the recording."
         }
@@ -378,10 +389,9 @@ enum OverflowMenu {
             .action(OverflowAction(
                 id: "checkForUpdates",
                 title: "Check for Updates…",
-                // Recording wins the explanation when both apply: it is the one
-                // the user caused and the one that clears on its own.
                 toolTip: updateRowTooltip(context),
-                isEnabled: context.allowsUpdateInstall && context.updaterIsUsable,
+                isEnabled: !context.installLocation.blocksUpdates
+                    && context.allowsUpdateInstall && context.updaterIsUsable,
                 perform: { onCheckForUpdates() }
             )),
             .separator,
@@ -397,7 +407,11 @@ enum OverflowMenu {
     /// Recursing matters: the mid-recording lock and one-checkmark invariants are
     /// asserted over this, and a per-app row that stayed clickable would hide
     /// inside a submenu where a top-level-only walk could never see it.
-    static func actions(_ context: OverflowContext = OverflowContext()) -> [OverflowAction] {
+    static func actions() -> [OverflowAction] {
+        actions(OverflowContext())
+    }
+
+    static func actions(_ context: OverflowContext) -> [OverflowAction] {
         flatten(entries(context))
     }
 
@@ -482,7 +496,11 @@ extension OverflowMenu {
     /// now call this. They used to render the same list twice, once as `NSMenu`
     /// and once as a SwiftUI `Menu`, and parity between them was an assertion.
     /// It is now an identity.
-    static func makeNSMenu(_ context: OverflowContext = OverflowContext()) -> NSMenu {
+    static func makeNSMenu() -> NSMenu {
+        makeNSMenu(OverflowContext())
+    }
+
+    static func makeNSMenu(_ context: OverflowContext) -> NSMenu {
         let menu = NSMenu()
         populate(menu, with: entries(context))
         return menu

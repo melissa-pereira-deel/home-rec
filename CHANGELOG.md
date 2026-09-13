@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Recovery protects recordings while they start and finish** - Recover Recordings now checks the recording session's output file when scanning, repairing, and moving files to Trash. A take stays protected from before file creation until finalization and cleanup finish, even if a recovery row was listed earlier. Pressing Record again while a failed take is still closing its file now waits for it rather than reporting a start failure. (BL-171b)
+- **Updates wait until Home Rec is in a writable location** - Running from a read-only disk image or volume, or a Gatekeeper-translocated path, now prevents both automatic and manual update checks. Check for Updates stays disabled with the instruction to quit, move Home Rec to Applications, and reopen it. Ordinary read-only volumes still allow recording; writable external installs remain supported. (BL-148a)
 
 ## [1.1.2] - 2026-09-07
 
