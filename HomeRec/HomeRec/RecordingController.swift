@@ -11,6 +11,7 @@ import os
 /// Errors originating from the recording controller before/around capture.
 enum RecordingControllerError: Error {
     case insufficientDiskSpace
+    case sessionInProgress
 }
 
 /// Controller that coordinates audio recording workflow
@@ -23,7 +24,7 @@ class RecordingController: RecordingControlling {
     private let saveLocation: SaveLocationProviding
     private let audioSource: AudioSourceProviding
 
-    private var currentRecordingURL: URL?
+    private var session: RecordingSession?
 
     /// Callback for waveform visualization data
     var onWaveformData: (([Float]) -> Void)?
@@ -66,6 +67,10 @@ class RecordingController: RecordingControlling {
         let source = audioSource.selectedSource
         try await audioSource.validate(source)
 
+        // Validation suspends. A take that acquired ownership meanwhile must
+        // keep it until teardown completes, even if the UI has entered error.
+        guard session == nil else { throw RecordingControllerError.sessionInProgress }
+
         // Generate file path (extension follows the chosen format).
         let fileURL = generateFilePath(format: format)
 
@@ -77,6 +82,8 @@ class RecordingController: RecordingControlling {
 
         // Wire waveform callback
         audioRecorder.onWaveformData = onWaveformData
+
+        session = RecordingSession(fileURL: fileURL)
 
         // Everything from here acquires something, so it is one transaction
         // (BL-171a). Before this, a throw from either capture call left an open
@@ -100,7 +107,6 @@ class RecordingController: RecordingControlling {
             throw error
         }
 
-        currentRecordingURL = fileURL
         Log.recorder.info("Recording started")
         return fileURL
     }
@@ -140,7 +146,7 @@ class RecordingController: RecordingControlling {
         await captureManager.cleanup()
 
         audioRecorder.onWaveformData = nil
-        currentRecordingURL = nil
+        session = nil
 
         // Capture first: it happened first, and it is the more likely cause.
         if let captureError {
@@ -185,7 +191,7 @@ class RecordingController: RecordingControlling {
         await captureManager.cleanup()
         audioRecorder.onWaveformData = nil
         try? FileManager.default.removeItem(at: fileURL)
-        currentRecordingURL = nil
+        session = nil
         Log.recorder.error("Recording start failed; rolled back")
     }
 
@@ -202,7 +208,7 @@ class RecordingController: RecordingControlling {
         try? audioRecorder.stopRecording()
         await captureManager.cleanup()
         audioRecorder.onWaveformData = nil
-        currentRecordingURL = nil
+        session = nil
         Log.recorder.error("Recording finalized after stream failure")
     }
 
@@ -211,9 +217,9 @@ class RecordingController: RecordingControlling {
         return captureManager.capturing
     }
 
-    /// Get current recording URL
+    /// The session's file, from before creation through finalization and cleanup.
     var recordingURL: URL? {
-        return currentRecordingURL
+        return session?.fileURL
     }
 
     // MARK: - File path
