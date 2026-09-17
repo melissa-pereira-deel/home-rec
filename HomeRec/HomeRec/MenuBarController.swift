@@ -36,9 +36,12 @@ class MenuBarController: NSObject {
         // many recordings. `weak` so a torn-down controller can't keep the view
         // model alive — and `false` when it is gone, because "unknown" must mean
         // "don't terminate the process".
-        self.updater = UpdaterController { [weak viewModel] in
-            viewModel?.state.allowsUpdateInstall ?? false
-        }
+        self.updater = UpdaterController(
+            installLocation: viewModel.installLocation,
+            isSafeToInstall: { [weak viewModel] in
+                viewModel?.state.allowsUpdateInstall ?? false
+            }
+        )
         super.init()
 
         // The single write path for the capture source. Checkmarks are derived
@@ -176,7 +179,8 @@ class MenuBarController: NSObject {
             inputDevices: devices,
             selectedMicName: selectedMicName,
             allowsUpdateInstall: viewModel.state.allowsUpdateInstall,
-            updaterIsUsable: updater.isUsable
+            updaterIsUsable: updater.isUsable,
+            installLocation: viewModel.installLocation
         )
     }
 

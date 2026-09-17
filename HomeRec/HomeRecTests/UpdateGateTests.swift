@@ -100,6 +100,188 @@ struct UpdateGateTests {
 
     // MARK: - The updater must not run in a test host
 
+    @Test("Blocked installs never construct or start Sparkle, and commands refuse", arguments: [
+        InstallLocation.translocated, .readOnlyVolume
+    ])
+    func blockedInstallNeverStarts(location: InstallLocation) throws {
+        let checker = TestUpdateChecker()
+        var constructions = 0
+        let updater = UpdaterController(
+            installLocation: location,
+            isSafeToInstall: { true },
+            environment: [:],
+            makeUpdater: { _ in
+                constructions += 1
+                return checker
+            }
+        )
+        #expect(updater.unavailable == .blockedInstallLocation)
+        #expect(!updater.isUsable)
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+
+        let previous = OverflowMenu.onCheckForUpdates
+        defer { OverflowMenu.onCheckForUpdates = previous }
+        OverflowMenu.onCheckForUpdates = { updater.checkForUpdates() }
+        let row = try #require(updateRow(OverflowContext(installLocation: location)))
+        row.perform()
+
+        #expect(constructions == 0)
+        #expect(checker.starts == 0)
+        #expect(checker.checks == 0)
+    }
+
+    @Test("Allowed locations start the updater and retain live recording gates", arguments: [
+        InstallLocation.applications, .developerBuild,
+        .elsewhere(URL(fileURLWithPath: "/Volumes/External/Home Rec.app"))
+    ])
+    func allowedInstallStarts(location: InstallLocation) {
+        let checker = TestUpdateChecker()
+        var constructions = 0
+        let updater = UpdaterController(
+            installLocation: location,
+            isSafeToInstall: { checker.isSafeToInstall },
+            environment: [:],
+            makeUpdater: { _ in
+                constructions += 1
+                return checker
+            }
+        )
+        #expect(constructions == 1)
+        #expect(checker.starts == 1)
+        #expect(updater.isUsable)
+        #expect(updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 1)
+
+        checker.isSafeToInstall = false
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 1)
+        // Sparkle's own flag draws the row but does not refuse the command:
+        // the row cannot see it, so refusing here would be a dead click. See
+        // `enabledRowAlwaysReachesSparkle`.
+        checker.isSafeToInstall = true
+        checker.canCheckForUpdates = false
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 2)
+    }
+
+    @Test("A test-host preflight also prevents construction")
+    func testHostPreventsConstruction() {
+        var constructions = 0
+        let updater = UpdaterController(
+            installLocation: .applications,
+            isSafeToInstall: { true },
+            environment: ["XCTestConfigurationFilePath": ""],
+            makeUpdater: { _ in
+                constructions += 1
+                return TestUpdateChecker()
+            }
+        )
+        #expect(updater.unavailable == .notRunInTestHost)
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(constructions == 0)
+    }
+
+    @Test("A failed startup still refuses manual checks even if Sparkle says it can check")
+    func startupFailureRefusesCommands() {
+        Diagnostics.clearUpdaterStartupFailure()
+        defer { Diagnostics.clearUpdaterStartupFailure() }
+
+        let checker = TestUpdateChecker()
+        checker.startError = NSError(
+            domain: "HomeRecUpdaterTests",
+            code: 42,
+            userInfo: [NSLocalizedDescriptionKey: "Synthetic updater startup failure"]
+        )
+        let updater = UpdaterController(
+            installLocation: .applications,
+            isSafeToInstall: { true },
+            environment: [:],
+            makeUpdater: { _ in checker }
+        )
+        #expect(checker.starts == 1)
+        #expect(updater.unavailable == .startFailed)
+        #expect(!updater.canCheckForUpdates)
+        updater.checkForUpdates()
+        #expect(checker.checks == 0)
+
+        let report = Diagnostics.report()
+        #expect(report.contains("Updater startup failure:"))
+        #expect(report.contains("Domain: HomeRecUpdaterTests"))
+        #expect(report.contains("Code: 42"))
+        #expect(report.contains("Synthetic updater startup failure"))
+    }
+
+    @Test("Blocked install rows use canonical copy before recording or startup failures", arguments: [
+        InstallLocation.translocated, .readOnlyVolume
+    ])
+    func blockedLocationMenu(location: InstallLocation) throws {
+        for canInstall in [true, false] {
+            for usable in [true, false] {
+                let context = OverflowContext(
+                    allowsUpdateInstall: canInstall,
+                    updaterIsUsable: usable,
+                    installLocation: location
+                )
+                let row = try #require(updateRow(context))
+                #expect(!row.isEnabled)
+                // The row's own reason, not the recording copy: a tooltip on
+                // Check for Updates has to be about updating.
+                #expect(row.toolTip == location.updateBlockExplanation)
+                let tip = try #require(row.toolTip)
+                #expect(tip.localizedCaseInsensitiveContains("update"))
+                #expect(!tip.localizedCaseInsensitiveContains("can't record"))
+                #expect(tip.hasSuffix("Quit, drag it to your Applications folder, and open it from there."))
+                let menu = OverflowMenu.makeNSMenu(context)
+                let item = try #require(menu.items.first { $0.title == row.title })
+                #expect(!item.isEnabled)
+                #expect(item.toolTip == row.toolTip)
+            }
+        }
+    }
+
+    @Test("Writable external and developer installs keep the update menu available", arguments: [
+        InstallLocation.applications, .developerBuild,
+        .elsewhere(URL(fileURLWithPath: "/Volumes/External/Home Rec.app"))
+    ])
+    func allowedLocationMenu(location: InstallLocation) throws {
+        let row = try #require(updateRow(OverflowContext(installLocation: location)))
+        #expect(row.isEnabled)
+        #expect(row.toolTip == nil)
+    }
+
+    /// The row's `isEnabled` is built from launch-time facts. Sparkle's own
+    /// `canCheckForUpdates` is not one of them, so gating the command on it
+    /// produces the exact outcome `canCheckForUpdates`' own comment calls worse
+    /// than an honest error: a live-looking row that does nothing when clicked.
+    @Test("An enabled update row never clicks into nothing")
+    func enabledRowAlwaysReachesSparkle() throws {
+        let checker = TestUpdateChecker()
+        let updater = UpdaterController(
+            installLocation: .applications,
+            isSafeToInstall: { true },
+            environment: [:],
+            makeUpdater: { _ in checker }
+        )
+        // Sparkle is busy with a check it started earlier — a session state, not
+        // a reason the row would ever have been drawn disabled.
+        checker.canCheckForUpdates = false
+
+        let row = try #require(updateRow(OverflowContext(
+            allowsUpdateInstall: true,
+            updaterIsUsable: updater.isUsable,
+            installLocation: .applications
+        )))
+        #expect(row.isEnabled, "every input the row reads still says it is live")
+
+        updater.checkForUpdates()
+        #expect(checker.checks == 1, "an enabled row must reach Sparkle, which fronts its window")
+    }
+
     @Test("A test host runs no updater at all")
     func testHostRunsNoUpdater() {
         // This is the regression guard for a CI break that cost a full run.
@@ -145,6 +327,22 @@ struct UpdateGateTests {
         let both = context(canInstall: false, updaterUsable: false)
         #expect(try #require(OverflowMenu.updateRowTooltip(both)).localizedCaseInsensitiveContains("recording"))
         #expect(OverflowMenu.updateRowTooltip(context()) == nil)
+
+        // ...but a blocked location outranks both (BL-148a). It outlives the
+        // take, so telling someone to stop recording would cost them the take
+        // and leave the row greyed anyway. Asserted rather than left to the
+        // default `installLocation`, which is what made this ordering
+        // incidental when BL-148a introduced it.
+        for location in [InstallLocation.translocated, .readOnlyVolume] {
+            let blocked = OverflowContext(
+                allowsUpdateInstall: false,
+                updaterIsUsable: false,
+                installLocation: location
+            )
+            let tip = try #require(OverflowMenu.updateRowTooltip(blocked))
+            #expect(tip == location.updateBlockExplanation)
+            #expect(!tip.localizedCaseInsensitiveContains("would end the recording"))
+        }
     }
 
     @Test("Blocking an update reads as a reason plus a way forward")
@@ -157,5 +355,24 @@ struct UpdateGateTests {
         #expect(try #require(error.errorDescription).isEmpty == false)
         let suggestion = try #require(error.recoverySuggestion)
         #expect(suggestion.localizedCaseInsensitiveContains("stop recording"))
+    }
+}
+
+/// Counts construction-independent updater effects without running Sparkle.
+@MainActor
+private final class TestUpdateChecker: UpdateChecking {
+    var isSafeToInstall = true
+    var canCheckForUpdates = true
+    var startError: Error?
+    private(set) var starts = 0
+    private(set) var checks = 0
+
+    func start() throws {
+        starts += 1
+        if let startError { throw startError }
+    }
+
+    func checkForUpdates() {
+        checks += 1
     }
 }

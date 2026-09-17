@@ -16,6 +16,14 @@ enum Diagnostics {
     static let subsystem = "com.mdebritto.homerec"
     static let issueBaseURL = "https://github.com/melissa-pereira-deel/home-rec/issues/new"
 
+    @MainActor private static var updaterStartupFailure: CapturedUpdaterStartupFailure?
+
+    private struct CapturedUpdaterStartupFailure: Equatable {
+        let domain: String
+        let code: Int
+        let description: String
+    }
+
     static var appVersion: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
@@ -27,7 +35,27 @@ enum Diagnostics {
         ProcessInfo.processInfo.operatingSystemVersionString
     }
 
+    /// Capture a startup failure Sparkle reported before it could run any checks.
+    @MainActor
+    static func recordUpdaterStartupFailure(_ error: Error) {
+        let nsError = error as NSError
+        updaterStartupFailure = CapturedUpdaterStartupFailure(
+            domain: nsError.domain,
+            code: nsError.code,
+            description: nsError.localizedDescription
+        )
+    }
+
+    #if DEBUG
+    /// Clears captured updater state so tests can keep report output deterministic.
+    @MainActor
+    static func clearUpdaterStartupFailure() {
+        updaterStartupFailure = nil
+    }
+    #endif
+
     /// A shareable diagnostics report: environment header + recent app log entries.
+    @MainActor
     static func report(date: Date = Date()) -> String {
         var lines = [
             "Home Rec Diagnostics",
@@ -38,6 +66,15 @@ enum Diagnostics {
             "Recent log entries:"
         ]
         lines.append(contentsOf: recentLogLines())
+        if let updaterStartupFailure {
+            lines.append(contentsOf: [
+                "",
+                "Updater startup failure:",
+                "Domain: \(updaterStartupFailure.domain)",
+                "Code: \(updaterStartupFailure.code)",
+                "Description: \(updaterStartupFailure.description)"
+            ])
+        }
         return lines.joined(separator: "\n")
     }
 

@@ -72,6 +72,9 @@ struct OverflowContext: Sendable, Equatable {
     /// a misconfigured build.
     var updaterIsUsable: Bool = true
 
+    /// The same launch snapshot used to preflight Sparkle (BL-148a).
+    var installLocation: InstallLocation = .applications
+
     init(
         selectedSource: AudioSource = .systemAll,
         allowsCaptureSourceChange: Bool = true,
@@ -81,8 +84,10 @@ struct OverflowContext: Sendable, Equatable {
         inputDevices: [InputDeviceInfo] = [],
         selectedMicName: String? = nil,
         allowsUpdateInstall: Bool = true,
-        updaterIsUsable: Bool = true
+        updaterIsUsable: Bool = true,
+        installLocation: InstallLocation = .applications
     ) {
+        self.installLocation = installLocation
         self.updaterIsUsable = updaterIsUsable
         self.selectedSource = selectedSource
         self.allowsCaptureSourceChange = allowsCaptureSourceChange
