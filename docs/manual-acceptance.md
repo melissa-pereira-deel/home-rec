@@ -304,6 +304,67 @@ is the failure mode this file exists to prevent.
 Newest first. Record what was checked, what was *not*, and by what means — a run
 that doesn't say what it skipped is indistinguishable from a complete one.
 
+## v1.1.3 — signed-product pass, 2026-09-17 · `18bdd6a`
+
+**Run against the notarized DMG**, which is what makes this entry different from
+every previous one. v1.1.2's entry closed with "every signed-product check — not
+run"; this is that pass. The artifact tested was built from `5eea369` and
+reported **1.1.2 / 10102**, because the version bump to 1.1.3 came after. The
+code is identical to what ships — `18bdd6a` is `5eea369` merged — so the only
+difference between the tested artifact and the release artifact is the version
+string and the CHANGELOG. **The release DMG itself has not been re-tested.**
+
+⚠️ **v1.1.2 was never released.** No tag, no GitHub release, no notarization
+submission. The live appcast still advertised 1.1.1 during this run, confirmed by
+fetching it. Every user was on 1.1.1, so 1.1.3 folds 1.1.2's CHANGELOG section
+into its own — otherwise the update dialog would have described two fixes while
+silently delivering six, including a crash.
+
+### Passed — on the notarized artifact
+
+- App and DMG notarization both **Accepted** (`a1cab638…`, `7768a36a…`).
+  `stapler validate` passed; SHA-256 matched the sidecar.
+- Gatekeeper: `accepted`, `source=Notarized Developer ID`.
+- Packaged bundle carried `com.apple.security.device.audio-input`, hardened
+  runtime `flags=0x10000(runtime)`, team `S3J47F2UXA`.
+- **Translocated launch, for real.** The DMG was given a `com.apple.quarantine`
+  attribute first. ⚠️ **Without that the check is worthless** — a locally built
+  DMG carries no quarantine, Gatekeeper never translocates it, and the app runs
+  at its real path while the tester records a pass. Confirmed genuine by reading
+  the running process path: `/AppTranslocation/…/d/Home Rec.app`.
+- Translocated state showed "Move to Applications", blocked recording, and the
+  update row greyed with "Home Rec can't update from this location. Quit, drag it
+  to your Applications folder, and open it from there."
+- `/Applications` install: update row **enabled**; the check reached the live
+  feed (HTTP 200) and correctly reported no update (1.1.2 installed vs 1.1.1
+  advertised).
+- Mid-recording: update row greyed with "Installing an update restarts Home Rec,
+  which would end the recording." Capture Source section correctly hidden.
+- Both tooltips matched their source strings exactly, exercising BL-148a's
+  precedence in both directions.
+
+### Not run — and why
+
+- **The repeated-check sub-case** — clicking an enabled Check for Updates several
+  times in succession. Not reached before the release was cut.
+- **The N-1 → N update rehearsal.** Still the largest untested surface: no
+  scratch N+1 was built, so nothing here proves an update installs, relaunches at
+  the same path, keeps its name, or preserves TCC grants. This has now been
+  deferred across four releases.
+- **The functional matrix** — permissions, the recording matrix per source,
+  crash/quit durability, the reskin state sweep. Covered by the automated suite
+  and v1.1.2's manual pass on the same code; not repeated here.
+- **The release artifact itself.** See above: tested at 1.1.2, shipping as 1.1.3.
+
+### Filed from this run
+
+- **BL-180** — the checklist has no translocated-launch item at all, and only one
+  packaged-app item. The checks reported "incomplete" on PR #35 were never on it.
+- **BL-181** — notarytool credentials have no refresh procedure, and a stale one
+  fails after archive and signing rather than as a pre-flight. The failure here
+  was an Apple ID **lock**, not an expired password — the 401 text says so, and
+  the docs do not mention that cause.
+
 ## v1.1.2 — partial, 2026-09-07 · `abe306e`
 
 **Run against a locally built, Developer ID signed app — not the notarized DMG.**
