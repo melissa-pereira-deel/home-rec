@@ -27,9 +27,8 @@ Strict concurrency is **not** optional polish: the app target sets
 main-actor isolated whether or not its work happens there, and that entire class
 of bug is invisible to an ordinary warning-free build.
 
-`SWIFT_STRICT_CONCURRENCY = complete` is now set in all six build
-configurations, so the ordinary build above *is* the check and the expected
-result is **zero warnings**.
+`SWIFT_STRICT_CONCURRENCY = complete` is set in all six build configurations, so
+the ordinary build above *is* the check.
 
 **This replaced counting Swift 6 errors, which could not work.** The old gate
 built with `SWIFT_VERSION=6` and compared an error count against the previous
@@ -37,16 +36,46 @@ release. A Swift 6 build stops at the first failing batch, so later files were
 never type-checked: the count was a floor, the same tree reported 1 on four
 builds and 2 on a fifth with nothing touching either file, and "has not grown"
 was unevaluable from a single build — as the run log below records three
-separate times. Measured as warnings instead, nothing stops the build, so one
-run enumerates the whole set. The first complete measurement was **12 warnings
-across 6 files**, on a tree whose last release recorded "1".
+separate times. Measured as warnings, nothing stops the build, so one run
+enumerates the whole set, and "has not grown" becomes a real comparison.
+
+### ⚠️ The number is toolchain-specific. Read it from CI, never from a local build.
+
+This is not a caveat, it is the thing that will mislead you. **CI builds with
+Xcode 16.4 / Swift 6.1.2**, pinned by `xcode-select` in `.github/workflows/ci.yml`.
+A newer Xcode reports *far fewer* warnings on identical source, because
+concurrency inference changed between releases — a global-actor-isolated closure
+became `Sendable`, immutable statics stopped needing annotation, and so on.
+
+Measured on the same commit: **Xcode 26.6 / Swift 6.3.3 reported 0 warnings
+while Xcode 16.4 / Swift 6.1.2 reported 31.** A clean local build therefore
+means nothing on its own, and `isolated deinit` (SE-0371) compiles on 6.3 and is
+a **hard error** on 6.1.2, where it still needs
+`-enable-experimental-feature IsolatedDeinit`. That mistake failed both CI jobs
+once already.
+
+If the machine has only one Xcode, this check cannot be run locally at all. Open
+the PR and read the number off CI.
+
+### Most of the count is vendored and not ours to fix
+
+Roughly 18 of the 31 are `static let` declarations in `DesignSystem/Vendor`
+(`GlassSurface`, `GlassTheme`, `GlassColors`, `GlassMetrics`, `GlassTypography`,
+`GlassWaveform`, `GlassElevation`) — "not concurrency-safe because non-Sendable
+type … may have shared mutable state". They cannot be fixed here:
+`scripts/design-system/check-vendor-drift.sh` requires vendored files to stay
+byte-identical, so a fix belongs upstream or in a recorded patch under
+`scripts/design-system/patches/`.
+
+So count the two separately, and gate on the one the project controls.
 
 The language mode is still `SWIFT_VERSION = 5.0`. Flipping it to `6.0` is a
-separate decision; the warning count reaching zero is its precondition, not
-its trigger.
+separate decision, and a local probe saying it builds proves nothing about the
+CI toolchain — see above.
 
 - [ ] `scripts/check-docs.sh` exits 0
-- [ ] Strict-concurrency warnings: **0** (the number, not "no new ones")
+- [ ] Strict-concurrency warnings **read from CI**, split app-owned vs vendored;
+      the app-owned number has not grown
 - [ ] Full suite green; note the count in the PR
 - [ ] `MARKETING_VERSION` verified against the **built product's**
       `CFBundleShortVersionString`, not the file
