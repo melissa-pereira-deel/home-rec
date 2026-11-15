@@ -66,7 +66,7 @@ Home Rec is designed for users who want the simplest possible path to recording 
 - Screen Recording permission (the app prompts on first record) — required by ScreenCaptureKit even for audio-only capture
 - Microphone permission, **only** if you record from a microphone. macOS asks once: **if you decline, it will not ask again.** Home Rec says microphone access is missing and offers to open the Microphone pane in System Settings, where you can grant it by hand.
 
-For building from source: Xcode 16+ and a free Apple Developer account.
+For building from source: Xcode 26+ (Swift 6.2 or newer) and a free Apple Developer account.
 
 ## Installation
 
@@ -93,7 +93,7 @@ If you want to build it yourself:
 **Prerequisites:**
 
 - **Apple Developer Account** — You need a free or paid [Apple Developer account](https://developer.apple.com/account) to sign and run the app on your Mac. If you don't have one, sign up at [developer.apple.com](https://developer.apple.com) using your Apple ID.
-- **Xcode 16+** — Download from the [Mac App Store](https://apps.apple.com/app/xcode/id497799835) or [developer.apple.com/xcode](https://developer.apple.com/xcode/).
+- **Xcode 26+** (Swift 6.2 or newer; older Xcodes fail to compile `isolated deinit`) — Download from the [Mac App Store](https://apps.apple.com/app/xcode/id497799835) or [developer.apple.com/xcode](https://developer.apple.com/xcode/).
 
 **Steps:**
 

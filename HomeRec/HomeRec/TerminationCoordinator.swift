@@ -46,12 +46,21 @@ final class TerminationCoordinator {
     /// isolated: it elapses regardless, and fires the moment the main thread is
     /// free again.
     ///
-    /// What that leaves genuinely unbounded is a hung `M4AEncoder.finalize()`,
-    /// whose `DispatchSemaphore.wait()` has no timeout (TD-014). That is not
-    /// fixable from out here, and sequencing constraint 9 forbids fixing it as
-    /// part of this item. Recorded so the bound is not mistaken for more
-    /// protection than it gives.
+    /// The one stall that used to be unbounded was a hung
+    /// `M4AEncoder.finalize()`, whose wait on `finishWriting` had no timeout.
+    /// It is bounded now, from the inside: `M4AEncoder.finalizeBudget` caps
+    /// both of its waits together, and `M4AEncoderTests` pins that budget to be
+    /// no larger than `defaultTimeout` below. So the worst case is the main
+    /// thread blocked for that budget, after which this timeout — already
+    /// elapsed — fires at once. WAV and FLAC finalize synchronously with file
+    /// I/O only and have no equivalent wait.
     private let timeout: Duration
+
+    /// The bound used in the app, named rather than written as a literal in the
+    /// initialiser's default. `M4AEncoder.finalizeBudget` has to fit inside it,
+    /// and two `5` literals in two files is how that relationship gets broken
+    /// by a one-line edit with nothing to catch it.
+    static let defaultTimeout: Duration = .seconds(5)
 
     /// Injected so tests never touch `NSApp`.
     private let reply: @MainActor (Bool) -> Void
@@ -60,7 +69,7 @@ final class TerminationCoordinator {
     private var isDraining = false
 
     init(
-        timeout: Duration = .seconds(5),
+        timeout: Duration = TerminationCoordinator.defaultTimeout,
         isSafeToQuit: @escaping @MainActor () -> Bool,
         drain: @escaping @MainActor () async -> Void,
         reply: @escaping @MainActor (Bool) -> Void = { NSApp.reply(toApplicationShouldTerminate: $0) }

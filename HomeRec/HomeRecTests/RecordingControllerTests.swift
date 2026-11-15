@@ -8,6 +8,7 @@
 
 import Testing
 import Foundation
+import AVFoundation
 @testable import HomeRec
 
 @MainActor
@@ -229,6 +230,74 @@ struct RecordingControllerTests {
         // never happened.
         let scanner = RecoveryScanner(saveLocation: MockSaveLocationProviding(directory: dir))
         #expect(scanner.scan(excluding: nil).isEmpty, "a failed start produced a recovery row")
+    }
+
+    // MARK: - The waveform sink's ordering
+
+    /// `AudioRecorder` snapshots `onWaveformData` inside `startRecording`, so
+    /// the controller has to assign it *before* it starts the recorder — today
+    /// `RecordingController.swift:84` then `:95`. Nothing else pins that order,
+    /// and getting it wrong is invisible in every way that normally catches a
+    /// mistake: the file is written correctly, every existing test stays green,
+    /// and the only symptom is a live waveform that never moves.
+    ///
+    /// Drives a real `AudioRecorder` end to end, because the snapshot is the
+    /// behaviour under test and `MockAudioFileWriting` does not have one. The
+    /// existing waveform coverage in `WriteFailureTests` sets the sink directly
+    /// on an `AudioRecorder`, which exercises the snapshot but not the
+    /// controller's ordering around it.
+    @Test("A take started through the controller delivers waveform data")
+    func waveformReachesTheControllersSink() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("waveform-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let capture = MockAudioCapturing()
+        let controller = RecordingController(
+            captureManager: capture,
+            audioRecorder: AudioRecorder(),
+            saveLocation: MockSaveLocationProviding(directory: dir),
+            audioSource: MockAudioSourceProviding()
+        )
+
+        final class Counter: @unchecked Sendable { var value = 0 }
+        let delivered = Counter()
+        controller.onWaveformData = { _ in delivered.value += 1 }
+
+        _ = try await controller.startRecording(format: .wav)
+
+        for _ in 0..<4 {
+            #expect(
+                capture.simulateAudioBuffer(canonicalBuffer()),
+                "no audio callback was wired up, so this asserts nothing"
+            )
+        }
+
+        // Deliveries hop to the main queue, so they land after this test yields.
+        await waitUntil("a waveform delivery to reach the controller's sink") {
+            delivered.value > 0
+        }
+        #expect(
+            delivered.value > 0,
+            "the controller's waveform sink never fired — the live waveform is dead"
+        )
+
+        try await controller.stopRecording()
+    }
+
+    /// 48 kHz stereo Float32 non-interleaved: the canonical format every
+    /// `AudioCapturing` source promises and the encoders are told to expect.
+    private func canonicalBuffer(frames: Int = 512) -> AVAudioPCMBuffer {
+        SampleBufferFixtures.makePCMBuffer(
+            channels: 2,
+            frames: frames,
+            interleaved: false
+        ) { _, frame in
+            // Audible-scale, not silence: a downsampler fed zeros is
+            // indistinguishable from one that was never called.
+            sin(Float(frame) * 0.05) * 0.5
+        }
     }
 
     @Test("No audio can reach the encoder when the start throws")

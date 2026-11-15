@@ -27,7 +27,7 @@ class RecordingController: RecordingControlling {
     private var session: RecordingSession?
 
     /// Callback for waveform visualization data
-    var onWaveformData: (([Float]) -> Void)?
+    var onWaveformData: (@MainActor ([Float]) -> Void)?
 
     /// Forwarded from the capture manager when the stream fails mid-recording.
     var onStreamError: (@MainActor (String) -> Void)?
@@ -249,7 +249,12 @@ class RecordingController: RecordingControlling {
 
     // MARK: - Cleanup
 
-    deinit {
+    /// `isolated deinit` (SE-0371; needs Swift 6.2+, see `Clock.swift`):
+    /// `audioRecorder` is a non-Sendable `AudioFileWriting`, and reading it from
+    /// a nonisolated `deinit` is an error in the Swift 6 language mode.
+    /// Isolating also means the `Task` below starts from the main actor instead
+    /// of hopping onto it with a non-Sendable value in hand.
+    isolated deinit {
         // Capture managers directly to avoid referencing self inside the Task closure
         let captureManager = captureManager
         let audioRecorder = audioRecorder

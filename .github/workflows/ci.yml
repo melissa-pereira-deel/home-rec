@@ -9,13 +9,56 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Pin the toolchain; do not inherit it. Both jobs read this, so they cannot
+# drift apart, and `sudo xcode-select` is no longer needed.
+#
+# The macos-15 image's default `/Applications/Xcode.app` is **16.4 (Swift
+# 6.1.2)**, and that default moves when GitHub rolls the image. So the compiler
+# this project was being checked by had never actually been chosen — and the
+# gap went unnoticed until it produced a hard failure:
+#
+#   error: 'isolated' deinit requires frontend flag
+#          -enable-experimental-feature IsolatedDeinit
+#
+# `isolated deinit` (SE-0371) is stable from Swift 6.2 and experimental before
+# it, so TD-008's four `isolated deinit` fixes — Clock, PermissionGrantWatcher,
+# RecorderViewModel, RecordingController — compile on the 26.x toolchain used
+# for development and not on 16.4. Both CI jobs failed in under 90 seconds
+# while the same tree built clean locally.
+#
+# ⚠️ **The runner image has to match the Xcode, not just carry it.** The first
+# attempt kept `macos-15` and pinned its newest Xcode, 26.3. That compiles — the
+# Release job passed — and then every test in the suite failed in 0.000 s, with
+# the test host dying at load:
+#
+#   dyld: symbol '_OBJC_CLASS_$_FigBaseCALayer' missing from root that overrides
+#   .../MediaToolbox.framework. Use of that symbol in .../AVFCore.framework
+#
+# Xcode 26.3 ships CoreMedia/MediaToolbox roots that override macOS 15's system
+# frameworks, and AVFCore then cannot resolve against them. Everything touching
+# AVFoundation — which is the encoders, so most of the suite — aborts the host.
+# A compile-only gate cannot see this; only running the tests can.
+#
+# So: `macos-26` with Xcode 26.4.1, which is also what development uses, so
+# local and CI finally agree. The "Toolchain" step prints what is installed,
+# making the next bump a lookup rather than a guess.
+#
+# This is also what makes `SWIFT_STRICT_CONCURRENCY = complete` a real gate: a
+# warning count means nothing until the compiler producing it is named. The
+# expected result is zero, measured here, on this version.
+#
+# ⚠️ The TSan job's documented CoreMedia abort was characterised on macOS 15. It
+# is advisory (`continue-on-error`) and cannot fail the PR either way, but its
+# note describes behaviour on an image this workflow no longer uses.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+
 jobs:
   unit-tests:
     name: Unit tests
-    # NOTE: the runner's Xcode must provide the macOS SDK this project targets.
-    # If the image's Xcode is too old, pin a newer one with `xcode-select` below
-    # or bump the runner image. See the "Select Xcode" step.
-    runs-on: macos-15
+    # The Xcode that provides this project's macOS SDK is pinned in the
+    # workflow-level `env` above, not selected here.
+    runs-on: macos-26
     # Without this, GitHub's default is SIX HOURS. A single hung test then
     # quietly consumes the runner budget and leaves no log to diagnose from.
     # The suite completes in 2-3 minutes; 20 is generous headroom that still
@@ -26,13 +69,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        # Adjust to an installed Xcode whose SDK matches the project. List with:
-        #   ls /Applications | grep Xcode
+      - name: Toolchain
+        # Reports only; the selection is `DEVELOPER_DIR` above. The version
+        # belongs in the log of every run: this job's last failure was a
+        # toolchain mismatch, and it was diagnosable only because the old step
+        # printed one.
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
           swift --version
+          ls /Applications | grep '^Xcode'
 
       - name: Run unit tests (functional)
         # BLOCKING gate: full unit-test suite WITHOUT Thread Sanitizer. Covers all
@@ -110,17 +155,22 @@ jobs:
     # the tree was in doubt, nobody learned whether it still built. That
     # happened on `main` at 66d0702. A separate job has no `needs:`, so the two
     # gates fail independently and both always report.
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Toolchain
+        # Reports only; the selection is `DEVELOPER_DIR` above. The version
+        # belongs in the log of every run: this job's last failure was a
+        # toolchain mismatch, and it was diagnosable only because the old step
+        # printed one.
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
+          swift --version
+          ls /Applications | grep '^Xcode'
 
       - name: Release build
         run: |

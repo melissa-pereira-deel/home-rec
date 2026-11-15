@@ -73,10 +73,16 @@ final class PermissionGrantWatcher {
         self.maxProbes = maxProbes
     }
 
-    deinit {
-        // `deinit` is nonisolated; cancelling is safe from any context and is the
-        // only teardown that matters — an orphaned loop would keep probing
-        // `SCShareableContent` for the life of the process.
+    /// `isolated deinit` (SE-0371; needs Swift 6.2+, see `Clock.swift`).
+    /// Cancelling the task is safe from any context, but `activity` is a
+    /// non-Sendable `NSObjectProtocol` and reading it from a nonisolated
+    /// `deinit` is an error in the Swift 6 language mode. Isolating the whole
+    /// teardown is cheaper than splitting it.
+    ///
+    /// The teardown is what matters: an orphaned loop would keep probing
+    /// `SCShareableContent` for the life of the process, and an unended activity
+    /// would hold a power assertion open.
+    isolated deinit {
         pollTask?.cancel()
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)

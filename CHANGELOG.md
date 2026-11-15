@@ -5,6 +5,16 @@ All notable changes to Home Rec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Quitting while saving an M4A can no longer hang the app** — When you quit, Home Rec finishes writing the open recording before it closes, which is what keeps the file complete. For M4A that last step hands the file to the system to close, and Home Rec waited for it to report back with no limit on how long it would wait. If that report never came, the app stopped responding to anything at all — including the quit you had just asked for — and the only way out was to force-quit it, which is the exact outcome finishing the file was meant to avoid. Home Rec now waits a bounded five seconds in total, then stops waiting and quits. The recording is still in your save folder and still plays: M4A audio is written to disk as it is captured, so at most the last second or so is missing. It may also appear in **Recover Recordings**, where there is nothing to repair. WAV and FLAC were never affected.
+
+### Changed
+
+- **Building Home Rec from source now needs Xcode 26 or newer** — earlier versions of Xcode cannot compile it. Nothing changes if you install Home Rec from the download.
+
 ## [1.1.3] - 2026-09-17
 
 This release also carries every fix prepared as 1.1.2, which was never published. **If you are updating from 1.1.1, all six fixes below are new to you** — including a crash that could take a long recording with it.

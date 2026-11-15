@@ -27,6 +27,14 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
     /// A buffer arrived whose rate/channels differ from what the writer input was
     /// configured for. Appending it would fail and cost the whole take at stop.
     case formatMismatch
+    /// `finalize()` gave up waiting for `AVAssetWriter.finishWriting` (TD-014).
+    /// Distinct from `.writeFailed` because the outcome differs: the audio is
+    /// on disk as movie fragments, and a fragmented M4A **already plays** — that
+    /// is what `movieFragmentInterval` buys (BL-016). Nothing needs rebuilding;
+    /// `repair(at:)` is a deliberate no-op for this format. What can be missing
+    /// is the tail: whatever was still queued when the drain's share of the
+    /// budget ran out, plus anything after the last fragment boundary.
+    case finalizeTimedOut
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +44,23 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
         // copy can no longer name finalizing specifically.
         case .writeFailed:     return "Failed to write audio to the M4A file"
         case .formatMismatch:  return "Audio format changed mid-recording"
+        case .finalizeTimedOut:
+            return "Home Rec stopped waiting for the M4A file to close"
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .setupFailed:
+            return "Check that the save folder exists and can be written to"
+        case .notOpen:
+            return "Call createFile() before writing data"
+        case .writeFailed:
+            return "Check that the disk has free space and is still connected"
+        case .formatMismatch:
+            return "Capture buffers must be normalised to the file's declared format before writing"
+        case .finalizeTimedOut:
+            return "The recording is in your save folder and should play as it is, though its last second or so may be missing"
         }
     }
 }
@@ -54,6 +79,31 @@ nonisolated final class M4AEncoder: AudioFileEncoder {
     /// everything up to the last flushed fragment. Recovery granularity equals
     /// this interval; the cost is ~6% larger output.
     static let fragmentIntervalSeconds: Double = 1.0
+
+    /// Worst-case total time `finalize()` may spend waiting, across *both* of
+    /// its waits — not a per-wait ceiling.
+    ///
+    /// One budget rather than two independent ceilings, because the caller
+    /// cannot shorten either. `AudioRecorder.stopRecording()` runs finalize
+    /// inside `processingQueue.sync` from the main actor, so while it waits
+    /// nothing scheduled on the main thread runs — `TerminationCoordinator`'s
+    /// 5 s quit bound included. Two separate 5 s ceilings would mean a ⌘Q that
+    /// can sit for ten seconds behind a frozen UI with nothing able to cut it
+    /// short, which is the shape of the hang TD-014 describes.
+    static let finalizeBudget: TimeInterval = 5.0
+
+    /// The writer always gets at least this long to close the file, even when
+    /// draining ran long. Writing the index is cheap next to encoding a backlog,
+    /// so refusing it any time at all would turn every slow drain into a file
+    /// that needs repairing.
+    ///
+    /// Reserved out of `finalizeBudget` rather than added on top of it, which is
+    /// what makes the budget a real total: the drain gets
+    /// `finalizeBudget - minimumFinishWait`, the finish gets whatever the drain
+    /// left plus this floor, and the worst case is `finalizeBudget` exactly.
+    /// Not `private`, so `M4AEncoderTests` can pin that total against
+    /// `TerminationCoordinator.defaultTimeout`.
+    static let minimumFinishWait: TimeInterval = 0.5
 
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
@@ -158,26 +208,60 @@ nonisolated final class M4AEncoder: AudioFileEncoder {
 
         // Drain anything still queued. The input encodes on its own queue, so
         // readiness recovers continuously; bound the wait so a stuck writer can't
-        // hang stop indefinitely.
-        var waited = 0
+        // hang stop indefinitely. The bound is now a wall-clock deadline shared
+        // with the finish below, not a count of sleeps — `usleep(1_000)` sleeps
+        // *at least* a millisecond, so 5,000 iterations was never 5 seconds.
+        let deadline = DispatchTime.now() + (Self.finalizeBudget - Self.minimumFinishWait)
         while !pending.isEmpty {
             drainPending(into: input)
             if pending.isEmpty { break }
-            if waited >= 5_000 { break }   // ~5s ceiling
+            if DispatchTime.now() >= deadline { break }
             usleep(1_000)
-            waited += 1
         }
 
         input.markAsFinished()
 
         let done = DispatchSemaphore(value: 0)
         writer.finishWriting { done.signal() }
-        done.wait()   // completion fires on AVF's internal queue — no deadlock
+
+        // ⚠️ This wait had no timeout at all, and that was TD-014. The completion
+        // fires on AVFoundation's internal queue so there is no deadlock — but
+        // "cannot deadlock" is not "returns". A writer that never called back
+        // held the main thread for the rest of the process's life, which is the
+        // unquittable app `TerminationCoordinator` exists to prevent, and the
+        // one path it documented as beyond its reach.
+        let now = DispatchTime.now()
+        let remainingNanos = deadline > now ? deadline.uptimeNanoseconds - now.uptimeNanoseconds : 0
+        let remaining = max(Self.minimumFinishWait, Double(remainingNanos) / 1_000_000_000)
+        let outcome = done.wait(timeout: .now() + remaining)
 
         let status = writer.status
         self.writer = nil
         self.input = nil
         pending.removeAll()
+
+        if outcome == .timedOut {
+            // The completion handler has not run, and it captures only the
+            // semaphore — so after the two assignments above, nothing is keeping
+            // this writer alive. Releasing it here could deallocate an
+            // `AVAssetWriter` midway through closing its own file, which is a
+            // worse outcome than the timeout we are already reporting. Hold it
+            // off this queue until the finish reports back, then let it go. If it
+            // never reports, one utility thread stays parked for the life of the
+            // process — by which point we are quitting anyway, and the
+            // alternative is a half-freed writer still touching the file.
+            // Sole ownership: the two assignments above dropped this encoder's
+            // references, and the completion handler captures only the
+            // semaphore, so this is the last one in existence.
+            let keeper = UncheckedTransfer(writer)
+            DispatchQueue.global(qos: .utility).async {
+                withExtendedLifetime(keeper.value) { done.wait() }
+            }
+            Log.recorder.error(
+                "M4A finalize timed out after \(remaining, privacy: .public)s; left as playable fragments"
+            )
+            throw M4AEncoderError.finalizeTimedOut
+        }
 
         if status != .completed {
             throw M4AEncoderError.writeFailed

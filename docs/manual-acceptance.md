@@ -19,16 +19,121 @@ scripts/check-docs.sh          # documented facts still true?
 
 ```bash
 xcodebuild -project HomeRec/HomeRec.xcodeproj -scheme HomeRec \
-  -configuration Debug SWIFT_VERSION=6 CODE_SIGNING_ALLOWED=NO build
+  -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
-The Swift 6 build is **not** optional polish: the app target infers `@MainActor`
-on unannotated types, and that entire class of bug is invisible to a
-warning-free Swift 5 build. Errors here are expected to cascade — fixing the top
-layer reveals more underneath.
+Strict concurrency is **not** optional polish: the app target sets
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so an unannotated type is
+main-actor isolated whether or not its work happens there, and that entire class
+of bug is invisible to an ordinary warning-free build.
+
+`SWIFT_STRICT_CONCURRENCY = complete` is set in all six build configurations, so
+the ordinary build above *is* the check.
+
+**This replaced counting Swift 6 errors, which could not work.** The old gate
+built with `SWIFT_VERSION=6` and compared an error count against the previous
+release. A Swift 6 build stops at the first failing batch, so later files were
+never type-checked: the count was a floor, the same tree reported 1 on four
+builds and 2 on a fifth with nothing touching either file, and "has not grown"
+was unevaluable from a single build — as the run log below records three
+separate times. Measured as warnings, nothing stops the build, so one run
+enumerates the whole set, and "has not grown" becomes a real comparison.
+
+### ⚠️ The number is toolchain-specific. Read it from CI, never from a local build.
+
+This is not a caveat, it is the thing that will mislead you. A newer Xcode
+reports *far fewer* warnings on identical source, because concurrency inference
+changed between releases — a global-actor-isolated closure became `Sendable`,
+immutable statics stopped needing annotation, and so on.
+
+Measured on the same commit: **Xcode 26.x / Swift 6.3 reported 0 warnings while
+Xcode 16.4 / Swift 6.1.2 reported 31.** A clean local build therefore means
+nothing on its own, and `isolated deinit` (SE-0371) compiles on 6.2+ and is a
+**hard error** on 6.1.2, where it still needs
+`-enable-experimental-feature IsolatedDeinit`. That mistake failed both CI jobs
+once already.
+
+**So the toolchain is now pinned rather than inherited.**
+`.github/workflows/ci.yml` sets `DEVELOPER_DIR` at the workflow level to
+**Xcode 26.4.1 on the `macos-26` runner**, the same version development uses —
+and both jobs read
+that one setting. Before this, the workflow ran `xcode-select -s
+/Applications/Xcode.app`, which takes the *image default*: 16.4, never chosen by
+anyone, and liable to move whenever GitHub rolls the image. Two consecutive CI
+failures came out of that gap, the second of them a **`swift-frontend` crash in
+6.1.2's SIL diagnostics pass** on code written to satisfy 6.1.2 — a compiler bug
+that cannot be reproduced on a machine carrying only one Xcode.
+
+⚠️ **Pinning the Xcode is not enough on its own — the image has to match it.**
+Keeping `macos-15` and selecting its newest Xcode (26.3) compiled fine and then
+failed every test in 0.000 s: Xcode 26.3's CoreMedia/MediaToolbox roots override
+macOS 15's system frameworks and AVFCore cannot resolve against them, so the
+test host dies at load (`dyld: symbol '_OBJC_CLASS_$_FigBaseCALayer' missing
+from root that overrides .../MediaToolbox`). The Release job passed through all
+of it, because a compile-only gate cannot see a runtime link failure. Hence
+`macos-26`.
+
+**The pin now has a floor, and it is load-bearing.** Four teardowns use
+`isolated deinit` — `Clock`, `PermissionGrantWatcher`, `RecorderViewModel`,
+`RecordingController` — so lowering `DEVELOPER_DIR` below **Xcode 26.0 / Swift
+6.2** is not a configuration tweak, it is four compile errors. `Clock.swift`
+carries the explanation and the other three point at it. `Clock`'s is also the
+one whose revert reintroduces a bug rather than a warning, since
+`Timer.invalidate()` is valid only on the thread that scheduled the timer. So
+the pin has a window: at or above 26.0 for the language, and matched to the
+image for the frameworks.
+
+Read the number off CI anyway. The pin means the number is comparable between
+runs; it does not mean your local Xcode matches it. **Where the pin and your
+local Xcode disagree, the pin is the gate**, and the `Toolchain` step prints
+both the selected version and the installed list at the top of every run.
+
+### Most of the count is vendored and not ours to fix
+
+Counted on 16.4, roughly 18 of the 31 are `static let` declarations in
+`DesignSystem/Vendor`
+(`GlassSurface`, `GlassTheme`, `GlassColors`, `GlassMetrics`, `GlassTypography`,
+`GlassWaveform`, `GlassElevation`) — "not concurrency-safe because non-Sendable
+type … may have shared mutable state". They cannot be fixed here:
+`scripts/design-system/check-vendor-drift.sh` requires vendored files to stay
+byte-identical, so a fix belongs upstream or in a recorded patch under
+`scripts/design-system/patches/`.
+
+So count the two separately, and gate on the one the project controls.
+
+**Baseline on the pinned toolchain, read off CI: app-owned 0, vendored 0**
+(Xcode 26.4.1 / Swift 6.3.1, first green pinned run of `claude/concurrency-debt`).
+The 31/18 split above is a 16.4 measurement and does not carry forward — the
+vendored statics produce nothing on 26.x. So the gate on this pin is a flat
+**zero**, and any non-zero count is new.
+
+### ⚠️ Zero warnings does not clear the Swift 6 language-mode flip
+
+The language mode is still `SWIFT_VERSION = 5.0`, and the count reaching zero is
+**not** what gates changing it. **TD-009 is** — the cross-queue state in
+`ScreenCaptureAudioManager.swift`.
+
+`SCStreamOutput` and `SCStreamDelegate` are unannotated Objective-C protocols,
+so the compiler assumes their methods are main-actor isolated, while
+`addStreamOutput(_:type:sampleHandlerQueue:)` hands ScreenCaptureKit a
+*background* queue to call them on. The SDK's annotations contradict its own API
+contract, and the compiler believes the annotations. On Xcode 16.4 that file
+still drew a warning; on the pinned 26.x it draws none. **So this check reports
+the riskiest file in the app clean, and flipping the mode would make it look
+verified.** Fix the race first, under a Thread Sanitizer test that exercises the
+real capture manager; then flip.
+
+And a local probe saying `SWIFT_VERSION=6` builds proves nothing about the CI
+toolchain — see above.
 
 - [ ] `scripts/check-docs.sh` exits 0
-- [ ] Swift 6 error count has not grown
+- [ ] **One launch-and-record on macOS 15**, the deployment floor. CI runs on
+      `macos-26` because the pinned Xcode cannot run this suite on an older
+      image (see above), so nothing automated executes the app on the oldest
+      system it claims to support
+- [ ] Strict-concurrency warnings **read from CI**, split app-owned vs vendored,
+      noted with the Xcode version CI reported them on; the app-owned number has
+      not grown
 - [ ] Full suite green; note the count in the PR
 - [ ] `MARKETING_VERSION` verified against the **built product's**
       `CFBundleShortVersionString`, not the file

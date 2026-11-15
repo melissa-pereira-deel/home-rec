@@ -155,4 +155,76 @@ struct M4AEncoderTests {
         let actualSeconds = Double(full.length) / full.fileFormat.sampleRate
         #expect(abs(actualSeconds - expectedSeconds) < 0.15)
     }
+
+    // MARK: - TD-014: finalize must be bounded
+
+    /// The policy, asserted the way `UpdateGateTests` asserts the update rule —
+    /// without constructing the framework object whose behaviour is at issue.
+    /// There is no seam that makes `AVAssetWriter.finishWriting` hang on demand,
+    /// so what is pinned here is the arithmetic that makes a hang survivable.
+    ///
+    /// Why it matters: `finalize()` runs inside `processingQueue.sync` called
+    /// from the main actor, so while it waits, nothing on the main thread runs —
+    /// including `TerminationCoordinator`'s bound and `NSApp.reply`. A finalize
+    /// budget larger than the quit bound is therefore not "slightly slow", it is
+    /// an app that ignores ⌘Q for as long as the difference.
+    @Test("The finalize budget fits inside the quit bound, floor included")
+    func finalizeBudgetFitsTheQuitBound() {
+        let quitBound = Double(TerminationCoordinator.defaultTimeout.components.seconds)
+
+        #expect(M4AEncoder.finalizeBudget > 0, "an unbounded finalize is TD-014 itself")
+        #expect(
+            M4AEncoder.finalizeBudget <= quitBound,
+            "finalize may wait \(M4AEncoder.finalizeBudget)s but ⌘Q is bounded at \(quitBound)s"
+        )
+        // The floor is reserved *out of* the budget, not added to it, so the
+        // worst case is the budget itself. If someone changes the deadline to
+        // `now + finalizeBudget` again, the two together exceed the quit bound.
+        #expect(
+            M4AEncoder.minimumFinishWait < M4AEncoder.finalizeBudget,
+            "the reserved floor must leave the drain some budget to use"
+        )
+    }
+
+    /// A timed-out finalize is its own failure, not a write failure. They lead
+    /// to different places: a write failure means audio did not reach the disk,
+    /// while this means it did — as fragments that already play (BL-016), so
+    /// the advice must not send the user off to repair a file that is fine.
+    @Test("A finalize timeout is distinguishable from a write failure")
+    func finalizeTimeoutIsItsOwnError() {
+        #expect(M4AEncoderError.finalizeTimedOut != M4AEncoderError.writeFailed)
+        let described = M4AEncoderError.finalizeTimedOut.errorDescription
+        #expect(described?.isEmpty == false, "the error a user may see must say something")
+        #expect(described != M4AEncoderError.writeFailed.errorDescription)
+
+        let advice = M4AEncoderError.finalizeTimedOut.recoverySuggestion
+        #expect(advice?.isEmpty == false, "an error must carry what to do about it")
+        #expect(
+            advice?.localizedCaseInsensitiveContains("repair") == false,
+            "a fragmented M4A plays as found; `repair(at:)` is a no-op for it"
+        )
+    }
+
+    /// The happy path must not have paid for the bound: a normal finalize over a
+    /// small file returns in a fraction of the budget, nowhere near it.
+    @Test("A normal finalize returns well inside the budget")
+    func normalFinalizeIsFast() throws {
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let encoder = M4AEncoder()
+        try encoder.createFile(at: url, sampleRate: inputSampleRate, channels: channels)
+        for i in 0..<bufferCount {
+            try encoder.writeBuffer(buffer(i))
+        }
+
+        let started = Date()
+        try encoder.finalize()
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(
+            elapsed < M4AEncoder.finalizeBudget / 2,
+            "finalize took \(elapsed)s of a \(M4AEncoder.finalizeBudget)s budget — the bound is being leaned on, not spared"
+        )
+    }
 }
