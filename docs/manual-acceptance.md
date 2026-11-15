@@ -41,25 +41,37 @@ enumerates the whole set, and "has not grown" becomes a real comparison.
 
 ### ⚠️ The number is toolchain-specific. Read it from CI, never from a local build.
 
-This is not a caveat, it is the thing that will mislead you. **CI builds with
-Xcode 16.4 / Swift 6.1.2**, pinned by `xcode-select` in `.github/workflows/ci.yml`.
-A newer Xcode reports *far fewer* warnings on identical source, because
-concurrency inference changed between releases — a global-actor-isolated closure
-became `Sendable`, immutable statics stopped needing annotation, and so on.
+This is not a caveat, it is the thing that will mislead you. A newer Xcode
+reports *far fewer* warnings on identical source, because concurrency inference
+changed between releases — a global-actor-isolated closure became `Sendable`,
+immutable statics stopped needing annotation, and so on.
 
-Measured on the same commit: **Xcode 26.6 / Swift 6.3.3 reported 0 warnings
-while Xcode 16.4 / Swift 6.1.2 reported 31.** A clean local build therefore
-means nothing on its own, and `isolated deinit` (SE-0371) compiles on 6.3 and is
-a **hard error** on 6.1.2, where it still needs
+Measured on the same commit: **Xcode 26.x / Swift 6.3 reported 0 warnings while
+Xcode 16.4 / Swift 6.1.2 reported 31.** A clean local build therefore means
+nothing on its own, and `isolated deinit` (SE-0371) compiles on 6.2+ and is a
+**hard error** on 6.1.2, where it still needs
 `-enable-experimental-feature IsolatedDeinit`. That mistake failed both CI jobs
 once already.
 
-If the machine has only one Xcode, this check cannot be run locally at all. Open
-the PR and read the number off CI.
+**So the toolchain is now pinned rather than inherited.**
+`.github/workflows/ci.yml` sets `DEVELOPER_DIR` at the workflow level to
+**Xcode 26.3** — the newest the `macos-15` image carries — and both jobs read
+that one setting. Before this, the workflow ran `xcode-select -s
+/Applications/Xcode.app`, which takes the *image default*: 16.4, never chosen by
+anyone, and liable to move whenever GitHub rolls the image. Two consecutive CI
+failures came out of that gap, the second of them a **`swift-frontend` crash in
+6.1.2's SIL diagnostics pass** on code written to satisfy 6.1.2 — a compiler bug
+that cannot be reproduced on a machine carrying only one Xcode.
+
+Read the number off CI anyway. The pin means the number is comparable between
+runs; it does not mean your local Xcode matches it. **Where the pin and your
+local Xcode disagree, the pin is the gate**, and the `Toolchain` step prints
+both the selected version and the installed list at the top of every run.
 
 ### Most of the count is vendored and not ours to fix
 
-Roughly 18 of the 31 are `static let` declarations in `DesignSystem/Vendor`
+Counted on 16.4, roughly 18 of the 31 are `static let` declarations in
+`DesignSystem/Vendor`
 (`GlassSurface`, `GlassTheme`, `GlassColors`, `GlassMetrics`, `GlassTypography`,
 `GlassWaveform`, `GlassElevation`) — "not concurrency-safe because non-Sendable
 type … may have shared mutable state". They cannot be fixed here:
@@ -67,15 +79,20 @@ type … may have shared mutable state". They cannot be fixed here:
 byte-identical, so a fix belongs upstream or in a recorded patch under
 `scripts/design-system/patches/`.
 
-So count the two separately, and gate on the one the project controls.
+So count the two separately, and gate on the one the project controls. ⚠️ **That
+split was measured on 16.4 and has not been re-measured on the pinned 26.3** —
+on the local 26.x toolchain these same statics produce nothing, so the vendored
+share may be zero there. Take the first pinned CI run's number as the new
+baseline rather than carrying 31/18 forward.
 
 The language mode is still `SWIFT_VERSION = 5.0`. Flipping it to `6.0` is a
 separate decision, and a local probe saying it builds proves nothing about the
 CI toolchain — see above.
 
 - [ ] `scripts/check-docs.sh` exits 0
-- [ ] Strict-concurrency warnings **read from CI**, split app-owned vs vendored;
-      the app-owned number has not grown
+- [ ] Strict-concurrency warnings **read from CI**, split app-owned vs vendored,
+      noted with the Xcode version CI reported them on; the app-owned number has
+      not grown
 - [ ] Full suite green; note the count in the PR
 - [ ] `MARKETING_VERSION` verified against the **built product's**
       `CFBundleShortVersionString`, not the file

@@ -9,12 +9,38 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Pin the toolchain; do not inherit it. Both jobs read this, so they cannot
+# drift apart, and `sudo xcode-select` is no longer needed.
+#
+# The macos-15 image's default `/Applications/Xcode.app` is **16.4 (Swift
+# 6.1.2)**, and that default moves when GitHub rolls the image. So the compiler
+# this project was being checked by had never actually been chosen — and the
+# gap went unnoticed until it produced a hard failure:
+#
+#   error: 'isolated' deinit requires frontend flag
+#          -enable-experimental-feature IsolatedDeinit
+#
+# `isolated deinit` (SE-0371) is stable from Swift 6.2 and experimental before
+# it, so TD-008's four `isolated deinit` fixes — Clock, PermissionGrantWatcher,
+# RecorderViewModel, RecordingController — compile on the 26.x toolchain used
+# for development and not on 16.4. Both CI jobs failed in under 90 seconds
+# while the same tree built clean locally.
+#
+# 26.3 is the newest Xcode on the macos-15 image; development is on 26.4, which
+# the image does not carry. The "Toolchain" step prints what is installed, so
+# the next bump is a lookup rather than a guess.
+#
+# This is also what makes `SWIFT_STRICT_CONCURRENCY = complete` a real gate: a
+# warning count means nothing until the compiler producing it is named. The
+# expected result is zero, measured here, on this version.
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   unit-tests:
     name: Unit tests
-    # NOTE: the runner's Xcode must provide the macOS SDK this project targets.
-    # If the image's Xcode is too old, pin a newer one with `xcode-select` below
-    # or bump the runner image. See the "Select Xcode" step.
+    # The Xcode that provides this project's macOS SDK is pinned in the
+    # workflow-level `env` above, not selected here.
     runs-on: macos-15
     # Without this, GitHub's default is SIX HOURS. A single hung test then
     # quietly consumes the runner budget and leaves no log to diagnose from.
@@ -26,13 +52,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        # Adjust to an installed Xcode whose SDK matches the project. List with:
-        #   ls /Applications | grep Xcode
+      - name: Toolchain
+        # Reports only; the selection is `DEVELOPER_DIR` above. The version
+        # belongs in the log of every run: this job's last failure was a
+        # toolchain mismatch, and it was diagnosable only because the old step
+        # printed one.
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
           swift --version
+          ls /Applications | grep '^Xcode'
 
       - name: Run unit tests (functional)
         # BLOCKING gate: full unit-test suite WITHOUT Thread Sanitizer. Covers all
@@ -117,10 +145,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Toolchain
+        # Reports only; the selection is `DEVELOPER_DIR` above. The version
+        # belongs in the log of every run: this job's last failure was a
+        # toolchain mismatch, and it was diagnosable only because the old step
+        # printed one.
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
+          swift --version
+          ls /Applications | grep '^Xcode'
 
       - name: Release build
         run: |
