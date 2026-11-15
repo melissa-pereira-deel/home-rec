@@ -63,6 +63,16 @@ final class MockAudioCapturing: AudioCapturing {
         await onCleanup?()
     }
 
+    /// Deliver a buffer the way a live stream would, through whatever callback
+    /// `setupCapture` was handed. Returns false if nothing is wired up yet, so a
+    /// test cannot quietly assert on a stream it never started.
+    @discardableResult
+    func simulateAudioBuffer(_ buffer: AVAudioPCMBuffer) -> Bool {
+        guard let audioCallback else { return false }
+        audioCallback(buffer)
+        return true
+    }
+
     /// Simulate the capture stream dying unexpectedly.
     func simulateStreamError(_ message: String) {
         capturing = false
