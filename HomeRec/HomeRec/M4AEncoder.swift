@@ -28,9 +28,12 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
     /// configured for. Appending it would fail and cost the whole take at stop.
     case formatMismatch
     /// `finalize()` gave up waiting for `AVAssetWriter.finishWriting` (TD-014).
-    /// Distinct from `.writeFailed` because the cause and the remedy differ: the
-    /// audio captured so far is on disk as movie fragments, and what is missing
-    /// is the index a player needs — which is what Recover Recordings rebuilds.
+    /// Distinct from `.writeFailed` because the outcome differs: the audio is
+    /// on disk as movie fragments, and a fragmented M4A **already plays** — that
+    /// is what `movieFragmentInterval` buys (BL-016). Nothing needs rebuilding;
+    /// `repair(at:)` is a deliberate no-op for this format. What can be missing
+    /// is the tail: whatever was still queued when the drain's share of the
+    /// budget ran out, plus anything after the last fragment boundary.
     case finalizeTimedOut
 
     var errorDescription: String? {
@@ -42,7 +45,22 @@ enum M4AEncoderError: Error, LocalizedError, Equatable {
         case .writeFailed:     return "Failed to write audio to the M4A file"
         case .formatMismatch:  return "Audio format changed mid-recording"
         case .finalizeTimedOut:
-            return "Timed out closing the M4A file; it may need repairing via Recover Recordings"
+            return "Home Rec stopped waiting for the M4A file to close"
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .setupFailed:
+            return "Check that the save folder exists and can be written to"
+        case .notOpen:
+            return "Call createFile() before writing data"
+        case .writeFailed:
+            return "Check that the disk has free space and is still connected"
+        case .formatMismatch:
+            return "Capture buffers must be normalised to the file's declared format before writing"
+        case .finalizeTimedOut:
+            return "The recording is in your save folder and should play as it is, though its last second or so may be missing"
         }
     }
 }
@@ -240,7 +258,7 @@ nonisolated final class M4AEncoder: AudioFileEncoder {
                 withExtendedLifetime(keeper.value) { done.wait() }
             }
             Log.recorder.error(
-                "M4A finalize timed out after \(remaining, privacy: .public)s; file may need repair"
+                "M4A finalize timed out after \(remaining, privacy: .public)s; left as playable fragments"
             )
             throw M4AEncoderError.finalizeTimedOut
         }

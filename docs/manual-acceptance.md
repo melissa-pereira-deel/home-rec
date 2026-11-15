@@ -99,17 +99,38 @@ type … may have shared mutable state". They cannot be fixed here:
 byte-identical, so a fix belongs upstream or in a recorded patch under
 `scripts/design-system/patches/`.
 
-So count the two separately, and gate on the one the project controls. ⚠️ **That
-split was measured on 16.4 and has not been re-measured on the pinned 26.4.1** —
-on the local 26.x toolchain these same statics produce nothing, so the vendored
-share may be zero there. Take the first pinned CI run's number as the new
-baseline rather than carrying 31/18 forward.
+So count the two separately, and gate on the one the project controls.
 
-The language mode is still `SWIFT_VERSION = 5.0`. Flipping it to `6.0` is a
-separate decision, and a local probe saying it builds proves nothing about the
-CI toolchain — see above.
+**Baseline on the pinned toolchain, read off CI: app-owned 0, vendored 0**
+(Xcode 26.4.1 / Swift 6.3.1, first green pinned run of `claude/concurrency-debt`).
+The 31/18 split above is a 16.4 measurement and does not carry forward — the
+vendored statics produce nothing on 26.x. So the gate on this pin is a flat
+**zero**, and any non-zero count is new.
+
+### ⚠️ Zero warnings does not clear the Swift 6 language-mode flip
+
+The language mode is still `SWIFT_VERSION = 5.0`, and the count reaching zero is
+**not** what gates changing it. **TD-009 is** — the cross-queue state in
+`ScreenCaptureAudioManager.swift`.
+
+`SCStreamOutput` and `SCStreamDelegate` are unannotated Objective-C protocols,
+so the compiler assumes their methods are main-actor isolated, while
+`addStreamOutput(_:type:sampleHandlerQueue:)` hands ScreenCaptureKit a
+*background* queue to call them on. The SDK's annotations contradict its own API
+contract, and the compiler believes the annotations. On Xcode 16.4 that file
+still drew a warning; on the pinned 26.x it draws none. **So this check reports
+the riskiest file in the app clean, and flipping the mode would make it look
+verified.** Fix the race first, under a Thread Sanitizer test that exercises the
+real capture manager; then flip.
+
+And a local probe saying `SWIFT_VERSION=6` builds proves nothing about the CI
+toolchain — see above.
 
 - [ ] `scripts/check-docs.sh` exits 0
+- [ ] **One launch-and-record on macOS 15**, the deployment floor. CI runs on
+      `macos-26` because the pinned Xcode cannot run this suite on an older
+      image (see above), so nothing automated executes the app on the oldest
+      system it claims to support
 - [ ] Strict-concurrency warnings **read from CI**, split app-owned vs vendored,
       noted with the Xcode version CI reported them on; the app-owned number has
       not grown

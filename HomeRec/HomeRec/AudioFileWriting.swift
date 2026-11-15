@@ -11,7 +11,7 @@ import AVFoundation
 
 /// Writes captured audio buffers to a file. Implemented by `AudioRecorder`.
 ///
-/// `nonisolated`, and that is the whole of TD-009 on this seam. Every buffer
+/// `nonisolated`, and that is the whole of TD-008 on this seam. Every buffer
 /// this protocol receives arrives on a capture queue and is written on
 /// `AudioRecorder.processingQueue`; none of it belongs on the main actor.
 /// Declaring it `@MainActor` — which an unannotated declaration in this target

@@ -187,15 +187,22 @@ struct M4AEncoderTests {
     }
 
     /// A timed-out finalize is its own failure, not a write failure. They lead
-    /// to different places: a write failure means the audio never reached the
-    /// disk, while this means it did and only the index is missing — which is
-    /// what Recover Recordings rebuilds.
+    /// to different places: a write failure means audio did not reach the disk,
+    /// while this means it did — as fragments that already play (BL-016), so
+    /// the advice must not send the user off to repair a file that is fine.
     @Test("A finalize timeout is distinguishable from a write failure")
     func finalizeTimeoutIsItsOwnError() {
         #expect(M4AEncoderError.finalizeTimedOut != M4AEncoderError.writeFailed)
         let described = M4AEncoderError.finalizeTimedOut.errorDescription
         #expect(described?.isEmpty == false, "the error a user may see must say something")
         #expect(described != M4AEncoderError.writeFailed.errorDescription)
+
+        let advice = M4AEncoderError.finalizeTimedOut.recoverySuggestion
+        #expect(advice?.isEmpty == false, "an error must carry what to do about it")
+        #expect(
+            advice?.localizedCaseInsensitiveContains("repair") == false,
+            "a fragmented M4A plays as found; `repair(at:)` is a no-op for it"
+        )
     }
 
     /// The happy path must not have paid for the bound: a normal finalize over a

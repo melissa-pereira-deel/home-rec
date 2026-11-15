@@ -46,11 +46,14 @@ final class TerminationCoordinator {
     /// isolated: it elapses regardless, and fires the moment the main thread is
     /// free again.
     ///
-    /// What that leaves genuinely unbounded is a hung `M4AEncoder.finalize()`,
-    /// whose `DispatchSemaphore.wait()` has no timeout (TD-014). That is not
-    /// fixable from out here, and sequencing constraint 9 forbids fixing it as
-    /// part of this item. Recorded so the bound is not mistaken for more
-    /// protection than it gives.
+    /// The one stall that used to be unbounded was a hung
+    /// `M4AEncoder.finalize()`, whose wait on `finishWriting` had no timeout.
+    /// It is bounded now, from the inside: `M4AEncoder.finalizeBudget` caps
+    /// both of its waits together, and `M4AEncoderTests` pins that budget to be
+    /// no larger than `defaultTimeout` below. So the worst case is the main
+    /// thread blocked for that budget, after which this timeout — already
+    /// elapsed — fires at once. WAV and FLAC finalize synchronously with file
+    /// I/O only and have no equivalent wait.
     private let timeout: Duration
 
     /// The bound used in the app, named rather than written as a literal in the
