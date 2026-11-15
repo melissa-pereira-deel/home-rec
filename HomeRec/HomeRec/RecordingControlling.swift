@@ -11,7 +11,7 @@ import Foundation
 /// Orchestrates the start/stop recording workflow. Implemented by `RecordingController`.
 @MainActor
 protocol RecordingControlling: AnyObject {
-    var onWaveformData: (([Float]) -> Void)? { get set }
+    var onWaveformData: (@MainActor ([Float]) -> Void)? { get set }
     /// Called when the underlying capture stream fails unexpectedly mid-recording.
     var onStreamError: (@MainActor (String) -> Void)? { get set }
     /// Called when a buffer cannot be written mid-recording (BL-173).

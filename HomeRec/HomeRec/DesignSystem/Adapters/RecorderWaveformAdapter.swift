@@ -14,7 +14,12 @@
 
 import Foundation
 
-enum RecorderWaveformAdapter {
+/// `nonisolated`: two constants and pure functions over arrays and a `CGFloat`.
+/// Left to infer `@MainActor` from the target default, every call from a
+/// synchronous test context was a strict-concurrency violation — sixteen of
+/// them, all in `RecorderWaveformAdapterTests`, for a type that touches no
+/// actor-bound state at all.
+nonisolated enum RecorderWaveformAdapter {
 
     /// Bars are 2pt wide with a 1pt gap, so each one occupies 3pt of width.
     private static let barPitch: CGFloat = 3

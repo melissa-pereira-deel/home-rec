@@ -53,6 +53,12 @@ final class TerminationCoordinator {
     /// protection than it gives.
     private let timeout: Duration
 
+    /// The bound used in the app, named rather than written as a literal in the
+    /// initialiser's default. `M4AEncoder.finalizeBudget` has to fit inside it,
+    /// and two `5` literals in two files is how that relationship gets broken
+    /// by a one-line edit with nothing to catch it.
+    static let defaultTimeout: Duration = .seconds(5)
+
     /// Injected so tests never touch `NSApp`.
     private let reply: @MainActor (Bool) -> Void
 
@@ -60,7 +66,7 @@ final class TerminationCoordinator {
     private var isDraining = false
 
     init(
-        timeout: Duration = .seconds(5),
+        timeout: Duration = TerminationCoordinator.defaultTimeout,
         isSafeToQuit: @escaping @MainActor () -> Bool,
         drain: @escaping @MainActor () async -> Void,
         reply: @escaping @MainActor (Bool) -> Void = { NSApp.reply(toApplicationShouldTerminate: $0) }

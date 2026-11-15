@@ -44,7 +44,25 @@ enum AudioRecorderError: Error, LocalizedError {
 }
 
 /// Records audio from ScreenCaptureKit to WAV file
-class AudioRecorder: AudioFileWriting {
+///
+/// `nonisolated` for the same reason its encoders are: everything here runs on
+/// `processingQueue` or on the capture queue that feeds it. See
+/// `AudioFileWriting` for why it used to claim otherwise.
+///
+/// `@unchecked Sendable` because the capture queue hands buffers to the
+/// processing queue through a `@Sendable` closure that captures `self`. The
+/// claim behind the `unchecked` is the one this class was already built on and
+/// documents throughout: every mutable property is read and written **only**
+/// inside `processingQueue`, which is serial. The two public sinks are the
+/// exception that proves it — they are assigned before `startRecording` and
+/// immediately snapshotted into queue-confined copies, so the queue never reads
+/// a property another thread may be writing.
+///
+/// It is `unchecked` rather than checked because Swift cannot see a dispatch
+/// queue as an isolation domain. If that confinement is ever broken, this
+/// annotation is what will have stopped the compiler from saying so — so do not
+/// add mutable state here without putting it behind the queue.
+nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
 
     // MARK: - Properties
 
@@ -61,6 +79,13 @@ class AudioRecorder: AudioFileWriting {
     /// rather than repeated as a new instance of the same bug.
     private var activeWriteErrorHandler: (@MainActor (WriteFailure) -> Void)?
 
+    /// Snapshot of `onWaveformData`, confined to the processing queue for the
+    /// same reason as the handler above. `processPCMBuffer` used to read the
+    /// stored property directly, ~47 times a second, while the main actor was
+    /// free to assign it — the identical cross-thread read that was fixed for
+    /// the write-error sink and left in place for this one.
+    private var activeWaveformHandler: (@MainActor ([Float]) -> Void)?
+
     /// How an encoder is built for a format. Injectable so tests can drive the
     /// stop path with an encoder that fails to finalize (BL-016) — the real app
     /// always uses `AudioFormat.makeEncoder()`.
@@ -74,7 +99,7 @@ class AudioRecorder: AudioFileWriting {
     private let channels: Int = 2           // Stereo
 
     /// Callback for waveform visualization data (downsampled amplitude values)
-    var onWaveformData: (([Float]) -> Void)?
+    var onWaveformData: (@MainActor ([Float]) -> Void)?
 
     /// Called once when the encoder refuses a buffer (BL-173).
     var onWriteError: (@MainActor (WriteFailure) -> Void)?
@@ -102,10 +127,12 @@ class AudioRecorder: AudioFileWriting {
         // The write-failure latch and its handler are confined the same way and
         // reset here, so a previous take's failure cannot silence this one.
         let handler = onWriteError
+        let waveformHandler = onWaveformData
         processingQueue.sync {
             self.encoder = encoder
             self.writeFailed = false
             self.activeWriteErrorHandler = handler
+            self.activeWaveformHandler = waveformHandler
         }
 
         Log.recorder.debug("AudioRecorder started: \(fileURL.path, privacy: .private)")
@@ -115,11 +142,19 @@ class AudioRecorder: AudioFileWriting {
     /// 48kHz/stereo/Float32/non-interleaved format by the `AudioCapturing` source).
     /// - Parameter pcmBuffer: Audio buffer from the capture source
     func processAudioSample(_ pcmBuffer: AVAudioPCMBuffer) {
-        // Hand off to the serial queue immediately. `wavWriter` is only ever read
+        // Hand off to the serial queue immediately. `encoder` is only ever read
         // there, so a concurrent stop cannot free it mid-read.
+        //
+        // The buffer crosses in an `UncheckedTransfer` because `async` takes a
+        // `@Sendable` closure and `AVAudioPCMBuffer` is not Sendable. Why this
+        // is a transfer and not a shared reference: the capture source builds a
+        // fresh buffer for every callback — `AudioSampleConverter.makePCMBuffer`
+        // from the `CMSampleBuffer`, then `AudioFormatNormalizer` — and does not
+        // keep it. There is one reference, and it is being handed over.
+        let transfer = UncheckedTransfer(pcmBuffer)
         processingQueue.async { [weak self] in
             guard let self, self.encoder != nil else { return }
-            self.processPCMBuffer(pcmBuffer)
+            self.processPCMBuffer(transfer.value)
         }
     }
 
@@ -138,6 +173,7 @@ class AudioRecorder: AudioFileWriting {
             defer {
                 encoder = nil
                 activeWriteErrorHandler = nil
+                activeWaveformHandler = nil
             }
             // BL-016: this was `try?`, which discarded every conformer's finalize
             // error — a failed M4A finish was invisible to the user. The error
@@ -200,10 +236,15 @@ class AudioRecorder: AudioFileWriting {
 
         // Waveform only once the audio is actually on disk, so the UI cannot
         // outlive the file it is describing.
-        if let onWaveformData = onWaveformData {
+        if let onWaveformData = activeWaveformHandler {
             let waveformSamples = WaveformDownsampler.downsample(pcmBuffer)
+            // `DispatchQueue.main.async`, not `Task { @MainActor in }`: this runs
+            // ~47×/sec and tasks carry no ordering guarantee relative to one
+            // another, so waveform frames could arrive out of order and draw a
+            // jittering trace. The main queue is FIFO. `assumeIsolated` states
+            // what is already true inside it — this is the main actor.
             DispatchQueue.main.async {
-                onWaveformData(waveformSamples)
+                MainActor.assumeIsolated { onWaveformData(waveformSamples) }
             }
         }
     }

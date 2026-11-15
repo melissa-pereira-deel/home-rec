@@ -19,16 +19,34 @@ scripts/check-docs.sh          # documented facts still true?
 
 ```bash
 xcodebuild -project HomeRec/HomeRec.xcodeproj -scheme HomeRec \
-  -configuration Debug SWIFT_VERSION=6 CODE_SIGNING_ALLOWED=NO build
+  -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
-The Swift 6 build is **not** optional polish: the app target infers `@MainActor`
-on unannotated types, and that entire class of bug is invisible to a
-warning-free Swift 5 build. Errors here are expected to cascade — fixing the top
-layer reveals more underneath.
+Strict concurrency is **not** optional polish: the app target sets
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so an unannotated type is
+main-actor isolated whether or not its work happens there, and that entire class
+of bug is invisible to an ordinary warning-free build.
+
+`SWIFT_STRICT_CONCURRENCY = complete` is now set in all six build
+configurations, so the ordinary build above *is* the check and the expected
+result is **zero warnings**.
+
+**This replaced counting Swift 6 errors, which could not work.** The old gate
+built with `SWIFT_VERSION=6` and compared an error count against the previous
+release. A Swift 6 build stops at the first failing batch, so later files were
+never type-checked: the count was a floor, the same tree reported 1 on four
+builds and 2 on a fifth with nothing touching either file, and "has not grown"
+was unevaluable from a single build — as the run log below records three
+separate times. Measured as warnings instead, nothing stops the build, so one
+run enumerates the whole set. The first complete measurement was **12 warnings
+across 6 files**, on a tree whose last release recorded "1".
+
+The language mode is still `SWIFT_VERSION = 5.0`. Flipping it to `6.0` is a
+separate decision; the warning count reaching zero is its precondition, not
+its trigger.
 
 - [ ] `scripts/check-docs.sh` exits 0
-- [ ] Swift 6 error count has not grown
+- [ ] Strict-concurrency warnings: **0** (the number, not "no new ones")
 - [ ] Full suite green; note the count in the PR
 - [ ] `MARKETING_VERSION` verified against the **built product's**
       `CFBundleShortVersionString`, not the file

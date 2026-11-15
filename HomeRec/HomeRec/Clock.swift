@@ -38,7 +38,15 @@ final class SystemDurationClock: DurationClock {
         onTick = nil
     }
 
-    deinit {
+    /// `isolated deinit` (SE-0371), not a plain one, and the reason is not
+    /// ceremony. A plain `deinit` runs wherever the last reference was released,
+    /// and `Timer.invalidate()` is documented as valid only on the thread that
+    /// scheduled the timer — here, the main run loop. The teardown is also
+    /// load-bearing rather than tidy: `Timer.scheduledTimer` hands the run loop
+    /// a strong reference to the timer while the block holds `self` weakly, so
+    /// a clock released without this would leave a repeating timer firing into
+    /// a nil `self` for the life of the process.
+    isolated deinit {
         timer?.invalidate()
     }
 }

@@ -70,9 +70,13 @@ final class MockAudioCapturing: AudioCapturing {
     }
 }
 
-@MainActor
-final class MockAudioFileWriting: AudioFileWriting {
-    var onWaveformData: (([Float]) -> Void)?
+/// Isolated exactly as `AudioRecorder` is, because that is what it stands in
+/// for: `AudioFileWriting` is `nonisolated`, so a `@MainActor` mock could not
+/// witness its requirements. The `@unchecked Sendable` carries the same claim
+/// as the real one, and here it is trivially true — every test drives this from
+/// the main actor, serially, and never hands it to a queue.
+nonisolated final class MockAudioFileWriting: AudioFileWriting, @unchecked Sendable {
+    var onWaveformData: (@MainActor ([Float]) -> Void)?
     var onWriteError: (@MainActor (WriteFailure) -> Void)?
     private(set) var recording = false
     private(set) var startCount = 0
@@ -107,6 +111,12 @@ final class MockAudioFileWriting: AudioFileWriting {
     }
 
     /// Simulate the encoder refusing a buffer mid-take (BL-173).
+    ///
+    /// `@MainActor` because `onWriteError` is, and because this is a test helper
+    /// rather than a protocol requirement — so it can be isolated without the
+    /// mock failing to witness `AudioFileWriting`. Kept synchronous: the tests
+    /// assert on the very next line, and a hop would make them race.
+    @MainActor
     func emitWriteError(_ reason: WriteFailure = .other("write failed")) {
         onWriteError?(reason)
     }
@@ -331,7 +341,7 @@ final class ManualClock: DurationClock {
 
 @MainActor
 final class MockRecordingControlling: RecordingControlling {
-    var onWaveformData: (([Float]) -> Void)?
+    var onWaveformData: (@MainActor ([Float]) -> Void)?
     var onStreamError: (@MainActor (String) -> Void)?
     var onWriteError: (@MainActor (WriteFailure) -> Void)?
     private(set) var isRecording = false

@@ -292,7 +292,11 @@ class RecorderViewModel: ObservableObject {
         }
     }
 
-    deinit {
+    /// `isolated deinit` (SE-0371): both tokens are non-Sendable
+    /// `NSObjectProtocol` values, and reading them from a nonisolated `deinit`
+    /// is an error in the Swift 6 language mode. They were registered on the
+    /// main actor, so that is where they are removed.
+    isolated deinit {
         if let activationObserver {
             notificationCenter.removeObserver(activationObserver)
         }

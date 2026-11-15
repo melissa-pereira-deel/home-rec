@@ -5,6 +5,16 @@ All notable changes to Home Rec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Quitting while saving an M4A can no longer hang the app** — When you quit, Home Rec finishes writing the open recording before it closes, which is what keeps the file playable. For M4A that last step hands the file to the system to close, and Home Rec waited for it to report back with no limit on how long it would wait. If that report never came, the app stopped responding to anything at all — including the quit you had just asked for — and the only way out was to force-quit it, which is the exact outcome finishing the file was meant to avoid. Home Rec now waits a bounded five seconds in total. If the file still has not closed, it stops waiting, quits, and tells you the recording may need repairing — and **Recover Recordings** repairs it, because the audio itself was already on disk. WAV and FLAC were never affected. (TD-014)
+
+### Changed
+
+- **Nothing you can see** — the app's internal rules about which code runs on which thread were wrong in several places: the part of Home Rec that writes audio to disk claimed to run on the main thread, where the interface lives, while actually running on its own. The claim was harmless on its own and the audio path was already correct in practice, but it hid the one tool that finds real threading bugs — the kind that produce a silent file, or a crash nobody can reproduce. Those declarations now match reality, the check is switched on permanently, and it reports clean.
+
 ## [1.1.3] - 2026-09-17
 
 This release also carries every fix prepared as 1.1.2, which was never published. **If you are updating from 1.1.1, all six fixes below are new to you** — including a crash that could take a long recording with it.

@@ -15,6 +15,24 @@
 import Foundation
 import AVFoundation
 
+/// Carries a non-Sendable reference across exactly one queue hop whose safety
+/// the caller guarantees structurally.
+///
+/// `DispatchQueue.async` takes a `@Sendable` closure, and the audio path moves
+/// AVFoundation objects — PCM buffers, asset writers — that AVFoundation does
+/// not declare `Sendable`. Where the hand-off genuinely is a *transfer* (one
+/// reference, created by the sender, never touched again) this states that
+/// claim in one greppable place instead of marking a whole class
+/// `@unchecked Sendable` and losing the checking on everything else it holds.
+/// Precedent: `InputSource` in `AudioFormatNormalizer.swift`.
+///
+/// Every use must say at the use site why the transfer is sole-ownership. If
+/// that sentence cannot be written, this is the wrong tool.
+nonisolated struct UncheckedTransfer<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 nonisolated protocol AudioFileEncoder: AnyObject {
     /// Open the output file. `sampleRate`/`channels` describe the *input* buffers
     /// the encoder will receive (the capture format, currently 48kHz stereo). Each
