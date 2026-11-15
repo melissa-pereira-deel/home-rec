@@ -249,11 +249,12 @@ class RecordingController: RecordingControlling {
 
     // MARK: - Cleanup
 
-    /// ⚠️ Known Swift 6 violation: `audioRecorder` is a non-Sendable
-    /// `AudioFileWriting` read from a nonisolated `deinit`, and the `Task` below
-    /// then carries it onto the main actor. `isolated deinit` fixes both and is
-    /// unavailable on the CI toolchain — see `Clock.swift`.
-    deinit {
+    /// `isolated deinit` (SE-0371; needs Swift 6.2+, see `Clock.swift`):
+    /// `audioRecorder` is a non-Sendable `AudioFileWriting`, and reading it from
+    /// a nonisolated `deinit` is an error in the Swift 6 language mode.
+    /// Isolating also means the `Task` below starts from the main actor instead
+    /// of hopping onto it with a non-Sendable value in hand.
+    isolated deinit {
         // Capture managers directly to avoid referencing self inside the Task closure
         let captureManager = captureManager
         let audioRecorder = audioRecorder

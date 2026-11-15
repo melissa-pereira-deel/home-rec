@@ -244,14 +244,12 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
             // jittering trace. The main queue is FIFO. `assumeIsolated` states
             // what is already true inside it — this is the main actor.
             //
-            // The handler crosses in an `UncheckedTransfer` because Swift 6.1 —
-            // the CI toolchain — does not infer a global-actor-isolated closure
-            // to be `Sendable`, so capturing it in a `@Sendable` closure warns
-            // there even though it does not on 6.3. Sole ownership: this is a
-            // local copy of a queue-confined snapshot, read nowhere else.
-            let handler = UncheckedTransfer(onWaveformData)
+            // Captured directly: a global-actor-isolated closure is `Sendable`
+            // from Swift 6.2, which the pinned toolchain provides. It needed an
+            // `UncheckedTransfer` on 6.1, and if the CI pin is ever lowered this
+            // is where that reappears.
             DispatchQueue.main.async {
-                MainActor.assumeIsolated { handler.value(waveformSamples) }
+                MainActor.assumeIsolated { onWaveformData(waveformSamples) }
             }
         }
     }

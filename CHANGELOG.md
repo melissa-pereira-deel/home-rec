@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Nothing you can see** — the app's internal rules about which code runs on which thread were wrong in several places: the part of Home Rec that writes audio to disk claimed to run on the main thread, where the interface lives, while actually running on its own. The claim was harmless on its own and the audio path was already correct in practice, but it hid the one tool that finds real threading bugs — the kind that produce a silent file, or a crash nobody can reproduce. Those declarations now match reality and the check is switched on permanently. It does not yet report clean: most of what remains is in the vendored design-system files, which cannot be changed here, and a handful of ours needs a newer compiler than the build machine has.
+- **Nothing you can see** — the app's internal rules about which code runs on which thread were wrong in several places: the part of Home Rec that writes audio to disk claimed to run on the main thread, where the interface lives, while actually running on its own. The claim was harmless on its own and the audio path was already correct in practice, but it hid the one tool that finds real threading bugs — the kind that produce a silent file, or a crash nobody can reproduce. Those declarations now match reality and the check is switched on permanently. The machine that builds Home Rec was also using whichever version of Apple's compiler its image happened to default to — two major versions behind the one Home Rec is written on, and checking a subtly different language as a result. It now uses the same version, which is what makes the check's result mean anything at all.
 
 ## [1.1.3] - 2026-09-17
 

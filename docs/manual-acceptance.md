@@ -73,6 +73,16 @@ from root that overrides .../MediaToolbox`). The Release job passed through all
 of it, because a compile-only gate cannot see a runtime link failure. Hence
 `macos-26`.
 
+**The pin now has a floor, and it is load-bearing.** Four teardowns use
+`isolated deinit` — `Clock`, `PermissionGrantWatcher`, `RecorderViewModel`,
+`RecordingController` — so lowering `DEVELOPER_DIR` below **Xcode 26.0 / Swift
+6.2** is not a configuration tweak, it is four compile errors. `Clock.swift`
+carries the explanation and the other three point at it. `Clock`'s is also the
+one whose revert reintroduces a bug rather than a warning, since
+`Timer.invalidate()` is valid only on the thread that scheduled the timer. So
+the pin has a window: at or above 26.0 for the language, and matched to the
+image for the frameworks.
+
 Read the number off CI anyway. The pin means the number is comparable between
 runs; it does not mean your local Xcode matches it. **Where the pin and your
 local Xcode disagree, the pin is the gate**, and the `Toolchain` step prints
