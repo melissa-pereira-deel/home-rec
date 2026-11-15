@@ -33,9 +33,14 @@ Package.pins
 *.mobileprovision
 *.provisionprofile
 
-# Claude Code
+# Agent instructions and skills — private for the same reason in every harness:
+# they describe internal policy, point at `private/`, and the skills carry
+# measured findings. Anything a public contributor must know belongs in
+# README.md, docs/, or a code comment.
 .claude/
 CLAUDE.md
+.agents/
+AGENTS.md
 
 # macOS
 .DS_Store
