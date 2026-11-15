@@ -26,22 +26,39 @@ concurrency:
 # for development and not on 16.4. Both CI jobs failed in under 90 seconds
 # while the same tree built clean locally.
 #
-# 26.3 is the newest Xcode on the macos-15 image; development is on 26.4, which
-# the image does not carry. The "Toolchain" step prints what is installed, so
-# the next bump is a lookup rather than a guess.
+# ⚠️ **The runner image has to match the Xcode, not just carry it.** The first
+# attempt kept `macos-15` and pinned its newest Xcode, 26.3. That compiles — the
+# Release job passed — and then every test in the suite failed in 0.000 s, with
+# the test host dying at load:
+#
+#   dyld: symbol '_OBJC_CLASS_$_FigBaseCALayer' missing from root that overrides
+#   .../MediaToolbox.framework. Use of that symbol in .../AVFCore.framework
+#
+# Xcode 26.3 ships CoreMedia/MediaToolbox roots that override macOS 15's system
+# frameworks, and AVFCore then cannot resolve against them. Everything touching
+# AVFoundation — which is the encoders, so most of the suite — aborts the host.
+# A compile-only gate cannot see this; only running the tests can.
+#
+# So: `macos-26` with Xcode 26.4.1, which is also what development uses, so
+# local and CI finally agree. The "Toolchain" step prints what is installed,
+# making the next bump a lookup rather than a guess.
 #
 # This is also what makes `SWIFT_STRICT_CONCURRENCY = complete` a real gate: a
 # warning count means nothing until the compiler producing it is named. The
 # expected result is zero, measured here, on this version.
+#
+# ⚠️ The TSan job's documented CoreMedia abort was characterised on macOS 15. It
+# is advisory (`continue-on-error`) and cannot fail the PR either way, but its
+# note describes behaviour on an image this workflow no longer uses.
 env:
-  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+  DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
 
 jobs:
   unit-tests:
     name: Unit tests
     # The Xcode that provides this project's macOS SDK is pinned in the
     # workflow-level `env` above, not selected here.
-    runs-on: macos-15
+    runs-on: macos-26
     # Without this, GitHub's default is SIX HOURS. A single hung test then
     # quietly consumes the runner budget and leaves no log to diagnose from.
     # The suite completes in 2-3 minutes; 20 is generous headroom that still
@@ -138,7 +155,7 @@ jobs:
     # the tree was in doubt, nobody learned whether it still built. That
     # happened on `main` at 66d0702. A separate job has no `needs:`, so the two
     # gates fail independently and both always report.
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
 
     steps:

@@ -55,13 +55,23 @@ once already.
 
 **So the toolchain is now pinned rather than inherited.**
 `.github/workflows/ci.yml` sets `DEVELOPER_DIR` at the workflow level to
-**Xcode 26.3** — the newest the `macos-15` image carries — and both jobs read
+**Xcode 26.4.1 on the `macos-26` runner**, the same version development uses —
+and both jobs read
 that one setting. Before this, the workflow ran `xcode-select -s
 /Applications/Xcode.app`, which takes the *image default*: 16.4, never chosen by
 anyone, and liable to move whenever GitHub rolls the image. Two consecutive CI
 failures came out of that gap, the second of them a **`swift-frontend` crash in
 6.1.2's SIL diagnostics pass** on code written to satisfy 6.1.2 — a compiler bug
 that cannot be reproduced on a machine carrying only one Xcode.
+
+⚠️ **Pinning the Xcode is not enough on its own — the image has to match it.**
+Keeping `macos-15` and selecting its newest Xcode (26.3) compiled fine and then
+failed every test in 0.000 s: Xcode 26.3's CoreMedia/MediaToolbox roots override
+macOS 15's system frameworks and AVFCore cannot resolve against them, so the
+test host dies at load (`dyld: symbol '_OBJC_CLASS_$_FigBaseCALayer' missing
+from root that overrides .../MediaToolbox`). The Release job passed through all
+of it, because a compile-only gate cannot see a runtime link failure. Hence
+`macos-26`.
 
 Read the number off CI anyway. The pin means the number is comparable between
 runs; it does not mean your local Xcode matches it. **Where the pin and your
@@ -80,7 +90,7 @@ byte-identical, so a fix belongs upstream or in a recorded patch under
 `scripts/design-system/patches/`.
 
 So count the two separately, and gate on the one the project controls. ⚠️ **That
-split was measured on 16.4 and has not been re-measured on the pinned 26.3** —
+split was measured on 16.4 and has not been re-measured on the pinned 26.4.1** —
 on the local 26.x toolchain these same statics produce nothing, so the vendored
 share may be zero there. Take the first pinned CI run's number as the new
 baseline rather than carrying 31/18 forward.
