@@ -13,7 +13,9 @@ import os
 struct HomeRecApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var viewModel = RecorderViewModel()
+    @StateObject private var viewModel = RecorderViewModel(
+        lastRecordingStore: LastRecordingStore(defaults: .standard)
+    )
 
     init() {
         // Register custom fonts from the app bundle

@@ -212,6 +212,13 @@ below. A Debug build cannot answer it.
 - [ ] Selected app quits mid-recording → partial file plays, banner shown
 - [ ] Mic unplugged mid-recording → partial file plays, banner shown
 - [ ] Mic unplugged while idle → menu shows "(not connected)", checked, disabled
+- [ ] **The last recording survives a relaunch (BL-143)** — record, stop, ⌘Q,
+      reopen. The popover's last-recording row and the window's Reveal in
+      Finder are both there and reveal that file. Then move the file to another
+      folder and press Reveal: the row goes away, and it is still gone after
+      the next relaunch. The unit tests use a mock recorder and their own
+      settings domain, so only this run shows the app's real settings and the
+      real file.
 
 ## Crash durability — one force-quit per format
 
