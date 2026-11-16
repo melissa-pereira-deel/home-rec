@@ -55,9 +55,9 @@ unannotated=0
 for f in WAVWriter M4AEncoder FLACEncoder AudioFormatNormalizer; do
   path="HomeRec/HomeRec/$f.swift"
   [ -f "$path" ] || continue
-  grep -qE "^nonisolated (final )?class $f" "$path" || { bad "$f is not declared nonisolated (constraint 12)"; unannotated=1; }
+  grep -qE "^nonisolated (final )?class $f" "$path" || { bad "$f is not declared nonisolated (constraint 3)"; unannotated=1; }
 done
-[ "$unannotated" -eq 0 ] && ok "Audio-path encoders are all nonisolated (constraint 12)"
+[ "$unannotated" -eq 0 ] && ok "Audio-path encoders are all nonisolated (constraint 3)"
 
 echo
 
