@@ -110,8 +110,8 @@ vendored statics produce nothing on 26.x. So the gate on this pin is a flat
 ### ⚠️ Zero warnings does not clear the Swift 6 language-mode flip
 
 The language mode is still `SWIFT_VERSION = 5.0`, and the count reaching zero is
-**not** what gates changing it. **TD-009 is** — the cross-queue state in
-`ScreenCaptureAudioManager.swift`.
+**not** what cleared changing it. **TD-009 was** — the cross-queue state in
+`ScreenCaptureAudioManager.swift` — and it is now fixed under a test (below).
 
 `SCStreamOutput` and `SCStreamDelegate` are unannotated Objective-C protocols,
 so the compiler assumes their methods are main-actor isolated, while
@@ -120,8 +120,11 @@ so the compiler assumes their methods are main-actor isolated, while
 contract, and the compiler believes the annotations. On Xcode 16.4 that file
 still drew a warning; on the pinned 26.x it draws none. **So this check reports
 the riskiest file in the app clean, and flipping the mode would make it look
-verified.** Fix the race first, under a Thread Sanitizer test that exercises the
-real capture manager; then flip.
+verified.** The race is now fixed under a Thread Sanitizer test that exercises
+the real capture manager (`ScreenCaptureAudioManagerTests`): the state is
+confined to `audioQueue`. That confinement is invisible to the compiler — the
+properties are `nonisolated(unsafe)` — so **that test, not a clean build, is
+what checks it**, in Swift 5 or 6 mode alike.
 
 And a local probe saying `SWIFT_VERSION=6` builds proves nothing about the CI
 toolchain — see above.

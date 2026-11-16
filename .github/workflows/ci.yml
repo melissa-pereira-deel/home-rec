@@ -114,8 +114,12 @@ jobs:
         # skips it justified are gone: both suites run clean under TSan.
         #
         # Nothing is skipped, so the race check covers the whole unit suite. It
-        # covers only what the suite exercises: not ScreenCaptureKit capture,
-        # which needs Screen Recording permission a runner cannot grant.
+        # covers only what the suite exercises. That now includes the real
+        # ScreenCaptureAudioManager's sample path: ScreenCaptureAudioManagerTests
+        # feeds it buffers on its own capture queue while the main actor sets up
+        # and tears down a session (TD-013). It does not include ScreenCaptureKit
+        # delivering those buffers, or `didStopWithError`: both need a real
+        # SCStream, which needs Screen Recording permission a runner cannot grant.
         continue-on-error: true
         env:
           # xcodebuild hands TEST_RUNNER_<NAME> to the test host as <NAME>.
