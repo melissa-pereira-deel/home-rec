@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Report a problem by email** — Report a Problem used to open a GitHub issue, which meant you needed a GitHub account to tell us something had gone wrong. It now opens an email to support@homerec.app, already filled in with your Home Rec and macOS versions and the app's most recent log entries, so you only have to describe what happened. The log is trimmed so the email opens in any mail app; Export Diagnostics still saves the full log if we ask for it. Paths inside your user folder are shortened to `~`, so your account name is not sent. If no email app opens, the report is copied for you to paste into an email, and GitHub is still there if you prefer it. (BL-141)
 - **Your last recording is still there after you reopen Home Rec** — The menu-bar popover shows the recording you made last, with a button to reveal it in Finder, but Home Rec forgot it the moment it quit: open the app the next day and there was only a record button. It now remembers the recording once the file has finished saving, so it is there the next time you open Home Rec, in the popover and in the main window. If you have since moved or deleted the file, it is not shown, and pressing Reveal on a file that has gone takes the row away instead of doing nothing. A recording cut off by a crash or a power cut is not remembered this way; Recover Recordings is where to find it. (BL-143)
 
 ### Fixed
