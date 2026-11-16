@@ -168,12 +168,10 @@ toolchain — see above.
       nearest alternative fix would have gone silent again here
 - [ ] **Mic already denied in System Settings before launch** → pressing record
       reports it. No prompt appears in this case, by design
-- [ ] The **packaged** app carries the microphone entitlement:
-      `codesign -d --entitlements :- "/Applications/Home Rec.app"` lists
-      `com.apple.security.device.audio-input`.
-      ⚠️ A Debug build has no hardened runtime and works regardless — checking
-      one proves nothing about the release
 - [ ] Onboarding copy still describes what the app actually does
+
+The packaged app's microphone entitlement is checked under **Signed product**,
+below. A Debug build cannot answer it.
 
 ## Recording, per source
 
@@ -265,6 +263,74 @@ fake drain; it cannot exercise AppKit's termination reply or a real encoder's
 finalize. The 5-second bound also cannot rescue a finalize that blocks the main
 thread (TD-014) — if ⌘Q ever appears to hang, that is the cause, and it is a
 known deferral rather than a regression in this work.
+
+## Signed product — the notarized DMG only
+
+Every check here needs the **notarized, stapled DMG**: the release artifact if
+it exists yet, or one built by `scripts/build-dmg.sh` from the same commit. A
+Debug or locally signed build has no hardened runtime, no notarization ticket
+and no quarantine, so it passes these checks without testing anything. Without
+the DMG, the run log names this whole section as not run. The N → N+1
+rehearsal under Auto-update needs signed builds too.
+
+**The artifact**
+
+- [ ] App and DMG notarization both **Accepted**.
+      `xcrun stapler validate dist/HomeRec.dmg` passes, and in `dist/`,
+      `shasum -a 256 -c HomeRec.dmg.sha256` reports `OK`
+- [ ] `spctl --assess --verbose "/Applications/Home Rec.app"` reports
+      `accepted` and `source=Notarized Developer ID`
+- [ ] The packaged app carries the microphone entitlement:
+      `codesign -d --entitlements :- "/Applications/Home Rec.app"` lists
+      `com.apple.security.device.audio-input`.
+      ⚠️ A Debug build has no hardened runtime and works regardless — checking
+      one proves nothing about the release
+
+**Opened from inside the disk image, translocated.** This is what a user gets
+by double-clicking Home Rec in the mounted DMG instead of dragging it out.
+Gatekeeper runs it from a random read-only path, so no permission grant
+survives the next launch.
+
+- [ ] The DMG carries `com.apple.quarantine`, as it does when downloaded in a
+      browser. For a local build, add it before mounting:
+      `xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" dist/HomeRec.dmg`.
+      ⚠️ **Without quarantine this block is worthless.** Gatekeeper never
+      translocates an unquarantined DMG, so the app runs at its real path on the
+      volume and the tester records a pass for the wrong state
+- [ ] Mount it and double-click Home Rec **inside it**. Then prove the launch
+      was translocated: `ps -axo comm= | grep -F "Home Rec.app"` prints a path
+      containing `/AppTranslocation/`. If it does not, record this block as not
+      run
+- [ ] The window shows **Move to Applications**, and recording is blocked
+- [ ] **Check for Updates…** is greyed, and hovering shows exactly "Home Rec
+      can't update from this location. Quit, drag it to your Applications
+      folder, and open it from there."
+
+**Opened from inside the disk image, not translocated.** Quit, eject, remove
+the attribute (`xattr -d com.apple.quarantine dist/HomeRec.dmg`), mount it again
+and open Home Rec from inside it. The volume is read-only.
+
+- [ ] Recording **works**, and **Check for Updates…** is greyed with "Home Rec
+      can record from this read-only volume, but it can't update. Quit, drag it
+      to your Applications folder, and open it from there."
+- [ ] Start a recording: the tooltip **stays** that sentence. The location
+      outranks the recording reason, because stopping the take would not clear
+      it (BL-148a)
+
+**Installed in `/Applications`: the menu**
+
+- [ ] Drag Home Rec to `/Applications`, eject the DMG and open it from there:
+      **Check for Updates…** is enabled, with no tooltip
+- [ ] It reaches the live feed and gives the right answer for this build: it
+      offers the newer version, or says this one is the newest
+- [ ] **Repeated check.** Click it several times in a row, including while its
+      window is still open. Each click either starts a check or brings the
+      existing window forward: never a second window, and never a click that
+      does nothing
+- [ ] **The recording interlock, on this install.** Start recording: the row
+      greys, and hovering shows exactly "Installing an update restarts Home Rec,
+      which would end the recording." Then run the three interlock checks under
+      Auto-update on this copy, not on a development build
 
 ## Auto-update (BL-034) — first shipped in 1.1.0
 
