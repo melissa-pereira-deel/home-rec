@@ -580,7 +580,13 @@ class RecorderViewModel: ObservableObject {
             case .starting, .stopping:
                 try? await Task.sleep(for: .milliseconds(10))
             case .idle, .error:
-                await failureTeardown?.value
+                // Never spin without suspending: the quit deadline needs the
+                // main actor to answer AppKit.
+                if let failureTeardown {
+                    await failureTeardown.value
+                } else {
+                    try? await Task.sleep(for: .milliseconds(10))
+                }
             }
         }
     }
@@ -963,6 +969,11 @@ class RecorderViewModel: ObservableObject {
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
         isFinishingFailedTake = true
+        // The popover shows `errorMessage` inline in any `.error` state, so an
+        // earlier take's text and recovery button would stand in until the
+        // close reports. Show nothing rather than the wrong thing.
+        errorMessage = nil
+        recoverySuggestion = nil
         transition(to: .error(failure), presentingError: false)
 
         let url = lastRecordingURL
@@ -982,6 +993,11 @@ class RecorderViewModel: ObservableObject {
             if case .error = state {
                 if outcome != failure { state = .error(outcome) }
                 presentError(outcome.message, recovery: outcome.recovery)
+            } else if outcome != failure {
+                // The retry chose to move on from the failure, but not from a
+                // file that could not be closed: that is news about the
+                // previous recording, so say it without a recovery action.
+                presentError(outcome.message, recovery: nil)
             }
             isFinishingFailedTake = false
         }

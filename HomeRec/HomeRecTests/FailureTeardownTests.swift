@@ -160,6 +160,55 @@ struct FailureTeardownTests {
         #expect(viewModel.allowsProcessTermination)
     }
 
+    /// The alert waits for the close, so the popover's inline error must not
+    /// show an earlier take's message and recovery button meanwhile.
+    @Test("While a failed take closes, no earlier error's text is on show")
+    func closingTakeShowsNoStaleError() async {
+        let (viewModel, controller) = makeViewModel()
+        controller.startError = RecorderError.startFailed("first")
+        await viewModel.startRecording()
+        #expect(viewModel.errorMessage != nil)
+        viewModel.showError = false
+        controller.startError = nil
+
+        let gate = Gate()
+        defer { gate.release() }
+        await failTakeHoldingTeardown(viewModel, controller, gate: gate) {
+            $0.emitStreamError("stream died")
+        }
+        #expect(viewModel.errorMessage == nil, "the popover showed the previous error")
+        #expect(viewModel.recoverySuggestion == nil)
+
+        gate.release()
+        await waitUntil("the close to report") { viewModel.allowsProcessTermination }
+        #expect(viewModel.errorMessage == RecorderError.streamFailed("stream died").message)
+    }
+
+    /// A retry can start waiting before the failed take has closed. If that
+    /// close then fails, the file may be incomplete, and that is still news.
+    @Test("A close failure is shown even when a retry is already waiting")
+    func closeFailureSurvivesRetry() async {
+        let (viewModel, controller) = makeViewModel()
+        let gate = Gate()
+        defer { gate.release() }
+        struct CannotClose: LocalizedError {
+            var errorDescription: String? { "Cannot close" }
+        }
+        controller.finalizeError = CannotClose()
+        await failTakeHoldingTeardown(viewModel, controller, gate: gate) {
+            $0.emitStreamError("stream died")
+        }
+
+        let retry = Task { await viewModel.startRecording() }
+        await waitUntil("the retry to wait for the close") { viewModel.state == .starting }
+        gate.release()
+        await retry.value
+
+        #expect(viewModel.state == .recording)
+        #expect(viewModel.showError, "the close failure was dropped")
+        #expect(viewModel.errorMessage == RecorderError.stopFailed("Cannot close").message)
+    }
+
     @Test("An error with nothing left open does not hold the process")
     func settledErrorAllowsTermination() async {
         let (viewModel, controller) = makeViewModel()
