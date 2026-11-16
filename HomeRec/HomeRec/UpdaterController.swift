@@ -189,21 +189,16 @@ private final class SparkleUpdateChecker: UpdateChecking {
 @MainActor
 private final class UpdaterGate: NSObject, SPUUpdaterDelegate {
 
-    let isSafeToInstall: @MainActor () -> Bool
+    private let postponement: RelaunchPostponement
 
-    /// Sparkle's continuation, held while a take finishes. Non-nil means an
-    /// update is downloaded and waiting to relaunch us.
-    private var postponedRelaunch: (() -> Void)?
+    var isSafeToInstall: @MainActor () -> Bool { postponement.isSafeToInstall }
 
     init(isSafeToInstall: @escaping @MainActor () -> Bool) {
-        self.isSafeToInstall = isSafeToInstall
+        self.postponement = RelaunchPostponement(isSafeToInstall: isSafeToInstall)
     }
 
     func releasePostponedRelaunch() {
-        guard let relaunch = postponedRelaunch else { return }
-        postponedRelaunch = nil
-        Log.recorder.info("Recording ended; releasing the postponed update relaunch")
-        relaunch()
+        postponement.release()
     }
 
     // MARK: - SPUUpdaterDelegate
@@ -225,16 +220,53 @@ private final class UpdaterGate: NSObject, SPUUpdaterDelegate {
 
     /// The backstop for a download that completed mid-take. Returning `true`
     /// parks the relaunch until `installHandler` runs; `releasePostponedRelaunch`
-    /// is the only thing that runs it.
+    /// is the only thing that runs it. The policy is `RelaunchPostponement`'s.
     func updater(
         _ updater: SPUUpdater,
         shouldPostponeRelaunchForUpdate item: SUAppcastItem,
         untilInvokingBlock installHandler: @escaping () -> Void
     ) -> Bool {
+        postponement.postpone(installHandler)
+    }
+}
+
+/// Gate 2's policy: park a relaunch offered while a take is open, and run it
+/// once the take has ended.
+///
+/// Kept apart from `UpdaterGate` because the delegate callback that feeds it
+/// takes an `SPUUpdater` and an `SUAppcastItem`, and building an `SPUUpdater`
+/// reaches the network. This type names no Sparkle symbol, so the half of the
+/// gate that loses a take if it is wrong can be tested (BL-154).
+@MainActor
+final class RelaunchPostponement {
+
+    let isSafeToInstall: @MainActor () -> Bool
+
+    /// Sparkle's continuation, held while a take finishes. Non-nil means an
+    /// update is downloaded and waiting to relaunch us.
+    private var parked: (() -> Void)?
+
+    init(isSafeToInstall: @escaping @MainActor () -> Bool) {
+        self.isSafeToInstall = isSafeToInstall
+    }
+
+    /// Returns `true` when the relaunch is parked and Sparkle must wait for it.
+    /// `false` means nothing is open: Sparkle relaunches on its own, and the
+    /// handler is not ours to run.
+    func postpone(_ relaunch: @escaping () -> Void) -> Bool {
         guard !isSafeToInstall() else { return false }
         Log.recorder.info("Update ready but a recording is open; postponing relaunch")
-        postponedRelaunch = installHandler
+        parked = relaunch
         return true
+    }
+
+    /// Runs a parked relaunch, at most once. Cleared before it runs, so a
+    /// release triggered from inside the relaunch finds nothing to run.
+    func release() {
+        guard let relaunch = parked else { return }
+        parked = nil
+        Log.recorder.info("Recording ended; releasing the postponed update relaunch")
+        relaunch()
     }
 }
 
