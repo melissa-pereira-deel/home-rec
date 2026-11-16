@@ -376,3 +376,96 @@ private final class TestUpdateChecker: UpdateChecking {
         checks += 1
     }
 }
+
+/// Gate 2: an update that finished downloading during a take is parked until
+/// the take ends (BL-154).
+///
+/// Reached through `RelaunchPostponement`, which names no Sparkle symbol, so no
+/// `SPUUpdater` is built. What this cannot show is that Sparkle consults the
+/// delegate at all; that stays a manual check in `docs/manual-acceptance.md`.
+@MainActor
+struct RelaunchPostponementTests {
+
+    /// A relaunch handler that counts its calls.
+    private final class Relaunch {
+        private(set) var count = 0
+        func callAsFunction() { count += 1 }
+    }
+
+    @Test("A relaunch offered during a take is parked, not run")
+    func parksWhileUnsafe() {
+        let postponement = RelaunchPostponement(isSafeToInstall: { false })
+        let relaunch = Relaunch()
+
+        #expect(postponement.postpone { relaunch() }, "Sparkle must be told to wait")
+        #expect(relaunch.count == 0, "the app relaunched with the take still open")
+    }
+
+    @Test("The parked relaunch runs once when the take ends, and only once")
+    func releaseRunsParkedRelaunchOnce() {
+        var safe = false
+        let postponement = RelaunchPostponement(isSafeToInstall: { safe })
+        let relaunch = Relaunch()
+        _ = postponement.postpone { relaunch() }
+
+        safe = true
+        postponement.release()
+        #expect(relaunch.count == 1, "the update stayed parked after the take ended")
+
+        postponement.release()
+        #expect(relaunch.count == 1, "a second release ran the relaunch again")
+    }
+
+    @Test("Releasing with nothing parked does nothing")
+    func releaseWithNothingParked() {
+        let postponement = RelaunchPostponement(isSafeToInstall: { true })
+        postponement.release()
+        postponement.release()
+    }
+
+    @Test("With no take open the relaunch is not parked, so Sparkle relaunches now")
+    func refusesToParkWhenSafe() {
+        let postponement = RelaunchPostponement(isSafeToInstall: { true })
+        let relaunch = Relaunch()
+
+        #expect(!postponement.postpone { relaunch() })
+        // Sparkle relaunches on its own after a `false`; the handler is not ours
+        // to run, now or on a later release.
+        postponement.release()
+        #expect(relaunch.count == 0)
+    }
+
+    @Test("Safety is read when Sparkle asks, not when the gate was built")
+    func safetyIsReadPerCall() {
+        var safe = false
+        let postponement = RelaunchPostponement(isSafeToInstall: { safe })
+        let relaunch = Relaunch()
+
+        safe = true
+        #expect(!postponement.postpone { relaunch() }, "a take that had already ended still parked the update")
+
+        safe = false
+        #expect(postponement.postpone { relaunch() }, "a take that started after launch was not seen")
+        safe = true
+        postponement.release()
+        #expect(relaunch.count == 1)
+    }
+
+    /// The relaunch quits the app, but Sparkle's handler is not guaranteed to
+    /// be the last thing that runs. Anything it triggers that ends a take
+    /// again must not run it twice.
+    @Test("A release from inside the relaunch does not run it again")
+    func reentrantReleaseRunsOnce() {
+        var safe = false
+        let postponement = RelaunchPostponement(isSafeToInstall: { safe })
+        let relaunch = Relaunch()
+        _ = postponement.postpone {
+            relaunch()
+            postponement.release()
+        }
+
+        safe = true
+        postponement.release()
+        #expect(relaunch.count == 1)
+    }
+}
