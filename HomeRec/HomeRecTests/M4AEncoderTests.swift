@@ -12,6 +12,9 @@
 import Testing
 import Foundation
 import AVFoundation
+import AppKit
+import Combine
+import os
 @testable import HomeRec
 
 /// `.serialized` for the same reason as `EncoderFormatGuardTests`: `finalize()`
@@ -158,16 +161,6 @@ struct M4AEncoderTests {
 
     // MARK: - TD-014: finalize must be bounded
 
-    /// The policy, asserted the way `UpdateGateTests` asserts the update rule —
-    /// without constructing the framework object whose behaviour is at issue.
-    /// There is no seam that makes `AVAssetWriter.finishWriting` hang on demand,
-    /// so what is pinned here is the arithmetic that makes a hang survivable.
-    ///
-    /// Why it matters: `finalize()` runs inside `processingQueue.sync` called
-    /// from the main actor, so while it waits, nothing on the main thread runs —
-    /// including `TerminationCoordinator`'s bound and `NSApp.reply`. A finalize
-    /// budget larger than the quit bound is therefore not "slightly slow", it is
-    /// an app that ignores ⌘Q for as long as the difference.
     @Test("The finalize budget fits inside the quit bound, floor included")
     func finalizeBudgetFitsTheQuitBound() {
         let quitBound = Double(TerminationCoordinator.defaultTimeout.components.seconds)
@@ -186,23 +179,129 @@ struct M4AEncoderTests {
         )
     }
 
-    /// A timed-out finalize is its own failure, not a write failure. They lead
-    /// to different places: a write failure means audio did not reach the disk,
-    /// while this means it did — as fragments that already play (BL-016), so
-    /// the advice must not send the user off to repair a file that is fine.
-    @Test("A finalize timeout is distinguishable from a write failure")
-    func finalizeTimeoutIsItsOwnError() {
-        #expect(M4AEncoderError.finalizeTimedOut != M4AEncoderError.writeFailed)
-        let described = M4AEncoderError.finalizeTimedOut.errorDescription
+    @Test("A saved M4A with a shortened tail is distinguishable from a failed write")
+    func incompleteTakeIsItsOwnError() {
+        #expect(M4AEncoderError.incompleteTake != M4AEncoderError.writeFailed)
+        let described = M4AEncoderError.incompleteTake.errorDescription
         #expect(described?.isEmpty == false, "the error a user may see must say something")
         #expect(described != M4AEncoderError.writeFailed.errorDescription)
 
-        let advice = M4AEncoderError.finalizeTimedOut.recoverySuggestion
+        let advice = M4AEncoderError.incompleteTake.recoverySuggestion
         #expect(advice?.isEmpty == false, "an error must carry what to do about it")
         #expect(
             advice?.localizedCaseInsensitiveContains("repair") == false,
             "a fragmented M4A plays as found; `repair(at:)` is a no-op for it"
         )
+    }
+
+    private nonisolated final class HeldFinish: Sendable {
+        private struct State: Sendable {
+            var callback: (@Sendable () -> Void)?
+            var released = false
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+        var isHeld: Bool { state.withLock { $0.callback != nil } }
+
+        func hold(_ callback: @escaping @Sendable () -> Void) {
+            let released = state.withLock { state in
+                if state.released { return true }
+                state.callback = callback
+                return false
+            }
+            if released { callback() }
+        }
+
+        func release() {
+            let callback = state.withLock { state in
+                state.released = true
+                let callback = state.callback
+                state.callback = nil
+                return callback
+            }
+            callback?()
+        }
+    }
+
+    @Test("A delayed writer keeps its file, recovery exclusion and Sparkle gate until it closes",
+          arguments: [false, true])
+    func delayedWriterRetainsOwnership(failedTake: Bool) async throws {
+        let hold = HeldFinish()
+        defer { hold.release() }
+        let directory = tempURL().deletingPathExtension()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let domain = "M4AFinishTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = LastRecordingStore(defaults: defaults)
+        let capture = MockAudioCapturing()
+        let location = MockSaveLocationProviding(directory: directory)
+        let source = MockAudioSourceProviding()
+        let controller = RecordingController(
+            captureManager: capture,
+            audioRecorder: AudioRecorder(encoderFactory: { _ in
+                M4AEncoder(finalizeWait: 0.1, deliverFinish: hold.hold)
+            }),
+            saveLocation: location, audioSource: source
+        )
+        let model = RecorderViewModel(
+            controller: controller, permissions: MockPermissionProviding(.granted),
+            clock: ManualClock(), saveLocation: location, audioSource: source,
+            installLocation: MockInstallLocationProviding(), defaults: defaults,
+            notificationCenter: NotificationCenter(), lastRecordingStore: store
+        )
+        model.setFormat(.m4a)
+        await model.startRecording()
+        let url = try #require(controller.recordingURL)
+        for i in 0..<10 { #expect(capture.simulateAudioBuffer(buffer(i))) }
+
+        var installs = 0
+        let sparkle = RelaunchPostponement(isSafeToInstall: { model.allowsProcessTermination })
+        let subscription = model.allowsProcessTerminationPublisher
+            .receive(on: RunLoop.main)
+            .sink { if $0 { sparkle.release() } }
+        defer { subscription.cancel() }
+        #expect(sparkle.postpone { installs += 1 })
+
+        let stop: Task<Void, Never>?
+        if failedTake {
+            capture.simulateStreamError("Capture was interrupted")
+            stop = nil
+        } else {
+            stop = Task { await model.stopRecording() }
+        }
+        await waitUntil("AVFoundation to reach its held finish callback") { hold.isHeld }
+
+        // This deadline is longer than the encoder's synchronous wait. The
+        // callback is withheld throughout, exercising the asynchronous handoff.
+        var quitReplies: [Bool] = []
+        let quit = TerminationCoordinator(
+            timeout: .milliseconds(200),
+            isSafeToQuit: { model.allowsProcessTermination },
+            drain: { await model.finishForTermination() },
+            reply: { quitReplies.append($0) }
+        )
+        #expect(quit.shouldTerminate() == .terminateLater)
+        #expect(quit.shouldTerminate() == .terminateLater)
+        await waitUntil("explicit Quit to reach its deadline") { quitReplies.count > 0 }
+        #expect(quitReplies == [true])
+        #expect(controller.recordingURL == url)
+        #expect(model.recordingURLProvider() == url)
+        #expect(store.load() == nil)
+        #expect(!model.allowsProcessTermination)
+        #expect(installs == 0)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+
+        hold.release()
+        await stop?.value
+        await waitUntil("the callback to release the parked update") { installs > 0 }
+        sparkle.release()
+        #expect(installs == 1)
+        #expect(quitReplies == [true])
+        #expect(controller.recordingURL == nil)
+        #expect(store.load() == url)
+        #expect(try AVAudioFile(forReading: url).length > 0)
     }
 
     /// The happy path must not have paid for the bound: a normal finalize over a

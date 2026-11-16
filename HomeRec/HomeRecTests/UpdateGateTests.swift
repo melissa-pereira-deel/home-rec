@@ -386,6 +386,10 @@ private final class TestUpdateChecker: UpdateChecking {
 @MainActor
 struct RelaunchPostponementTests {
 
+    private final class Safety {
+        var allowsInstall = false
+    }
+
     /// A relaunch handler that counts its calls.
     private final class Relaunch {
         private(set) var count = 0
@@ -403,12 +407,12 @@ struct RelaunchPostponementTests {
 
     @Test("The parked relaunch runs once when the take ends, and only once")
     func releaseRunsParkedRelaunchOnce() {
-        var safe = false
-        let postponement = RelaunchPostponement(isSafeToInstall: { safe })
+        let safety = Safety()
+        let postponement = RelaunchPostponement(isSafeToInstall: { safety.allowsInstall })
         let relaunch = Relaunch()
         _ = postponement.postpone { relaunch() }
 
-        safe = true
+        safety.allowsInstall = true
         postponement.release()
         #expect(relaunch.count == 1, "the update stayed parked after the take ended")
 
@@ -437,16 +441,29 @@ struct RelaunchPostponementTests {
 
     @Test("Safety is read when Sparkle asks, not when the gate was built")
     func safetyIsReadPerCall() {
-        var safe = false
-        let postponement = RelaunchPostponement(isSafeToInstall: { safe })
+        let safety = Safety()
+        let postponement = RelaunchPostponement(isSafeToInstall: { safety.allowsInstall })
         let relaunch = Relaunch()
 
-        safe = true
+        safety.allowsInstall = true
         #expect(!postponement.postpone { relaunch() }, "a take that had already ended still parked the update")
 
-        safe = false
+        safety.allowsInstall = false
         #expect(postponement.postpone { relaunch() }, "a take that started after launch was not seen")
-        safe = true
+        safety.allowsInstall = true
+        postponement.release()
+        #expect(relaunch.count == 1)
+    }
+
+    @Test("A queued release cannot install while the file is still owned")
+    func queuedReleaseRechecksSafety() {
+        let safety = Safety()
+        let postponement = RelaunchPostponement(isSafeToInstall: { safety.allowsInstall })
+        let relaunch = Relaunch()
+        #expect(postponement.postpone { relaunch() })
+        postponement.release()
+        #expect(relaunch.count == 0)
+        safety.allowsInstall = true
         postponement.release()
         #expect(relaunch.count == 1)
     }
@@ -456,15 +473,15 @@ struct RelaunchPostponementTests {
     /// again must not run it twice.
     @Test("A release from inside the relaunch does not run it again")
     func reentrantReleaseRunsOnce() {
-        var safe = false
-        let postponement = RelaunchPostponement(isSafeToInstall: { safe })
+        let safety = Safety()
+        let postponement = RelaunchPostponement(isSafeToInstall: { safety.allowsInstall })
         let relaunch = Relaunch()
         _ = postponement.postpone {
             relaunch()
             postponement.release()
         }
 
-        safe = true
+        safety.allowsInstall = true
         postponement.release()
         #expect(relaunch.count == 1)
     }

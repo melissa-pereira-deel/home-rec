@@ -36,30 +36,11 @@ final class TerminationCoordinator {
     /// done everything it can.
     private let drain: @MainActor () async -> Void
 
-    /// How long to wait before quitting anyway.
-    ///
-    /// ⚠️ **This bounds the parts of the drain that yield — not all of it.**
-    /// `AudioRecorder.stopRecording()` runs `processingQueue.sync` from the main
-    /// actor, so a finalize that stalls blocks the main thread outright, and
-    /// nothing scheduled on it can run — including this timeout and including
-    /// `NSApp.reply`. The sleep below is therefore deliberately *not* main-actor
-    /// isolated: it elapses regardless, and fires the moment the main thread is
-    /// free again.
-    ///
-    /// The one stall that used to be unbounded was a hung
-    /// `M4AEncoder.finalize()`, whose wait on `finishWriting` had no timeout.
-    /// It is bounded now, from the inside: `M4AEncoder.finalizeBudget` caps
-    /// both of its waits together, and `M4AEncoderTests` pins that budget to be
-    /// no larger than `defaultTimeout` below. So the worst case is the main
-    /// thread blocked for that budget, after which this timeout — already
-    /// elapsed — fires at once. WAV and FLAC finalize synchronously with file
-    /// I/O only and have no equivalent wait.
+    /// Explicit Quit gives the open take this long to close. The audio
+    /// processing queue owns encoder I/O, so the deadline can answer AppKit
+    /// even when an M4A writer is still finishing.
     private let timeout: Duration
 
-    /// The bound used in the app, named rather than written as a literal in the
-    /// initialiser's default. `M4AEncoder.finalizeBudget` has to fit inside it,
-    /// and two `5` literals in two files is how that relationship gets broken
-    /// by a one-line edit with nothing to catch it.
     static let defaultTimeout: Duration = .seconds(5)
 
     /// Injected so tests never touch `NSApp`.
@@ -82,13 +63,10 @@ final class TerminationCoordinator {
 
     /// AppKit's `applicationShouldTerminate`, with the decision extracted.
     func shouldTerminate() -> NSApplication.TerminateReply {
-        if isSafeToQuit() {
-            return .terminateNow
-        }
-
-        // A second ⌘Q while already finishing must not start a second drain, and
-        // must not reply twice — replying twice traps.
+        // AppKit is already waiting for the original drain's reply.
         guard !isDraining else { return .terminateLater }
+        if isSafeToQuit() { return .terminateNow }
+
         isDraining = true
 
         Task { @MainActor [weak self] in
@@ -97,10 +75,7 @@ final class TerminationCoordinator {
             self.replyOnce()
         }
 
-        // Off the main actor on purpose — see `timeout`. `self` is captured
-        // strongly and unconditionally: a coordinator that got deallocated while
-        // a quit was pending would leave AppKit waiting on a reply that never
-        // comes, which is the unquittable app this item exists to prevent.
+        // Keep the coordinator alive until it can answer AppKit.
         Task.detached { [self, timeout] in
             try? await Task.sleep(for: timeout)
             await MainActor.run { self.replyOnce() }

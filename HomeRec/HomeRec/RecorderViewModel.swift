@@ -179,6 +179,7 @@ class RecorderViewModel: ObservableObject {
     /// A failure reported while a start or stop was in flight, waiting for that
     /// operation to land. See `handleTakeFailure`.
     private var pendingFailure: RecorderError?
+    private var isQuitting = false
 
     /// Whether ending this process now is safe — quitting, or letting Sparkle
     /// replace the app.
@@ -418,7 +419,7 @@ class RecorderViewModel: ObservableObject {
     /// Start recording
     func startRecording() async {
         // Only legal from idle or a prior error state.
-        guard state.canTransition(to: .starting) else { return }
+        guard !isQuitting, state.canTransition(to: .starting) else { return }
 
         // Install location is checked *before* permission (BL-082). A translocated
         // bundle can be granted permission and will still lose it on the next
@@ -438,6 +439,7 @@ class RecorderViewModel: ObservableObject {
             }
         }
 
+        guard !isQuitting else { return }
         transition(to: .starting)
 
         // Drain a failed take's teardown before asking for the file back.
@@ -504,6 +506,11 @@ class RecorderViewModel: ObservableObject {
             }
         }
 
+        guard !isQuitting else {
+            transition(to: .idle)
+            return
+        }
+
         do {
             // Wire waveform callback
             controller.onWaveformData = { [weak self] samples in
@@ -562,42 +569,19 @@ class RecorderViewModel: ObservableObject {
         }
     }
 
-    /// Stop recording
-    /// Finish whatever is open so the process can end, for BL-174's quit path.
-    ///
-    /// The states are **not** interchangeable, and treating them as one case is
-    /// the way to get this wrong:
-    ///
-    /// - `.starting` — `stopRecording()` is a **silent no-op** here, because
-    ///   `canTransition(.starting → .stopping)` is false. Calling it would drain
-    ///   nothing and let the app quit mid-start. Wait for the state to resolve,
-    ///   then decide again.
-    /// - `.stopping` — a finalize is already in flight. Calling `stopRecording()`
-    ///   would hit the same guard and return immediately; the only correct action
-    ///   is to wait for it to land.
-    /// - `.recording`, `.recovering` — both hold an open encoder. Stop normally.
-    /// - `.idle`, `.error` — nothing open, **unless a take failed a moment ago
-    ///   and is still closing** (BL-171c). `.error` is entered before that
-    ///   teardown starts, so wait for it; with none in flight this is a no-op.
-    ///
-    /// Unbounded on purpose: `TerminationCoordinator` owns the bound, so that
-    /// there is one deadline for the whole quit rather than several that
-    /// interact.
+    /// Drain an open take for explicit Quit. The termination coordinator
+    /// owns the deadline, so this can wait for the writer's real callback.
     func finishForTermination() async {
-        // `.starting` cannot be stopped — wait it out first.
-        while state == .starting {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-
-        switch state {
-        case .recording, .recovering:
-            await stopRecording()
-        case .stopping:
-            while state == .stopping {
+        isQuitting = true
+        while !allowsProcessTermination {
+            switch state {
+            case .recording, .recovering:
+                await stopRecording()
+            case .starting, .stopping:
                 try? await Task.sleep(for: .milliseconds(10))
+            case .idle, .error:
+                await failureTeardown?.value
             }
-        case .idle, .error, .starting:
-            await failureTeardown?.value
         }
     }
 
@@ -606,39 +590,23 @@ class RecorderViewModel: ObservableObject {
 
         transition(to: .stopping)
 
-        // Tear the timer and waveform down on *both* paths. Before BL-016 the
-        // catch branch was unreachable for finalize failures (the error was
-        // swallowed inside AudioRecorder), so this only started to matter once
-        // the error became live: a leaked timer republishes `duration` at 10Hz
-        // for the lifetime of the app and can fire the long-recording warning
-        // about a recording that has already ended.
-        defer {
-            stopTimer()
-            waveformSamples = Array(repeating: 0, count: 200)
-        }
+        stopTimer()
+        defer { waveformSamples = Array(repeating: 0, count: 200) }
 
+        let outcome: RecordingState
         do {
             try await controller.stopRecording()
-            // A failure reported while the stop was in flight: the take ended
-            // before the user ended it. The stop has already closed the file,
-            // so there is nothing left to finalize — only to say.
-            if let failure = pendingFailure {
-                pendingFailure = nil
-                transition(to: .error(failure))
-            } else {
-                transition(to: .idle)
-            }
-
+            outcome = pendingFailure.map { .error($0) } ?? .idle
+        } catch let failure as WriteFailure {
+            outcome = .error(failure.recorderError)
         } catch {
-            // The stop's own error wins over anything held: it names what went
-            // wrong with the file the user is about to look for.
-            pendingFailure = nil
             Log.recorder.error("Failed to stop recording: \(error.localizedDescription, privacy: .public)")
-            transition(to: .error(.stopFailed(error.localizedDescription)))
+            outcome = .error(Self.recordingCloseError(error))
         }
-        // Either way the session has ended and let go of the file, and the row
-        // is showing it.
+        pendingFailure = nil
+        // Persist before announcing the safe transition to Sparkle.
         lastRecordingStore?.save(lastRecordingURL)
+        transition(to: outcome)
     }
 
     /// Toggle recording state
@@ -946,12 +914,7 @@ class RecorderViewModel: ObservableObject {
 
     /// A buffer could not be written, so the file has stopped growing (BL-173).
     private func handleWriteFailure(_ reason: WriteFailure) {
-        switch reason {
-        case .sizeLimitReached:
-            handleTakeFailure(.sizeLimitReached)
-        case .other(let message):
-            handleTakeFailure(.writeFailed(message))
-        }
+        handleTakeFailure(reason.recorderError)
     }
 
     /// The capture stream stopped on its own, mid-take.
@@ -994,38 +957,44 @@ class RecorderViewModel: ObservableObject {
         }
     }
 
-    /// End an open take on a failure: stop the timer, zero the waveform, show
-    /// the error, then finalize what was captured so it is preserved.
+    /// Stop the live UI immediately. The alert waits for the close so a WAV
+    /// saturation alert can only claim the file was saved after a sound close.
     private func failTake(with failure: RecorderError) {
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
-        beginFailureTeardown()
-        transition(to: .error(failure))
-    }
-
-    /// Finalize what a failed take captured, and say so until it is done.
-    ///
-    /// ⚠️ Call this **before** the transition to `.error`, not after. The flag
-    /// has to be up when the state moves: otherwise the gate stream sees
-    /// `.error` with the flag still down and emits "safe" for an instant, which
-    /// is all a parked update needs to start replacing the app mid-finalize.
-    /// The task itself cannot run until the caller returns, so the order costs
-    /// nothing.
-    private func beginFailureTeardown() {
         isFinishingFailedTake = true
+        transition(to: .error(failure), presentingError: false)
+
         let url = lastRecordingURL
         failureTeardown = Task { [weak self] in
-            await self?.controller.finalizeAfterFailure()
-            // Remembered only now that the file is closed, so a launch can
-            // never offer a file that was still being written.
-            self?.lastRecordingStore?.save(url)
-            self?.isFinishingFailedTake = false
+            guard let self else { return }
+            let outcome: RecorderError
+            do {
+                try await controller.finalizeAfterFailure()
+                outcome = failure
+            } catch {
+                Log.recorder.error("Could not finalize the failed take: \(error.localizedDescription, privacy: .public)")
+                outcome = Self.recordingCloseError(error)
+            }
+            lastRecordingStore?.save(url)
+            // A user retry may already be waiting in .starting. Its state
+            // belongs to the next take, so only update the error still shown.
+            if case .error = state {
+                if outcome != failure { state = .error(outcome) }
+                presentError(outcome.message, recovery: outcome.recovery)
+            }
+            isFinishingFailedTake = false
         }
+    }
+
+    private static func recordingCloseError(_ error: any Error) -> RecorderError {
+        if (error as? M4AEncoderError) == .incompleteTake { return .incompleteTake }
+        return .stopFailed(error.localizedDescription)
     }
 
     /// Apply a state transition, rejecting illegal ones. Surfaces the alert when
     /// entering an error state.
-    private func transition(to next: RecordingState) {
+    private func transition(to next: RecordingState, presentingError: Bool = true) {
         guard state.canTransition(to: next) else {
             // Name both ends. The bare literal this replaced could not tell you
             // *which* error had been thrown away, which is a large part of why
@@ -1039,7 +1008,7 @@ class RecorderViewModel: ObservableObject {
             return
         }
         state = next
-        if case .error(let recorderError) = next {
+        if presentingError, case .error(let recorderError) = next {
             presentError(recorderError.message, recovery: recorderError.recovery)
         }
     }

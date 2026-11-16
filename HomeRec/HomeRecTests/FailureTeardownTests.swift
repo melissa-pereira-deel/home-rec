@@ -2,8 +2,8 @@
 //  FailureTeardownTests.swift
 //  HomeRecTests
 //
-//  A take that fails enters `.error` at once, so the alert is not held up, and
-//  closes its file afterwards. Until that has finished the encoder is still
+//  A take that fails enters `.error` at once, then reports the outcome
+//  after its file has closed. Until that has finished the encoder is still
 //  open, and `.error` alone must not be read as "nothing to lose" (BL-171c).
 //
 
@@ -113,6 +113,53 @@ struct FailureTeardownTests {
         #expect(controller.finalizeCount == 1)
     }
 
+    @Test("A failed WAV close presents one error instead of claiming the take was saved")
+    func failedSizeLimitCloseReportsFailureOnce() async {
+        let (viewModel, controller) = makeViewModel()
+        let gate = Gate()
+        defer { gate.release() }
+        var alerts = 0
+        let observation = viewModel.$showError.sink { if $0 { alerts += 1 } }
+        defer { observation.cancel() }
+
+        struct CannotClose: LocalizedError {
+            var errorDescription: String? { "Cannot close WAV" }
+        }
+        controller.finalizeError = CannotClose()
+        await failTakeHoldingTeardown(viewModel, controller, gate: gate) {
+            $0.emitWriteError(.sizeLimitReached)
+        }
+        #expect(alerts == 0)
+        gate.release()
+        await waitUntil("the close failure to surface") { viewModel.allowsProcessTermination }
+        #expect(viewModel.state == .error(.stopFailed("Cannot close WAV")))
+        #expect(alerts == 1)
+    }
+
+    @Test("Quit prevents a retry already waiting on the previous writer")
+    func quitAbortsWaitingRetry() async {
+        let (viewModel, controller) = makeViewModel()
+        let gate = Gate()
+        defer { gate.release() }
+        await failTakeHoldingTeardown(viewModel, controller, gate: gate) {
+            $0.emitStreamError("Capture disconnected")
+        }
+        let retry = Task { await viewModel.startRecording() }
+        await waitUntil("retry to wait for teardown") { viewModel.state == .starting }
+        var draining = false
+        let quit = Task {
+            draining = true
+            await viewModel.finishForTermination()
+        }
+        await waitUntil("explicit quit to start draining") { draining }
+        gate.release()
+        await retry.value
+        await quit.value
+        #expect(controller.startCount == 1)
+        #expect(viewModel.state == .idle)
+        #expect(viewModel.allowsProcessTermination)
+    }
+
     @Test("An error with nothing left open does not hold the process")
     func settledErrorAllowsTermination() async {
         let (viewModel, controller) = makeViewModel()
@@ -147,9 +194,9 @@ struct FailureTeardownTests {
             ? .error(.streamFailed("died while starting"))
             : .error(.writeFailed("refused while starting"))
         #expect(viewModel.state == expected)
-        #expect(viewModel.showError)
         await waitUntil("the take that did start to be finalized") { controller.finalizeCount == 1 }
         await waitUntil("its teardown to finish") { viewModel.allowsProcessTermination }
+        #expect(viewModel.showError)
     }
 
     @Test("A failure reported while the take is stopping is shown once the stop lands",

@@ -138,8 +138,8 @@ struct RecordingSessionTests {
         await waitUntil("stopCapture suspension") { stopGate.isWaiting }
         f.expectProtected(url, state: .stopping)
         stopGate.release()
-        await waitUntil("post-finalize cleanup suspension") { cleanupGate.isWaiting }
-        #expect(f.writer.stopCount == 1)
+        await waitUntil("capture cleanup suspension") { cleanupGate.isWaiting }
+        #expect(f.writer.stopCount == 0, "the encoder closes after capture stops feeding it")
         f.expectProtected(url, state: .stopping)
 
         await #expect(throws: RecordingControllerError.self) {
@@ -192,7 +192,7 @@ struct RecordingSessionTests {
         let start = Task { await f.recorder.startRecording() }
         await waitUntil("failed-start cleanup suspension") { cleanupGate.isWaiting }
         let url = try #require(f.controller.recordingURL)
-        #expect(f.writer.stopCount == 1)
+        #expect(f.writer.stopCount == 0)
         f.expectProtected(url, state: .starting)
         cleanupGate.release()
         await start.value
@@ -213,14 +213,14 @@ struct RecordingSessionTests {
         let url = try #require(f.controller.recordingURL)
         f.writer.stopError = InjectedFailure()
         f.capture.onCleanup = { await cleanupGate.wait() }
-        let finish = Task { await f.controller.finalizeAfterFailure() }
+        let finish = Task { try await f.controller.finalizeAfterFailure() }
         await waitUntil("failure teardown cleanup") { cleanupGate.isWaiting }
         #expect(!f.controller.isRecording)
         #expect(f.controller.recordingURL == url)
         f.recovery.refresh()
         #expect(f.recovery.recordings.isEmpty)
         cleanupGate.release()
-        await finish.value
+        await #expect(throws: InjectedFailure.self) { try await finish.value }
         #expect(f.controller.recordingURL == nil)
     }
 
@@ -261,7 +261,8 @@ struct RecordingSessionTests {
         recovery.refresh()
         #expect(recovery.recordings.count == 1, "refusal must not mark the file as handled")
         recovery.errorMessage = nil
-        recovery.recover(stale)
+        let current = try #require(recovery.recordings.first)
+        recovery.recover(current)
         #expect(recovery.errorMessage == nil)
         #expect(recovery.recordings.isEmpty)
         #expect(try WAVWriter.isUnfinalized(at: url) == false)

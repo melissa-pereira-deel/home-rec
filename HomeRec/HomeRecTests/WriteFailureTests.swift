@@ -39,11 +39,15 @@ struct WriteFailureTests {
     private final class FailingWriteEncoder: AudioFileEncoder {
         struct Boom: Error, Equatable {}
         private let throwAfter: Int
+        private let failure: any Error
         private(set) var acceptedWrites = 0
         private(set) var attemptedWrites = 0
         private(set) var finalizeCount = 0
 
-        init(throwAfter: Int) { self.throwAfter = throwAfter }
+        init(throwAfter: Int, failure: any Error = Boom()) {
+            self.throwAfter = throwAfter
+            self.failure = failure
+        }
 
         func createFile(at url: URL, sampleRate: Double, channels: Int) throws {
             FileManager.default.createFile(atPath: url.path, contents: Data())
@@ -51,7 +55,7 @@ struct WriteFailureTests {
 
         func writeBuffer(_ buffer: AVAudioPCMBuffer) throws {
             attemptedWrites += 1
-            if attemptedWrites > throwAfter { throw Boom() }
+            if attemptedWrites > throwAfter { throw failure }
             acceptedWrites += 1
         }
 
@@ -75,7 +79,7 @@ struct WriteFailureTests {
 
         try recorder.startRecording(to: url, format: .wav)
         for _ in 0..<10 { recorder.processAudioSample(makePCMBuffer()) }
-        try? recorder.stopRecording()
+        try? await recorder.stopRecording()
 
         // Let the queued main-thread waveform deliveries land.
         await waitUntil("waveform deliveries to settle") { waveformCount.value >= 3 }
@@ -107,7 +111,7 @@ struct WriteFailureTests {
         // Buffers arrive ~47×/sec in production; an unlatched error would fire
         // an alert for every one of them.
         for _ in 0..<40 { recorder.processAudioSample(makePCMBuffer()) }
-        try? recorder.stopRecording()
+        try? await recorder.stopRecording()
 
         await waitUntil("the write error to surface") { errorCount.value > 0 }
         #expect(errorCount.value == 1, "expected one error, got \(errorCount.value)")
@@ -123,7 +127,7 @@ struct WriteFailureTests {
         let recorder = AudioRecorder()
         try recorder.startRecording(to: url, format: .wav)
         for _ in 0..<5 { recorder.processAudioSample(makePCMBuffer(frames: 64)) }
-        try recorder.stopRecording()
+        try await recorder.stopRecording()
 
         let bytes = [UInt8](try Data(contentsOf: url))
         let dataSize = Int(UInt32(bytes[40]) | (UInt32(bytes[41]) << 8)
@@ -133,6 +137,36 @@ struct WriteFailureTests {
 
         let file = try AVAudioFile(forReading: url)
         #expect(file.length == 5 * 64)
+    }
+
+    @Test("A final buffer rejected during Stop reaches the caller after a successful close")
+    func stopSurfacesFinalBufferRejection() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("stop-probe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for _ in 0..<100 {
+            let capture = MockAudioCapturing()
+            let encoder = FailingWriteEncoder(throwAfter: 0, failure: WAVWriterError.sizeLimitReached)
+            let controller = RecordingController(
+                captureManager: capture,
+                audioRecorder: AudioRecorder(encoderFactory: { _ in encoder }),
+                saveLocation: MockSaveLocationProviding(directory: directory),
+                audioSource: MockAudioSourceProviding()
+            )
+            let url = try await controller.startRecording(format: .wav)
+            capture.onStopCapture = { [weak capture] in
+                #expect(capture?.simulateAudioBuffer(makePCMBuffer()) == true)
+                capture?.onStopCapture = nil
+            }
+
+            await #expect(throws: WriteFailure.sizeLimitReached) { try await controller.stopRecording() }
+            #expect(encoder.attemptedWrites == 1)
+            #expect(encoder.finalizeCount == 1)
+            #expect(controller.recordingURL == nil)
+            try FileManager.default.removeItem(at: url)
+        }
     }
 
     // MARK: - End to end, through the view model
@@ -191,6 +225,8 @@ struct WriteFailureTests {
         // Not `.writeFailed` — the file is complete, and saying otherwise would
         // tell someone their six-hour take was lost when it is on disk (BL-170).
         #expect(viewModel.state == .error(.sizeLimitReached))
+        #expect(!viewModel.showError, "the file is still closing")
+        await waitUntil("the take to finish closing") { viewModel.allowsProcessTermination }
         #expect(viewModel.errorMessage?.contains("saved complete") == true)
         #expect(viewModel.recoverySuggestion == nil)
 

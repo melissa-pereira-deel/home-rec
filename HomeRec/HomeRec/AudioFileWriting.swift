@@ -38,5 +38,5 @@ nonisolated protocol AudioFileWriting: AnyObject {
     /// fixed for the lifetime of this recording.
     func startRecording(to fileURL: URL, format: AudioFormat) throws
     func processAudioSample(_ pcmBuffer: AVAudioPCMBuffer)
-    func stopRecording() throws
+    func stopRecording() async throws
 }

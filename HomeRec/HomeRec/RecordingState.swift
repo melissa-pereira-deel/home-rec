@@ -16,11 +16,18 @@ import Foundation
 /// and simply reached the format's ceiling. Telling someone their six-hour take
 /// failed when it is sitting complete on disk would be the same class of
 /// dishonesty as the changelog claim BL-173 had to make true.
-enum WriteFailure: Sendable, Equatable {
+enum WriteFailure: Error, Equatable {
     /// The WAV container's 4 GiB ceiling (BL-170). The file is complete.
     case sizeLimitReached
     /// Anything else — a full disk, an ejected volume, a refused append.
     case other(String)
+
+    nonisolated var recorderError: RecorderError {
+        switch self {
+        case .sizeLimitReached: return .sizeLimitReached
+        case .other(let message): return .writeFailed(message)
+        }
+    }
 }
 
 /// A recoverable failure surfaced to the user during recording.
@@ -42,6 +49,7 @@ enum RecorderError: Error, Equatable, Sendable {
     /// again" here is an infinite loop. Settings is the only way out.
     case microphoneDenied
     case stopFailed(String)
+    case incompleteTake
     /// A start arrived while the previous take still owned its output file.
     ///
     /// Distinct from `.startFailed` because nothing is wrong and no diagnosis
@@ -68,6 +76,8 @@ enum RecorderError: Error, Equatable, Sendable {
             return detail
         case .sizeLimitReached:
             return "WAV data chunk reached its 4 GiB maximum"
+        case .incompleteTake:
+            return "M4A writer closed with buffers still pending"
         case .stillFinishing:
             return "the previous take still owns its output file"
         case .sourceUnavailable(let error):
@@ -95,7 +105,9 @@ enum RecorderError: Error, Equatable, Sendable {
         case .stillFinishing:
             return "Home Rec is still finishing the last recording. Try again in a moment."
         case .stopFailed:
-            return "Home Rec couldn't finish saving the recording. The audio captured so far may still be on your Desktop."
+            return "Home Rec couldn't finish saving the recording. Check your save folder for the audio captured so far."
+        case .incompleteTake:
+            return "The M4A recording was saved in your save folder, but some audio at the end could not be written."
         case .streamFailed:
             return "Recording stopped unexpectedly. This usually means Screen Recording permission was turned off, or another app took over audio capture."
         case .writeFailed:
@@ -132,7 +144,7 @@ enum RecorderError: Error, Equatable, Sendable {
             return .openSettings
         case .saveLocationUnavailable:
             return .chooseFolder
-        case .stopFailed, .diskFull, .sizeLimitReached:
+        case .stopFailed, .incompleteTake, .diskFull, .sizeLimitReached:
             return nil
         case .writeFailed:
             // No `.tryAgain`: whatever stopped the write — a full disk, a
