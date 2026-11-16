@@ -135,6 +135,12 @@ toolchain — see above.
       noted with the Xcode version CI reported them on; the app-owned number has
       not grown
 - [ ] Full suite green; note the count in the PR
+- [ ] **Thread Sanitizer, read from the release commit's CI job summary**
+      ("Thread Sanitizer" table): *marked crashed* is **0** and *tests ran* is
+      within a few of the functional step's count. The TSan steps are advisory,
+      so a green check says nothing here — for months the job ran a fraction of
+      the suite and showed green. Any race listed is either fixed or filed
+      before the tag. Locally: `scripts/tsan-report.sh <bundle>.xcresult`
 - [ ] `MARKETING_VERSION` verified against the **built product's**
       `CFBundleShortVersionString`, not the file
 - [ ] `CHANGELOG.md` describes what the *user* experiences
