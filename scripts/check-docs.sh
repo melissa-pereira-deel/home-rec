@@ -73,13 +73,6 @@ n=$(grep -c 'static var' HomeRec/HomeRec/OverflowMenu.swift)
   && note "TD-010 still open: $n mutable statics in OverflowMenu" \
   || bad "TD-010 appears FIXED — remove it from private/tech-debt.md"
 
-if grep -rql MonitorController HomeRec/HomeRec/ --include='*.swift' \
-   | grep -qv 'MonitorController.swift'; then
-  bad "TD-011 appears FIXED (MonitorController is now referenced) — update private/tech-debt.md"
-else
-  note "TD-011 still open: MonitorController ships but is referenced nowhere"
-fi
-
 n=$(grep -rl ScreenCaptureAudioManager HomeRec/HomeRecTests/ 2>/dev/null | wc -l | tr -d ' ')
 [ "$n" -eq 0 ] \
   && note "TD-013 still open: no test touches the real ScreenCaptureAudioManager" \
