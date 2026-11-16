@@ -29,7 +29,7 @@ enum SampleBufferFixtures {
             channels: AVAudioChannelCount(channels),
             interleaved: interleaved
         )!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(frames, 1)))!
+        let buffer = makeSanitizerVisibleBuffer(format: format, frameCapacity: AVAudioFrameCount(max(frames, 1)))
         buffer.frameLength = AVAudioFrameCount(frames)
 
         if frames > 0 {
@@ -50,6 +50,50 @@ enum SampleBufferFixtures {
                 }
             }
         }
+        return buffer
+    }
+
+    /// An `AVAudioPCMBuffer` whose sample memory comes from `malloc`, which Thread
+    /// Sanitizer can see, rather than from `AVAudioPCMBuffer(pcmFormat:frameCapacity:)`.
+    ///
+    /// That initializer takes its samples from a private malloc zone
+    /// (`caulk::audio_buffer_resource`) that hands the same address straight back
+    /// to the next buffer, outside the allocator TSan intercepts. TSan therefore
+    /// keeps the old buffer's access history on the recycled bytes, and filling a
+    /// new buffer on the test thread is reported as a race with the audio queue's
+    /// read of the one before it — a false positive, since the queue held the only
+    /// reference until it let go. Measured in a standalone hand-off of 2000
+    /// buffers under TSan: 1 report per run with the default initializer, 0 with
+    /// this one. In CI it was the only report on every run sampled, and the host
+    /// stopped at it, so it decided how much of the suite ran at all (BL-182).
+    ///
+    /// Production buffers still come from the pool; this keeps the *fixtures*
+    /// from manufacturing a report that drowns out a real one.
+    private static func makeSanitizerVisibleBuffer(
+        format: AVAudioFormat,
+        frameCapacity: AVAudioFrameCount
+    ) -> AVAudioPCMBuffer {
+        let channels = Int(format.channelCount)
+        let bufferCount = format.isInterleaved ? 1 : channels
+        let channelsPerBuffer = format.isInterleaved ? channels : 1
+        let byteSize = Int(frameCapacity) * channelsPerBuffer * MemoryLayout<Float>.size
+
+        let list = AudioBufferList.allocate(maximumBuffers: bufferCount)
+        for index in 0..<bufferCount {
+            list[index] = AudioBuffer(
+                mNumberChannels: UInt32(channelsPerBuffer),
+                mDataByteSize: UInt32(byteSize),
+                mData: calloc(byteSize, 1)
+            )
+        }
+        // The buffer copies the AudioBufferList struct itself and borrows only the
+        // sample memory, so the list is freed here and the samples in the deallocator.
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: list.unsafePointer) { borrowed in
+            for audioBuffer in UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: borrowed)) {
+                free(audioBuffer.mData)
+            }
+        }!
+        free(list.unsafeMutablePointer)
         return buffer
     }
 
