@@ -361,6 +361,81 @@ struct RecordingSessionTests {
         try await controller.stopRecording()
     }
 
+    // MARK: - A finished take cannot reach the next one (BL-171c)
+
+    /// The layers below report through sinks they were handed when the take
+    /// started, and a report already on its way outlives the take: the recorder
+    /// snapshots its handler at start and hops to the main actor to deliver.
+    /// These call the sinks exactly as take A's layers hold them, after take B
+    /// has begun.
+    @Test("A late failure report from a finished take cannot stop the next one",
+          arguments: ["write", "stream"])
+    func lateFailureCannotStopNextTake(kind: String) async throws {
+        let f = try Fixture()
+        defer { f.cleanup() }
+        await f.recorder.startRecording()
+        #expect(f.recorder.state == .recording)
+        let staleWrite = try #require(f.writer.onWriteError)
+        let staleStream = try #require(f.capture.onStreamError)
+        await f.recorder.stopRecording()
+        #expect(f.recorder.state == .idle)
+
+        await f.recorder.startRecording()
+        #expect(f.recorder.state == .recording)
+        let second = try #require(f.controller.recordingURL)
+
+        if kind == "write" {
+            staleWrite(.other("late, from the finished take"))
+        } else {
+            staleStream("late, from the finished take")
+        }
+        await settle()
+
+        #expect(f.recorder.state == .recording, "a finished take's report stopped a healthy one")
+        #expect(f.controller.recordingURL == second)
+        #expect(f.writer.stopCount == 1, "only the first take's own stop may have finalized anything")
+        await f.recorder.stopRecording()
+    }
+
+    @Test("A late waveform frame from a finished take is not drawn over the next one")
+    func lateWaveformIsNotDrawn() async throws {
+        let f = try Fixture()
+        defer { f.cleanup() }
+        await f.recorder.startRecording()
+        let staleWaveform = try #require(f.writer.onWaveformData)
+        await f.recorder.stopRecording()
+        await f.recorder.startRecording()
+        #expect(f.recorder.state == .recording)
+
+        staleWaveform(Array(repeating: 1, count: 200))
+        await settle()
+
+        #expect(f.recorder.waveformSamples.allSatisfy { $0 == 0 })
+        await f.recorder.stopRecording()
+    }
+
+    /// The other half of the filter: it must not swallow the take it belongs to.
+    @Test("The current take's own reports still arrive")
+    func currentTakeReportsArrive() async throws {
+        let f = try Fixture()
+        defer { f.cleanup() }
+        await f.recorder.startRecording()
+        await f.recorder.stopRecording()
+        await f.recorder.startRecording()
+        #expect(f.recorder.state == .recording)
+
+        let currentWaveform = try #require(f.writer.onWaveformData)
+        currentWaveform(Array(repeating: 1, count: 200))
+        await waitUntil("the live take's waveform") { f.recorder.waveformSamples.contains(1) }
+
+        f.capture.simulateStreamError("the live stream died")
+        guard case .error(.streamFailed) = f.recorder.state else {
+            Issue.record("expected .streamFailed, got \(f.recorder.state)")
+            return
+        }
+        await waitUntil("the failed take to release its file") { f.controller.recordingURL == nil }
+    }
+
     /// Pins a filename so a scan-then-own race does not depend on the clock.
     @MainActor
     private final class FixedPathController: RecordingController {
