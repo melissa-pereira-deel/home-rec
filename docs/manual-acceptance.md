@@ -265,9 +265,9 @@ open **without** repair, and Recovery must not offer it afterwards.
 - [ ] **A take that failed, then ⌘Q at once** (BL-171c) — record from a
       microphone, unplug it mid-take, and press ⌘Q the moment the alert appears.
       The file opens and reports its true length, and Recovery lists nothing on
-      the next launch. A failed take shows the error *before* it finishes
-      writing the file, so this is the one quit that lands while the app looks
-      idle and is not. The suite holds that teardown open with a fake; only this
+      the next launch. Since 1.2.0 the error waits until the file has closed,
+      so quit as soon as the capture stops: this is the one quit that lands
+      while the app looks idle and is not. The suite holds that teardown open with a fake; only this
       exercises a real encoder
 
 ⚠️ **Not mechanically testable, and not a formality.** The unit suite drives a
@@ -508,6 +508,141 @@ SHA-256 of the preserved DMG used for acceptance. Use lowercase hexadecimal.
 - Tested source commit: `FULL_SOURCE_COMMIT`
 - Tested DMG SHA-256: `PRESERVED_DMG_DIGEST`
 ```
+
+## v1.2.0 — signed-product pass and first update rehearsal, 2026-11-16
+
+- Tested source commit: `7a91565e48cc7436789a413d21e80802e82a614a`
+- Tested DMG SHA-256: `c58f0392cdd016583529b7cb0582e9e3ff8debc81785b781b4a8527a2c912b80`
+
+**Run on the preserved, notarized candidate** (2,765,639 bytes), built from a clean
+detached checkout of the commit above, on arm64 macOS 26.6.2. A person was at the
+machine for every item under "by a person"; the mechanical items were read from
+the artifact, the process list, the staging feed's access log and `tccd`'s log.
+
+Two faults on the test Mac interrupted the run. Neither is in this build, and
+both are recorded under "What went wrong on the test Mac" because the next
+tester will meet them.
+
+### Passed — mechanically
+
+- App and DMG notarization **Accepted**; `stapler validate` passed; the SHA-256
+  sidecar matched.
+- The app inside the DMG: `accepted`, `source=Notarized Developer ID`; strict
+  deep signature verification; team `S3J47F2UXA`; `x86_64 arm64`; carries
+  `com.apple.security.device.audio-input`.
+- Bundle reports **1.2.0 / 10200**, minimum macOS 15.0, matching the project and
+  the appcast item. The item's enclosure is version-pinned and its `length`
+  equals the DMG's byte count.
+- The update dialog's text is the 1.2.0 CHANGELOG section.
+- After the update: one bundle at `/Applications/Home Rec.app`, 1.2.0 / 10200,
+  feed back on `https://homerec.app/appcast.xml`, signature and Gatekeeper as
+  above.
+- ⌘Q mid-take left files that open with a real duration and no repair:
+  M4A 16.3 s, WAV 14.4 s, FLAC 10.2 s (`afinfo`).
+- A force-quit FLAC reported 15.0 s after Recover.
+
+### Passed — by a person at the machine
+
+**Opened from inside the disk image**
+
+- Translocated: the DMG was given `com.apple.quarantine` first, and the running
+  path contained `/AppTranslocation/`. ⚠️ The window's "Move to Applications"
+  and the tooltip wording were **not reported** for this launch; see Not run.
+- Not translocated (attribute removed, image ejected and mounted again; the
+  running path was `/Volumes/Home Rec/Home Rec.app`): recording works; the update
+  row is greyed with the read-only-volume sentence, idle and while recording.
+
+**N → N+1, for the first time.** N was the `v1.1.3` tag built with Developer ID
+signing, its feed pointed at `127.0.0.1:8765`, installed in `/Applications`.
+N+1 was the preserved candidate, served by `scripts/staging-feed.sh` at 80 KB/s.
+
+- A grant made to N at another path carried to the `/Applications` copy with no
+  prompt. Same signature, different path: **the signature decides, not the path.**
+- **Tamper check.** One character of `edSignature` changed within the base64
+  alphabet (still 64 bytes). The access log shows the whole payload served
+  (2,765,639 bytes in 35.2 s) before Sparkle refused with "The update is
+  improperly signed and could not be validated." N stayed at 1.1.3.
+- **Interlock.** Record was pressed during the throttled download. Sparkle
+  reached "Ready to Install" 35 s into the take; **Install and Relaunch** did not
+  restart the app; the update row was greyed while recording. On Stop the app
+  relaunched by itself as 1.2.0. The take, just under two minutes, plays to the end.
+- Same path, same name, one copy. Screen Recording and Microphone grants
+  **survived**: 1.2.0 recorded with no prompt, and `tccd` logged no code
+  requirement mismatch after the update.
+- Against the live feed, 1.2.0 reports "1.1.3 is currently the newest version
+  available", which is the right answer before publication.
+
+**The installed 1.2.0**
+
+- **Report a Problem** offers Open Email Draft, Copy Diagnostic Report and
+  Report on GitHub. **Open Email Draft produced a Mail draft to
+  `support@homerec.app`** with the versions and log lines, on a Mac where Mail
+  has an account. This path had never been seen working. The copied report held
+  the versions and three log lines, with no home path.
+- The last recording survives ⌘Q and a relaunch: no welcome screen, the row is
+  shown, Reveal selects the file (BL-143).
+- Force-quit mid-take: FLAC does not play as found, is listed, Recover repairs
+  it and it plays. M4A is listed, recovers, plays, and **is not offered again**
+  after a relaunch (BL-140a).
+- ⌘Q mid-take in WAV, M4A and FLAC: each file plays without Recover, and
+  Recovery lists nothing afterwards. Quitting idle is instant.
+- **Per-app capture** records the selected app and the take plays back.
+  Reported by the tester after the entry was first written; whether a second
+  app playing at the same time stayed out of the file was not reported.
+- The window stays readable over a light desktop.
+- Check for Updates clicked repeatedly, including with its window open: never a
+  second window, never a click that does nothing.
+- **Thread Sanitizer with real ScreenCaptureKit.** The candidate source built
+  with `-enableThreadSanitizer YES` and Developer ID signing, so it used the
+  existing grant. One 27.6 s All System Audio take in FLAC: **0 reports**.
+
+### Not run — and why
+
+- **macOS 15 launch-and-record.** No macOS 15 machine or VM was available. The
+  deployment floor is still unexercised by anything.
+- **The translocated window and tooltip wording.** The launch was confirmed
+  translocated; what the window and the update row said was not reported.
+- **BL-143's second half**: moving the file, pressing Reveal, and the row staying
+  gone after a relaunch. Not confirmed.
+- **A take that failed, then ⌘Q at once (BL-171c)**, and the mic-unplugged
+  items. No unpluggable microphone at the machine.
+- **Per-app capture and microphone under Thread Sanitizer.** One All System
+  Audio take only.
+- **Microphone at 44.1 kHz**, per-app isolation against a second app, the
+  permissions block from a reset, accessibility, and the reskin state sweep. Not repeated in this run.
+- **Arrival of the emailed report** in the support inbox. The draft was sent;
+  delivery was not confirmed in this run.
+- **The CI-read items** (strict-concurrency warning split, the Thread Sanitizer
+  table, the suite count). To be read from the release commit's CI run; `main`
+  at `bff1d83` was green on Docs check, Unit tests and Release build.
+
+### Observed, not failures
+
+- Clicking **Install and Relaunch** while recording gives no feedback that the
+  update is waiting for the take. This was 1.1.3's gate doing the updating.
+
+### What went wrong on the test Mac
+
+- **A stale Screen Recording grant.** A Debug build shares the shipped app's
+  bundle ID under a different signature. The TCC entry was re-created while one
+  was running, and from then every Developer ID copy was refused: `tccd` logged
+  "Failed to match existing code requirement" 477 times, and the Settings
+  toggle changed nothing. Cleared with `tccutil reset ScreenCapture` and
+  `tccutil reset Microphone`, then granted from a Developer ID copy. **Do not
+  run a Debug build during a pass.**
+- **Settings that would not persist.** From earlier the same afternoon,
+  `cfprefsd` rejected every preferences read and write for the app's domain
+  ("Path not accessible"), in the released 1.1.3 as well, so the welcome screen
+  returned on every launch and no last recording was kept. The preferences file
+  carried a quarantine attribute stamped by `cfprefsd`. Removing the attribute
+  and restarting `cfprefsd` cleared it; the trigger was not identified. BL-143
+  and BL-140a were checked after the fix.
+
+### Filed from this run
+
+- The app cannot tell "never granted" from "listed but refused", and a
+  permission failure at Record blames missing audio. Planned for 1.2.1.
+- The release guide's build block fails in zsh (`status` is read-only there).
 
 ## v1.1.3 — signed-product pass, 2026-09-17 · `18bdd6a`
 
