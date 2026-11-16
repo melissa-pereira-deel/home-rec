@@ -161,6 +161,40 @@ class RecorderViewModel: ObservableObject {
     /// and the output file are still held (BL-171b). Retained so the next start
     /// can wait for it instead of being refused.
     private var failureTeardown: Task<Void, Never>?
+
+    /// True from the moment a take fails until its teardown has released the
+    /// encoder and the file (BL-171c).
+    ///
+    /// `state` cannot carry this. It moves to `.error` *before* the teardown
+    /// starts, so the alert is not held up behind a finalize, and it does not
+    /// move again when the teardown ends. Published because that second moment
+    /// is exactly when a parked update has to be released, and no state change
+    /// marks it.
+    @Published private(set) var isFinishingFailedTake = false
+
+    /// Whether ending this process now is safe — quitting, or letting Sparkle
+    /// replace the app.
+    ///
+    /// `state.allowsUpdateInstall` answers for the state alone, and `.error`
+    /// passes it. But a take that failed a moment ago is in `.error` with its
+    /// encoder still finalizing, and ending the process there severs the file
+    /// exactly as it would mid-recording. The size limit is the common way in:
+    /// the alert says the take was saved, and quitting is the obvious next move.
+    var allowsProcessTermination: Bool {
+        state.allowsUpdateInstall && !isFinishingFailedTake
+    }
+
+    /// `allowsProcessTermination` as a stream, for the update gate's release.
+    ///
+    /// Not derived from `$state` alone: the state is already `.error` when a
+    /// failed take finishes closing, so a stream of states never reports that
+    /// the gate reopened, and an update Sparkle parked meanwhile stays parked.
+    var allowsProcessTerminationPublisher: AnyPublisher<Bool, Never> {
+        Publishers.CombineLatest($state, $isFinishingFailedTake)
+            .map { state, finishing in state.allowsUpdateInstall && !finishing }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
     private let installLocationProvider: InstallLocationProviding
     /// The install-location panel, created on first use for the same reason.
     private var installNoticePanel: FloatingPanelHost?
@@ -501,7 +535,9 @@ class RecorderViewModel: ObservableObject {
     ///   would hit the same guard and return immediately; the only correct action
     ///   is to wait for it to land.
     /// - `.recording`, `.recovering` — both hold an open encoder. Stop normally.
-    /// - `.idle`, `.error` — nothing open, nothing to do.
+    /// - `.idle`, `.error` — nothing open, **unless a take failed a moment ago
+    ///   and is still closing** (BL-171c). `.error` is entered before that
+    ///   teardown starts, so wait for it; with none in flight this is a no-op.
     ///
     /// Unbounded on purpose: `TerminationCoordinator` owns the bound, so that
     /// there is one deadline for the whole quit rather than several that
@@ -520,7 +556,7 @@ class RecorderViewModel: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(10))
             }
         case .idle, .error, .starting:
-            return
+            await failureTeardown?.value
         }
     }
 
@@ -858,14 +894,12 @@ class RecorderViewModel: ObservableObject {
         guard state == .recording else { return }
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
+        beginFailureTeardown()
         switch reason {
         case .sizeLimitReached:
             transition(to: .error(.sizeLimitReached))
         case .other(let message):
             transition(to: .error(.writeFailed(message)))
-        }
-        failureTeardown = Task { [weak self] in
-            await self?.controller.finalizeAfterFailure()
         }
     }
 
@@ -873,9 +907,23 @@ class RecorderViewModel: ObservableObject {
         guard state == .recording else { return }
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
+        beginFailureTeardown()
         transition(to: .error(.streamFailed(message)))
+    }
+
+    /// Finalize what a failed take captured, and say so until it is done.
+    ///
+    /// ⚠️ Call this **before** the transition to `.error`, not after. The flag
+    /// has to be up when the state moves: otherwise the gate stream sees
+    /// `.error` with the flag still down and emits "safe" for an instant, which
+    /// is all a parked update needs to start replacing the app mid-finalize.
+    /// The task itself cannot run until the caller returns, so the order costs
+    /// nothing.
+    private func beginFailureTeardown() {
+        isFinishingFailedTake = true
         failureTeardown = Task { [weak self] in
             await self?.controller.finalizeAfterFailure()
+            self?.isFinishingFailedTake = false
         }
     }
 

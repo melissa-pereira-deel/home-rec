@@ -370,6 +370,10 @@ final class MockRecordingControlling: RecordingControlling {
     private(set) var lastStartFormat: AudioFormat?
     /// Fired when `finalizeAfterFailure()` runs.
     var onFinalize: (() -> Void)?
+    /// Suspends `finalizeAfterFailure()` before it releases anything, so a test
+    /// can hold a failed take's teardown open and look at what is allowed
+    /// meanwhile (BL-171c).
+    var onFinalizeHold: (() async -> Void)?
 
     func startRecording(format: AudioFormat) async throws -> URL {
         startCount += 1
@@ -389,6 +393,7 @@ final class MockRecordingControlling: RecordingControlling {
 
     func finalizeAfterFailure() async {
         finalizeCount += 1
+        await onFinalizeHold?()
         isRecording = false
         recordingURL = nil
         onFinalize?()

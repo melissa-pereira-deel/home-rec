@@ -6,32 +6,6 @@ import Foundation
 struct RecordingSessionTests {
     private struct InjectedFailure: Error {}
 
-    /// A one-shot suspension that stays open for later calls (including deinit).
-    @MainActor
-    private final class Gate {
-        private(set) var isWaiting = false
-        private var released = false
-        private var continuation: CheckedContinuation<Void, Never>?
-
-        func wait() async {
-            guard !released else { return }
-            // `cleanup()` runs on three controller paths plus `deinit`, so a
-            // gate can be entered twice. Overwriting would strand the first
-            // continuation and hang the test past any timeout.
-            precondition(continuation == nil, "Gate does not support concurrent waiters")
-            await withCheckedContinuation {
-                continuation = $0
-                isWaiting = true
-            }
-        }
-
-        func release() {
-            released = true
-            continuation?.resume()
-            continuation = nil
-        }
-    }
-
     /// Real interrupted bytes make a missing exclusion observable on disk.
     private func writeInterruptedWAV(at url: URL) throws {
         let live = url.deletingLastPathComponent().appendingPathComponent("fixture.wav")

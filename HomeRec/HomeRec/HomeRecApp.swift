@@ -71,7 +71,7 @@ struct HomeRecApp: App {
                                 // AppDelegate. Deliberately the opposite default
                                 // from UpdaterController, which must answer
                                 // "don't replace the binary" when unsure.
-                                viewModel?.state.allowsUpdateInstall ?? true
+                                viewModel?.allowsProcessTermination ?? true
                             },
                             drain: { [weak viewModel] in
                                 await viewModel?.finishForTermination()

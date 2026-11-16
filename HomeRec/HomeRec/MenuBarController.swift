@@ -39,7 +39,7 @@ class MenuBarController: NSObject {
         self.updater = UpdaterController(
             installLocation: viewModel.installLocation,
             isSafeToInstall: { [weak viewModel] in
-                viewModel?.state.allowsUpdateInstall ?? false
+                viewModel?.allowsProcessTermination ?? false
             }
         )
         super.init()
@@ -113,9 +113,10 @@ class MenuBarController: NSObject {
         // Sparkle put a relaunch on hold and will wait indefinitely; nothing
         // else ever invokes that handler, so without this the user's update
         // silently never installs.
-        updateGateCancellable = viewModel.$state
-            .map(\.allowsUpdateInstall)
-            .removeDuplicates()
+        //
+        // Not `$state` alone: a failed take is already in `.error` when it
+        // finishes closing, so no state change announces that (BL-171c).
+        updateGateCancellable = viewModel.allowsProcessTerminationPublisher
             .receive(on: RunLoop.main)
             .sink { [weak self] mayInstall in
                 guard mayInstall else { return }
@@ -178,7 +179,7 @@ class MenuBarController: NSObject {
             selectedAppName: selectedAppName,
             inputDevices: devices,
             selectedMicName: selectedMicName,
-            allowsUpdateInstall: viewModel.state.allowsUpdateInstall,
+            allowsUpdateInstall: viewModel.allowsProcessTermination,
             updaterIsUsable: updater.isUsable,
             installLocation: viewModel.installLocation
         )

@@ -207,6 +207,11 @@ enum RecordingState: Equatable, Sendable {
     /// questions — "may the user retarget capture?" versus "may we terminate this
     /// process?" — and a future state can easily need one and not the other.
     ///
+    /// ⚠️ **Necessary, not sufficient.** `.error` is entered before a failed
+    /// take has finished closing its file, so the state can say yes while an
+    /// encoder is still open. Callers deciding whether to end the process ask
+    /// `RecorderViewModel.allowsProcessTermination`, which adds that (BL-171c).
+    ///
     /// ⚠️ Exhaustive with **no `default`**, for the same reason as above: a new
     /// state must become a compile error so someone decides.
     nonisolated var allowsUpdateInstall: Bool {
