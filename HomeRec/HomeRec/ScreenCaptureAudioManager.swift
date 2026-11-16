@@ -71,14 +71,14 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
         qos: .userInitiated
     )
 
-    /// Where each normalised buffer goes. Read by the sample handler on
-    /// `audioQueue`, and written on the main actor by `prepareSession` and
-    /// `cleanup`.
+    /// Where each normalised buffer goes.
     ///
-    /// ⚠️ `nonisolated(unsafe)` because that is what it is: touched from both
-    /// sides with nothing ordering them (TD-009). The SDK's unannotated
-    /// protocols let the compiler believe the handler runs on the main actor,
-    /// so without this the race was invisible to it as well.
+    /// ⚠️ **Confined to `audioQueue`.** The sample handler reads it there; the
+    /// main actor writes it only inside `audioQueue.sync` (`prepareSession`,
+    /// `cleanup`). `nonisolated(unsafe)` because the compiler cannot express
+    /// queue confinement, not because the access is unordered. Writing it
+    /// directly from the main actor raced the handler — the Thread Sanitizer
+    /// tests in `ScreenCaptureAudioManagerTests` report exactly that.
     nonisolated(unsafe) private var audioCallback: ((AVAudioPCMBuffer) -> Void)?
 
     /// Forces every captured buffer to the canonical 48 kHz stereo format the
@@ -90,15 +90,14 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     /// BL-130 adds a `.microphone` output it must either share that queue or get
     /// its own normalizer; it must not share this one across queues.
     ///
-    /// ⚠️ `nonisolated(unsafe)` for the same reason as `audioCallback` (TD-009).
+    /// ⚠️ Confined to `audioQueue`, like `audioCallback`.
     nonisolated(unsafe) private var audioNormalizer = AudioFormatNormalizer()
 
     /// One-shot latches so a rejected buffer is reported once per session rather
     /// than per buffer — this is the capture hot path (BL-150).
     ///
-    /// ⚠️ Written and read on the sample-handler queue only, unlike the
-    /// properties above it, so these two add no new cross-queue access. The rest
-    /// of this file's race is TD-009 and is not made worse here.
+    /// ⚠️ Written and read on `audioQueue` only — the handler is their sole
+    /// user, so they need no `sync` from the main actor.
     nonisolated(unsafe) private var hasLoggedConversionFailure = false
     nonisolated(unsafe) private var hasLoggedNormalizeFailure = false
 
@@ -208,12 +207,18 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     /// Split out of `setupCapture` so a test can begin a session without
     /// `SCShareableContent`, which needs Screen Recording permission and can
     /// raise the system prompt.
+    ///
+    /// Written on `audioQueue`, which the handler owns. A buffer still arriving
+    /// from the previous take either runs before this and goes to the old
+    /// callback, or after it and goes to the new one; never half of each.
     func prepareSession(audioCallback: @escaping (AVAudioPCMBuffer) -> Void) {
-        self.audioCallback = audioCallback
-        // Fresh converter state per session: this manager outlives a single
-        // recording, and a converter carrying the previous take's resampler state
-        // would start the next one mid-phase.
-        self.audioNormalizer = AudioFormatNormalizer()
+        audioQueue.sync {
+            self.audioCallback = audioCallback
+            // Fresh converter state per session: this manager outlives a single
+            // recording, and a converter carrying the previous take's resampler
+            // state would start the next one mid-phase.
+            self.audioNormalizer = AudioFormatNormalizer()
+        }
     }
 
     /// Start audio capture
@@ -242,10 +247,15 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     }
 
     /// Clean up resources
+    ///
+    /// The callback is dropped on `audioQueue`, so once this returns no buffer
+    /// can reach it. The wait is at most one buffer's conversion: the handler
+    /// hands each buffer on with `processingQueue.async` and never waits on the
+    /// main actor, so this `sync` cannot deadlock.
     func cleanup() async {
         try? await stopCapture()
         stream = nil
-        audioCallback = nil
+        audioQueue.sync { audioCallback = nil }
     }
 
     var capturing: Bool {
