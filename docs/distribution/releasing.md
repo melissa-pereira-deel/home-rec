@@ -27,13 +27,10 @@ This guide covers the per-release flow. One-time setup lives in
 
 Run all of this from the repo root.
 
-**The order is the point.** The DMG that ships must be the DMG a person tested,
-and `scripts/check-docs.sh` (a CI job since BL-160) refuses a version that has
-no run-log entry in `docs/manual-acceptance.md`. So the version is bumped on a
-release branch first, the release candidate is built from that commit, the manual
-pass runs on that DMG, and only then is the run log written, the branch merged
-and the tag cut. Testing a build and then shipping a different one is how
-v1.1.3's run log came to describe an artifact that reported itself as 1.1.2.
+Build the candidate after bumping the version, run manual acceptance on the
+preserved DMG, and commit the acceptance evidence before merging and tagging.
+The release check compares the tagged tree with the tested source and the
+published DMG with the digest recorded during acceptance.
 
 ### 1. Cut a release branch and bump the version
 
@@ -47,11 +44,11 @@ git checkout -b "release/$VERSION"
 
 In this one commit:
 
-- **`MARKETING_VERSION`** in all six build configurations (`check-docs.sh`
-  counts them; a find-and-replace that misses one ships a mislabelled build).
-- **`CURRENT_PROJECT_VERSION`**, which is what Sparkle compares. It must be
-  higher than the last release's; the convention is `MMmmpp` (`1.2.0` →
-  `10200`).
+- **`MARKETING_VERSION`** in all six build configurations.
+- **`CURRENT_PROJECT_VERSION`** in all six build configurations. Sparkle
+  compares this number with the previous release's build number. Use a higher
+  value following the existing convention (`1.2.0` → `10200`).
+  `check-docs.sh` verifies that all six configurations agree on both values.
 - **`CHANGELOG.md`:** rename `## [Unreleased]` to `## [$VERSION] - YYYY-MM-DD`
   and open a fresh empty `## [Unreleased]` above it. The build reads the
   release notes out of that heading by name, so skipping this ships an
@@ -64,24 +61,35 @@ Push the branch and open its PR. **CI's Docs check fails on this commit, on
 purpose:** there is no run-log entry for `$VERSION` yet. That is the gate
 working, not a fault to fix by writing an entry.
 
-### 2. Build the release candidate
+### 2. Build from a clean checkout and preserve the candidate
+
+Use a fresh detached worktree at the version-bump commit. The candidate
+directory lives outside the build worktree so a rebuild cannot overwrite it.
+Keep the directory path and the full source commit for the acceptance pass.
 
 ```bash
-TEAM_ID=S3J47F2UXA AC_PROFILE=HomeRecNotary ./scripts/build-dmg.sh
-git rev-parse --short HEAD    # the commit this candidate was built from
+SOURCE_COMMIT=$(git rev-parse HEAD)
+RC_DIR=$(mktemp -d "${TMPDIR:-/tmp}/HomeRec-v$VERSION.XXXXXX")
+BUILD_DIR="$RC_DIR/build"
+
+(
+  set -e
+  git worktree add --detach "$BUILD_DIR" "$SOURCE_COMMIT"
+  cd "$BUILD_DIR"
+  status=$(git status --porcelain --ignored)
+  test -z "$status" || exit 1
+  TEAM_ID=S3J47F2UXA AC_PROFILE=HomeRecNotary ./scripts/build-dmg.sh
+  cp dist/HomeRec.dmg dist/HomeRec.dmg.sha256 "dist/appcast-item-$VERSION.xml" "$RC_DIR/"
+)
+
+printf 'Tested source commit to record after acceptance: %s\n' "$SOURCE_COMMIT"
+printf 'Candidate artifacts: %s\n' "$RC_DIR"
 ```
 
-This checks the notary profile first, then runs archive → Developer ID sign →
-notarize → staple → DMG → notarize → staple → verify, and writes:
-
-- `dist/HomeRec.dmg` and `dist/HomeRec.dmg.sha256`
-- `dist/appcast-item-$VERSION.xml`, the Sparkle entry for step 9
-
-**Copy `dist/` aside now** (for example to `dist-rc-$VERSION/`). The script
-overwrites it on every run, and this is the artifact that ships.
-
-Apple's notary service typically returns Accepted in a few minutes. Outliers
-of 60–90 minutes happen during queue spikes — that's normal, the script waits.
+The build archives and signs the app, notarizes and staples the app and its
+DMG, verifies the DMG, and produces the Sparkle entry. Continue once it succeeds.
+Keep the three copied files together through publication. Copy them to durable
+storage if the release will outlast the temporary directory.
 
 ### 3. Read the notes the update dialog will show
 
@@ -90,7 +98,7 @@ accepting the update:
 
 ```bash
 awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} f' \
-  CHANGELOG.md | sed '/^---$/d'
+  "$BUILD_DIR/CHANGELOG.md" | sed '/^---$/d'
 ```
 
 That must print the section body, written for someone who records music, not
@@ -99,89 +107,96 @@ for someone who builds the app. The same text is in the appcast entry's
 
 ### 4. Run the manual pass on that DMG, then record it
 
-Work through [`docs/manual-acceptance.md`](../manual-acceptance.md) on the
-candidate from step 2: **Every release**, **Signed product**, and **Auto-update**,
-including the N → N+1 rehearsal against a staging feed.
+Work through [the manual acceptance checklist](../manual-acceptance.md) on
+`$RC_DIR/HomeRec.dmg`, using this DMG as **N+1** for the staging feed. Use a
+staging copy of the saved appcast item and point its enclosure at the local
+copy of the DMG. The staging N build points at the staging feed.
 
-Then add the run-log entry — `## v$VERSION — <what>, <date> · \`<commit from
-step 2>\`` — in its own commit on the release branch. It touches only that file.
-`scripts/check-docs.sh` now exits 0 and CI's Docs check goes green.
-
-**Why the gate sits before the tag rather than after the build.** v1.1.1 shipped
-on 2026-08-22 with no run-log entry at all — the release that fixed microphone
-recording, and the checklist that would have covered everything the fix did not
-touch was skipped. A tag is the point of no return for the appcast, so the gate
-belongs before it. If the run log has no entry for this version, **go and do the
-manual pass**; do not write an entry to make the check go green.
-
-### 5. Merge, prove the code is what was tested, then tag
-
-Merge the release PR. Then, on `main`:
+After the pass, get the digest of the file you tested and verify its sidecar.
 
 ```bash
-git checkout main && git pull --ff-only
-git diff --stat <commit from step 2> HEAD -- HomeRec scripts
+( cd "$RC_DIR" && shasum -a 256 -c HomeRec.dmg.sha256 && shasum -a 256 HomeRec.dmg )
 ```
 
-That must print nothing: between the tested commit and `main`, only the run log
-changed. If anything else did, the candidate is not this release — go back to
-step 2.
+Add the newest entry to the run log with the version, date and results. Record
+the full `$SOURCE_COMMIT` and digest in the two fields documented in the run
+log. Commit only `docs/manual-acceptance.md` and run this gate before merging.
 
 ```bash
-git tag -a "v$VERSION" -m "Home Rec v$VERSION"
-git push origin "v$VERSION"
+scripts/check-docs.sh --candidate "$VERSION" "$RC_DIR/HomeRec.dmg"
+```
+
+### 5. Merge, verify the merged tree, then tag
+
+On `main`, run the same candidate check before tagging. It compares all tracked
+paths, including packaging assets and release notes, with the source recorded
+in the run log. Only the acceptance log is excluded. If the check reports a
+tree difference, build and test a new candidate from the updated source.
+
+```bash
+(
+  set -e
+  git checkout main
+  git pull --ff-only
+  scripts/check-docs.sh --candidate "$VERSION" "$RC_DIR/HomeRec.dmg"
+  git tag -a "v$VERSION" -m "Home Rec v$VERSION"
+  git push origin "refs/tags/v$VERSION"
+  scripts/check-docs.sh --release "$VERSION" "$RC_DIR/HomeRec.dmg"
+)
 ```
 
 ### 6. Publish the GitHub Release with the tested DMG
 
-Upload the files you set aside in step 2, not a rebuild:
+Run this from the clean checkout at the release commit. The gate requires the
+local and published tags to resolve to the checked commit. GitHub's
+`--verify-tag` also requires a published tag.
 
 ```bash
-gh release create "v$VERSION" \
-  --title "Home Rec v$VERSION" \
-  --notes-file <(awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md | sed '/^---$/d') \
-  "dist-rc-$VERSION/HomeRec.dmg" \
-  "dist-rc-$VERSION/HomeRec.dmg.sha256"
+scripts/check-docs.sh --release "$VERSION" "$RC_DIR/HomeRec.dmg" &&
+  ( cd "$RC_DIR" && shasum -a 256 -c HomeRec.dmg.sha256 ) &&
+  gh release create "v$VERSION" --verify-tag \
+    --title "Home Rec v$VERSION" \
+    --notes-file <(awk -v v="$VERSION" 'index($0, "## [" v "]") == 1 {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md | sed '/^---$/d') \
+    "$RC_DIR/HomeRec.dmg" \
+    "$RC_DIR/HomeRec.dmg.sha256"
 ```
 
-⚠️ The previous form here was `awk '/^## \[$VERSION\]/,/^## \[/' … | sed '$d'`,
-and it **could never work for any version**. A range expression ends on the
-first record matching the end pattern *including the record that started it*,
-and `## [1.1.0] - 2026-08-07` matches both `/^## \[1.1.0\]/` and `/^## \[/`. So
-the range was always exactly one line, `sed '$d'` deleted it, and the result was
-always empty. Verified against 1.0.2 as well. A flag is used instead of a range
-because it is the only form that survives a header matching both ends.
+### 7. Verify the appcast enclosure before deploying it
 
-### 7. Verify the public URL
+Download the public DMG from the version-pinned enclosure URL in the saved
+appcast item. Check those bytes against the digest in the committed acceptance
+log and check the published sidecar from the same release.
 
 ```bash
-curl -sI -L https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg \
-  | grep -E "^(HTTP|content-length|content-type)"
+(
+  set -e
+  BASE_URL="https://github.com/melissa-pereira-deel/home-rec/releases/download/v$VERSION"
+  PUBLIC_DIR=$(mktemp -d "${TMPDIR:-/tmp}/HomeRec-public.XXXXXX")
+  trap 'rm -r "$PUBLIC_DIR"' EXIT
+  curl -fLsS "$BASE_URL/HomeRec.dmg" -o "$PUBLIC_DIR/HomeRec.dmg"
+  scripts/check-docs.sh --release "$VERSION" "$PUBLIC_DIR/HomeRec.dmg"
+  curl -fLsS "$BASE_URL/HomeRec.dmg.sha256" -o "$PUBLIC_DIR/HomeRec.dmg.sha256"
+  ( cd "$PUBLIC_DIR" && shasum -a 256 -c HomeRec.dmg.sha256 )
+)
 ```
 
-Expected: a 302 → 200 chain ending at the CDN-hosted asset, `content-type: application/x-apple-diskimage`, `content-length` matching the local file size.
-
-### 8. Confirm the SHA-256 sidecar
-
-A downloader can verify the artifact didn't change in transit:
+### 8. Verify the website download
 
 ```bash
-curl -sL -o /tmp/HomeRec.dmg https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg
-curl -sL -o /tmp/HomeRec.dmg.sha256 https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg.sha256
-( cd /tmp && shasum -a 256 -c HomeRec.dmg.sha256 )
+curl -fLsSI https://github.com/melissa-pereira-deel/home-rec/releases/latest/download/HomeRec.dmg \
+  | grep -Ei "^(HTTP|content-length|content-type)"
 ```
 
-Expected: `HomeRec.dmg: OK`
+Expect a redirect to the new release's `HomeRec.dmg` and a successful CDN
+response with the candidate's file size.
 
 ### 9. Publish the appcast entry — after the release, never before
 
-The entry's enclosure URL points at the release from step 6, so publishing it
-first would offer every install an update that 404s.
-
-In `home-rec-site`, on a branch, paste `dist-rc-$VERSION/appcast-item-$VERSION.xml`
-into `<channel>` in `public/appcast.xml`, **newest first**. Open a PR: the
-site's CI validates the feed (BL-176) and must pass. Merging deploys it. Then run the first boxes of the checklist's
-**Auto-update** section against the live feed.
+After the published DMG passes step 7, paste the original
+`$RC_DIR/appcast-item-$VERSION.xml` into `<channel>` in `public/appcast.xml`
+in `home-rec-site`, **newest first**. Open a PR and wait for the site's feed
+validation (BL-176). Merge to deploy the feed, then run the live-feed checks in
+the checklist's **Auto-update** section.
 
 ### 10. Record it
 
@@ -210,11 +225,14 @@ https://github.com/melissa-pereira-deel/home-rec/releases/latest
 
 If a release ships broken:
 
-1. Edit the release on GitHub → mark as **Pre-release** (demotes it; the
-   `latest` URL skips pre-releases automatically and falls back to the
-   previous one).
-2. If urgent, **delete the bad release tag** and ship a `v$NEXT.0.1` with
-   the fix. Don't reuse the broken version number.
+1. Remove the affected version's item from `public/appcast.xml` in
+   `home-rec-site` and deploy the feed change. Fetch the live appcast with a
+   cache-busting query string and confirm the withdrawn item is gone.
+2. Mark the GitHub release as **Pre-release** so the website's `latest`
+   download falls back to the previous release. The appcast's version-pinned
+   enclosure is independent of that alias.
+3. Ship the fix as a new release with a higher build number so Sparkle can
+   update installations that received the withdrawn release.
 
 ## Notes
 

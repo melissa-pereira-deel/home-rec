@@ -14,7 +14,7 @@ tagging a release and record the result in the PR.
 ## Every release
 
 ```bash
-scripts/check-docs.sh          # documented facts still true?
+scripts/check-docs.sh          # run after recording the acceptance evidence
 ```
 
 ```bash
@@ -129,7 +129,8 @@ what checks it**, in Swift 5 or 6 mode alike.
 And a local probe saying `SWIFT_VERSION=6` builds proves nothing about the CI
 toolchain — see above.
 
-- [ ] `scripts/check-docs.sh` exits 0
+- [ ] After committing the run log, `scripts/check-docs.sh --candidate "$VERSION" /path/to/HomeRec.dmg`
+      exits 0 for the preserved DMG
 - [ ] **One launch-and-record on macOS 15**, the deployment floor. CI runs on
       `macos-26` because the pinned Xcode cannot run this suite on an older
       image (see above), so nothing automated executes the app on the oldest
@@ -144,8 +145,9 @@ toolchain — see above.
       so a green check says nothing here — for months the job ran a fraction of
       the suite and showed green. Any race listed is either fixed or filed
       before the tag. Locally: `scripts/tsan-report.sh <bundle>.xcresult`
-- [ ] `MARKETING_VERSION` verified against the **built product's**
-      `CFBundleShortVersionString`, not the file
+- [ ] The installed candidate's `CFBundleShortVersionString` and
+      `CFBundleVersion` match `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`
+      in the Xcode project
 - [ ] `CHANGELOG.md` describes what the *user* experiences
 - [ ] **README describes the app that is shipping** — this has silently failed
       before (M4A shipped in June and never reached the README or the site)
@@ -276,18 +278,15 @@ known deferral rather than a regression in this work.
 
 ## Signed product — the notarized DMG only
 
-Every check here needs the **notarized, stapled DMG**: the release artifact if
-it exists yet, or one built by `scripts/build-dmg.sh` from the same commit. A
-Debug or locally signed build has no hardened runtime, no notarization ticket
-and no quarantine, so it passes these checks without testing anything. Without
-the DMG, the run log names this whole section as not run. The N → N+1
-rehearsal under Auto-update needs signed builds too.
+Run this section on the **preserved, notarized and stapled release candidate**
+from [the release workflow](distribution/releasing.md). Use the same DMG for
+the staging update rehearsal and record its digest in the run log.
 
 **The artifact**
 
 - [ ] App and DMG notarization both **Accepted**.
-      `xcrun stapler validate dist/HomeRec.dmg` passes, and in `dist/`,
-      `shasum -a 256 -c HomeRec.dmg.sha256` reports `OK`
+      In the preserved candidate directory, `xcrun stapler validate HomeRec.dmg`
+      passes and `shasum -a 256 -c HomeRec.dmg.sha256` reports `OK`
 - [ ] `spctl --assess --verbose "/Applications/Home Rec.app"` reports
       `accepted` and `source=Notarized Developer ID`
 - [ ] The packaged app carries the microphone entitlement:
@@ -380,8 +379,10 @@ update actually *installs* has to be watched.
 offers nothing to any user, and is the only way to see the update path work
 before it matters:
 
-- [ ] Build a scratch **N+1** (version bumped, signed, notarized, `sign_update`d)
-- [ ] Serve a staging appcast on `127.0.0.1` containing only that entry
+- [ ] Serve the preserved release candidate DMG as **N+1**
+- [ ] Serve a staging appcast on `127.0.0.1` containing only the candidate's
+      entry. In the staging copy, point the enclosure URL at the locally
+      served DMG and keep the signature, length, and versions from the build
 - [ ] Build a scratch **N** whose `SUFeedURL` points at the staging feed, with an
       ATS exception for localhost, and install it to `/Applications`
 - [ ] **Check for Updates…** finds N+1, verifies, downloads and installs it
@@ -497,6 +498,16 @@ is the failure mode this file exists to prevent.
 
 Newest first. Record what was checked, what was *not*, and by what means — a run
 that doesn't say what it skipped is indistinguishable from a complete one.
+
+Starting with v1.2.0, begin the entry with `## vVERSION — Summary, YYYY-MM-DD`
+and put the following two lines under that heading. Substitute the full
+40-character source commit from the clean build checkout and the 64-character
+SHA-256 of the preserved DMG used for acceptance. Use lowercase hexadecimal.
+
+```markdown
+- Tested source commit: `FULL_SOURCE_COMMIT`
+- Tested DMG SHA-256: `PRESERVED_DMG_DIGEST`
+```
 
 ## v1.1.3 — signed-product pass, 2026-09-17 · `18bdd6a`
 
