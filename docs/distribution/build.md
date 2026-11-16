@@ -23,16 +23,17 @@ The signing **identity lives in your Keychain** — never in the repo.
 
 ## 2. One-time notarization setup (BL-032)
 
-Store a notarytool profile in your Keychain (do this once):
+Store a notarytool profile in your Keychain (do this once). Leave `--password`
+out and notarytool prompts for the app-specific password:
 
 ```bash
 xcrun notarytool store-credentials "HomeRecNotary" \
   --apple-id "you@example.com" \
-  --team-id "YOUR_TEAM_ID" \
-  --password "APP_SPECIFIC_PASSWORD"   # appleid.apple.com → App-Specific Passwords
+  --team-id "S3J47F2UXA"
 ```
 
-See `notarization.md` for details.
+See `notarization.md` for details, and for refreshing the profile when it stops
+working.
 
 ## 3. Build the DMG (BL-033)
 
