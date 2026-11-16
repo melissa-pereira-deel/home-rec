@@ -586,6 +586,9 @@ N+1 was the preserved candidate, served by `scripts/staging-feed.sh` at 80 KB/s.
   after a relaunch (BL-140a).
 - ⌘Q mid-take in WAV, M4A and FLAC: each file plays without Recover, and
   Recovery lists nothing afterwards. Quitting idle is instant.
+- **Per-app capture** records the selected app and the take plays back.
+  Reported by the tester after the entry was first written; whether a second
+  app playing at the same time stayed out of the file was not reported.
 - The window stays readable over a light desktop.
 - Check for Updates clicked repeatedly, including with its window open: never a
   second window, never a click that does nothing.
@@ -605,8 +608,8 @@ N+1 was the preserved candidate, served by `scripts/staging-feed.sh` at 80 KB/s.
   items. No unpluggable microphone at the machine.
 - **Per-app capture and microphone under Thread Sanitizer.** One All System
   Audio take only.
-- **Microphone at 44.1 kHz**, per-app isolation, the permissions block from a
-  reset, accessibility, and the reskin state sweep. Not repeated in this run.
+- **Microphone at 44.1 kHz**, per-app isolation against a second app, the
+  permissions block from a reset, accessibility, and the reskin state sweep. Not repeated in this run.
 - **Arrival of the emailed report** in the support inbox. The draft was sent;
   delivery was not confirmed in this run.
 - **The CI-read items** (strict-concurrency warning split, the Thread Sanitizer
