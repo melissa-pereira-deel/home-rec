@@ -29,7 +29,9 @@ developer cannot be verified" and most give up before first launch.
 
 After this, tools reference it by name: `--keychain-profile "HomeRecNotary"`.
 
-## When the notary service returns 401
+## When the notary service refuses the profile
+
+### 401: the sign-in was refused
 
 A 401 means Apple refused the sign-in. Nothing is wrong with the build. There
 are four causes. A lock names itself in the error text; the other three can look
@@ -44,8 +46,23 @@ identical:
   password, which brings in the cause above.
 - **The profile names the wrong team.** It must be `S3J47F2UXA`.
 
-`scripts/build-dmg.sh` checks the profile before it builds anything, so all four
-show up in seconds rather than after a full archive and signing pass.
+All four are fixed by [refreshing the profile](#refreshing-the-profile).
+
+### 403: an agreement is missing or has expired
+
+```
+Error: HTTP status code: 403. A required agreement is missing or has expired.
+```
+
+The sign-in worked. Apple is refusing the team because it has not accepted the
+current Apple Developer Program License Agreement, usually because Apple
+published a new version. **Refreshing the profile does not help.** The Account
+Holder signs in at <https://developer.apple.com/account> and accepts the
+agreement shown there. Then confirm with `notarytool history`, below. This was
+the cause on 2026-11-16.
+
+`scripts/build-dmg.sh` checks the profile before it builds anything, so all of
+these show up in seconds rather than after a full archive and signing pass.
 
 ## Refreshing the profile
 

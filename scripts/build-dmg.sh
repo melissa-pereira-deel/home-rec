@@ -75,7 +75,7 @@ echo "==> Checking notarytool profile \"$AC_PROFILE\"…"
 if ! NOTARY_CHECK="$(xcrun notarytool history --keychain-profile "$AC_PROFILE" 2>&1)"; then
   echo "error: notarytool profile \"$AC_PROFILE\" cannot sign in. Nothing has been built." >&2
   printf '%s\n' "$NOTARY_CHECK" | sed 's/^/       /' >&2
-  echo "       See docs/distribution/notarization.md, \"When the notary service returns 401\"." >&2
+  echo "       See docs/distribution/notarization.md, \"When the notary service refuses the profile\"." >&2
   exit 1
 fi
 

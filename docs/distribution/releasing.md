@@ -15,7 +15,7 @@ This guide covers the per-release flow. One-time setup lives in
   ```
 - A stored notarytool profile in the Keychain. `scripts/build-dmg.sh` checks it
   first and stops before building if it cannot sign in. If that happens, see
-  [When the notary service returns 401](notarization.md#when-the-notary-service-returns-401).
+  [When the notary service refuses the profile](notarization.md#when-the-notary-service-refuses-the-profile).
   To check before tagging rather than after, run the same call by hand:
   ```bash
   xcrun notarytool history --keychain-profile "HomeRecNotary"
