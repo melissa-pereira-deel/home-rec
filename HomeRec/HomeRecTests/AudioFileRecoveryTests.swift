@@ -110,7 +110,7 @@ struct AudioFileRecoveryTests {
 
         let pair = try await makePair(.wav, in: dir)
         let beforeIdentity = try #require(FileIdentity(atPath: pair.crashed.path))
-        let repairedIdentity = try #require(WAVWriter.repair(at: pair.crashed, expectedIdentity: beforeIdentity))
+        let repairedIdentity = try #require(try WAVWriter.repair(at: pair.crashed, expectedIdentity: beforeIdentity))
         #expect(repairedIdentity == FileIdentity(atPath: pair.crashed.path))
         #expect(repairedIdentity != beforeIdentity)
 
@@ -136,7 +136,7 @@ struct AudioFileRecoveryTests {
 
         let before = try Data(contentsOf: pair.crashed)
         let beforeIdentity = try #require(FileIdentity(atPath: pair.crashed.path))
-        let repairedIdentity = try #require(FLACEncoder.repair(at: pair.crashed, expectedIdentity: beforeIdentity))
+        let repairedIdentity = try #require(try FLACEncoder.repair(at: pair.crashed, expectedIdentity: beforeIdentity))
         #expect(repairedIdentity == FileIdentity(atPath: pair.crashed.path))
         #expect(repairedIdentity != beforeIdentity)
         let after = try Data(contentsOf: pair.crashed)
@@ -335,7 +335,7 @@ struct AudioFileRecoveryTests {
         // Atomic write creates a new file with the same interrupted bytes and path.
         try replacement.write(to: pair.crashed, options: .atomic)
         let replacementIdentity = try #require(FileIdentity(atPath: pair.crashed.path))
-        #require(replacementIdentity != stale.identity)
+        try #require(replacementIdentity != stale.identity)
 
         if moveToTrash {
             viewModel.moveToTrash(stale)
@@ -360,7 +360,7 @@ struct AudioFileRecoveryTests {
 
         let finalized = try Data(contentsOf: pair.finalized)
         try finalized.write(to: pair.crashed)
-        #require(FileIdentity(atPath: pair.crashed.path) == stale.identity)
+        try #require(FileIdentity(atPath: pair.crashed.path) == stale.identity)
         viewModel.moveToTrash(stale)
 
         #expect(try Data(contentsOf: pair.crashed) == finalized)
