@@ -284,6 +284,36 @@ struct AudioFileRecoveryTests {
         #expect(viewModel.errorMessage == nil)
     }
 
+    /// The same no-op repair, across a relaunch: the real scanner still detects
+    /// the file as unfinalized, so only the remembered action can keep it out.
+    @Test("A recovered M4A is still not listed after a relaunch")
+    func recoveredM4AStaysRecoveredAfterRelaunch() async throws {
+        let dir = tempDir()
+        let defaultsName = "AudioFileRecoveryTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: defaultsName))
+        defer {
+            try? FileManager.default.removeItem(at: dir)
+            defaults.removePersistentDomain(forName: defaultsName)
+        }
+
+        _ = try await makePair(.m4a, in: dir)
+        let scanner = RecoveryScanner(saveLocation: MockSaveLocationProviding(directory: dir))
+
+        let first = RecoveryViewModel(
+            scanner: scanner, recoveredStore: RecoveredRecordingsStore(defaults: defaults)
+        )
+        first.refresh()
+        first.recover(try #require(first.recordings.first))
+        #expect(first.recordings.isEmpty)
+
+        let relaunched = RecoveryViewModel(
+            scanner: scanner, recoveredStore: RecoveredRecordingsStore(defaults: defaults)
+        )
+        relaunched.refresh()
+        #expect(relaunched.hasScanned)
+        #expect(relaunched.recordings.isEmpty)
+    }
+
     // MARK: - Format wiring
 
     @Test("Every implemented format has a recovery handler")
