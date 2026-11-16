@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Report a problem** — Choose Open Email Draft, Copy Diagnostic Report, or Report on GitHub from the Home Rec menu. The draft to support@homerec.app includes your Home Rec and macOS versions, recent log entries, and Sparkle startup error details when available. Copy Diagnostic Report and Export Diagnostics include more log context. These reports shorten paths in your home folder to `~`. The GitHub issue is prefilled with version information. (BL-141)
 - **Your last recording is still there after you reopen Home Rec** — The menu-bar popover shows the recording you made last, with a button to reveal it in Finder, but Home Rec forgot it the moment it quit: open the app the next day and there was only a record button. It now remembers the recording once the file has finished saving, so it is there the next time you open Home Rec, in the popover and in the main window. If you have since moved or deleted the file, it is not shown, and pressing Reveal on a file that has gone takes the row away instead of doing nothing. A recording cut off by a crash or a power cut is not remembered this way; Recover Recordings is where to find it. (BL-143)
 
 ### Fixed
