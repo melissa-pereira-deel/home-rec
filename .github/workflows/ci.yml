@@ -46,10 +46,7 @@ concurrency:
 # This is also what makes `SWIFT_STRICT_CONCURRENCY = complete` a real gate: a
 # warning count means nothing until the compiler producing it is named. The
 # expected result is zero, measured here, on this version.
-#
-# ⚠️ The TSan job's documented CoreMedia abort was characterised on macOS 15. It
-# is advisory (`continue-on-error`) and cannot fail the PR either way, but its
-# note describes behaviour on an image this workflow no longer uses.
+
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
 
@@ -96,21 +93,33 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
       - name: Run unit tests (Thread Sanitizer, advisory)
-        # ADVISORY (continue-on-error): TSan reliably aborts the test host with
-        # SIGABRT on this CI runner during the audio tests — a CoreMedia/AVFoundation
-        # instrumentation issue exercised by the buffer fixtures (since BL-007), NOT
-        # a race in our code, and not reproducible locally (the full suite + TSan
-        # passes locally, repeatedly). We can't fix Apple's frameworks, so this step
-        # does not block: it still runs and uploads results to surface real races
-        # when it completes, but a system-framework abort won't fail the PR. The
-        # authoritative TSan run for the BL-024 serial-queue guard is the local dev
-        # loop (targeted `-enableThreadSanitizer YES` runs, which are reliable).
-        # M4AEncoderTests is skipped — it aborts deterministically (AAC codec).
-        # FLACEncoderTests is skipped for the same reason: it drives the same
-        # AVFoundation/CoreAudio codec machinery via AVAudioFile. An aborting
-        # host yields NO results for ANY test in this job, so one aborting suite
-        # would silently destroy the advisory race signal for the whole run.
+        # ADVISORY (continue-on-error): a race report must not fail the PR, but
+        # the next step must say what this one found. Read that step, not this
+        # one: TSan writes to the test host's stderr, which xcodebuild keeps
+        # inside the .xcresult and never prints here.
+        #
+        # `halt_on_error=0` keeps the host alive through a report. Without it
+        # the host died on the FIRST report, and Swift Testing then marked every
+        # unfinished test "crashed" in 0.000 s — so one report, real or not,
+        # decided how much of the suite was checked at all. On all nine runs
+        # sampled (2026-09-07 to 2026-11-15, two images), between 7 and 234 of
+        # ~376 tests finished, and each run held exactly one report.
+        #
+        # The report it kept stopping at was a TSan false positive in the test
+        # fixtures, not a race in the app (BL-182): AVAudioPCMBuffer recycles
+        # sample memory through a private malloc zone TSan cannot see. The
+        # fixtures now allocate with malloc — see SampleBufferFixtures. The
+        # earlier "CoreMedia/AVFoundation abort" diagnosis described that same
+        # report from the outside, and the M4AEncoderTests / FLACEncoderTests
+        # skips it justified are gone: both suites run clean under TSan.
+        #
+        # Nothing is skipped, so the race check covers the whole unit suite. It
+        # covers only what the suite exercises: not ScreenCaptureKit capture,
+        # which needs Screen Recording permission a runner cannot grant.
         continue-on-error: true
+        env:
+          # xcodebuild hands TEST_RUNNER_<NAME> to the test host as <NAME>.
+          TEST_RUNNER_TSAN_OPTIONS: halt_on_error=0
         run: |
           set -o pipefail
           xcodebuild test \
@@ -118,13 +127,20 @@ jobs:
             -scheme HomeRec \
             -destination 'platform=macOS' \
             -only-testing:HomeRecTests \
-            -skip-testing:HomeRecTests/M4AEncoderTests \
-            -skip-testing:HomeRecTests/FLACEncoderTests \
             -enableThreadSanitizer YES \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 300 \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Report Thread Sanitizer findings
+        # Annotates each distinct race as a warning, and a host crash (tests
+        # marked crashed, so never checked) or an empty run as an error, and
+        # writes the counts to the job summary. Advisory like the run itself:
+        # it fails this step, visibly, but never the PR.
+        if: always()
+        continue-on-error: true
+        run: scripts/tsan-report.sh TestResults.xcresult
 
       - name: Upload test results
         if: always()
