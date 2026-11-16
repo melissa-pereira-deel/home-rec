@@ -88,3 +88,29 @@ func settle() async {
     try? await Task.sleep(for: .milliseconds(5))
     for _ in 0..<200 { await Task.yield() }
 }
+
+/// A one-shot suspension that stays open for later calls (including deinit).
+@MainActor
+final class Gate {
+    private(set) var isWaiting = false
+    private var released = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard !released else { return }
+        // `cleanup()` runs on three controller paths plus `deinit`, so a
+        // gate can be entered twice. Overwriting would strand the first
+        // continuation and hang the test past any timeout.
+        precondition(continuation == nil, "Gate does not support concurrent waiters")
+        await withCheckedContinuation {
+            continuation = $0
+            isWaiting = true
+        }
+    }
+
+    func release() {
+        released = true
+        continuation?.resume()
+        continuation = nil
+    }
+}

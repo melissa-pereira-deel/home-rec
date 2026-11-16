@@ -251,7 +251,9 @@ struct TerminationTests {
         #expect(viewModel.state == .idle)
     }
 
-    @Test("An errored take needs no drain — the file is already closed")
+    /// A failed *start* rolls back before it throws, so nothing is open. A take
+    /// that failed mid-recording is different — see `FailureTeardownTests`.
+    @Test("A failed start needs no drain — it was rolled back before the error")
     func errorNeedsNoDrain() async {
         let (viewModel, controller) = makeViewModel()
         controller.startError = RecorderError.startFailed("nope")

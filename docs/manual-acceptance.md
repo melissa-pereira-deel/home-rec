@@ -246,6 +246,13 @@ open **without** repair, and Recovery must not offer it afterwards.
       and the **Dock icon's** Quit — they are four different code paths into one
       delegate method, and only the last was ever named in the backlog
 - [ ] Quitting while **idle** is still instant — no added delay on the common case
+- [ ] **A take that failed, then ⌘Q at once** (BL-171c) — record from a
+      microphone, unplug it mid-take, and press ⌘Q the moment the alert appears.
+      The file opens and reports its true length, and Recovery lists nothing on
+      the next launch. A failed take shows the error *before* it finishes
+      writing the file, so this is the one quit that lands while the app looks
+      idle and is not. The suite holds that teardown open with a fake; only this
+      exercises a real encoder
 
 ⚠️ **Not mechanically testable, and not a formality.** The unit suite drives a
 fake drain; it cannot exercise AppKit's termination reply or a real encoder's

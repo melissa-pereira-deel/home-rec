@@ -234,11 +234,30 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
 
 extension ScreenCaptureAudioManager: SCStreamDelegate {
 
-    func stream(_ stream: SCStream, didStopWithError error: Error) {
+    /// ScreenCaptureKit calls this on a queue of its own, so it hops to the main
+    /// actor before touching anything — `stream`, `isCapturing` and
+    /// `onStreamError` are all written there.
+    ///
+    /// The hop is also what makes the identity check possible (BL-171c). A
+    /// stream this manager has already let go of can still report: without the
+    /// check, a take that ended would mark the *next* take as not capturing and
+    /// report it as failed. Compared by identity on the main actor, where
+    /// `stream` is assigned; the reporting stream is carried across in an
+    /// `UncheckedTransfer` so it stays alive until the comparison, and a new
+    /// stream cannot be allocated at its address in between.
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         let message = error.localizedDescription
         Log.capture.error("Capture stream stopped with error: \(message, privacy: .public)")
-        isCapturing = false
-        onStreamError?(message)
+        let reporting = UncheckedTransfer(stream)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard reporting.value === self.stream else {
+                Log.capture.error("Ignored a stop report from a stream that is no longer current")
+                return
+            }
+            self.isCapturing = false
+            self.onStreamError?(message)
+        }
     }
 }
 

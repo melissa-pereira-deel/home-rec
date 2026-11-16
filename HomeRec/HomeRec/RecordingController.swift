@@ -47,12 +47,6 @@ class RecordingController: RecordingControlling {
         self.audioRecorder = audioRecorder ?? AudioRecorder()
         self.saveLocation = saveLocation ?? SaveLocationManager()
         self.audioSource = audioSource ?? AudioSourceManager()
-        self.captureManager.onStreamError = { [weak self] message in
-            self?.onStreamError?(message)
-        }
-        self.audioRecorder.onWriteError = { [weak self] message in
-            self?.onWriteError?(message)
-        }
     }
 
     // MARK: - Public Methods
@@ -80,10 +74,9 @@ class RecordingController: RecordingControlling {
             throw RecordingControllerError.insufficientDiskSpace
         }
 
-        // Wire waveform callback
-        audioRecorder.onWaveformData = onWaveformData
-
-        session = RecordingSession(fileURL: fileURL)
+        let session = RecordingSession(fileURL: fileURL)
+        self.session = session
+        installSinks(for: session)
 
         // Everything from here acquires something, so it is one transaction
         // (BL-171a). Before this, a throw from either capture call left an open
@@ -109,6 +102,48 @@ class RecordingController: RecordingControlling {
 
         Log.recorder.info("Recording started")
         return fileURL
+    }
+
+    /// Route everything the layers below report through a check that it comes
+    /// from the take that is still current (BL-171c).
+    ///
+    /// Installed per take rather than once at init, because the sink *is* the
+    /// identity. `AudioRecorder` snapshots its handlers when a take starts and
+    /// hops to the main actor to deliver, so a report from a take that has since
+    /// been released arrives through that take's closure, carrying that take's
+    /// id — and is dropped here. A single shared sink could not tell it from
+    /// the live take's, and it stopped the live take.
+    ///
+    /// `ScreenCaptureAudioManager` reads `onStreamError` when it fires, not when
+    /// the stream is set up, so for the stream path this check only covers
+    /// reports that arrive with no take open; its delegate does the rest by
+    /// ignoring a stream it no longer holds.
+    private func installSinks(for session: RecordingSession) {
+        let id = session.id
+        captureManager.onStreamError = { [weak self] message in
+            guard let self, self.session?.id == id else {
+                Log.recorder.error("Dropped a stream failure from a take that is no longer current")
+                return
+            }
+            self.onStreamError?(message)
+        }
+        audioRecorder.onWriteError = { [weak self] reason in
+            guard let self, self.session?.id == id else {
+                Log.recorder.error("Dropped a write failure from a take that is no longer current")
+                return
+            }
+            self.onWriteError?(reason)
+        }
+        // Left nil when nobody is listening: the recorder skips downsampling
+        // altogether for a nil sink, and a wrapper would make it do the work.
+        if let onWaveformData {
+            audioRecorder.onWaveformData = { [weak self] samples in
+                guard let self, self.session?.id == id else { return }
+                onWaveformData(samples)
+            }
+        } else {
+            audioRecorder.onWaveformData = nil
+        }
     }
 
     /// Stop recording
