@@ -56,8 +56,30 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     // MARK: - Properties
 
     private var stream: SCStream?
-    private var audioCallback: ((AVAudioPCMBuffer) -> Void)?
     private var isCapturing = false
+
+    /// The queue ScreenCaptureKit delivers `.audio` and `.microphone` buffers
+    /// on, for the manager's lifetime rather than one per session. Internal so
+    /// a test can run the sample handler on the queue it really runs on.
+    ///
+    /// ⚠️ `.audio` and `.microphone` deliberately SHARE it: they feed the same
+    /// `AudioFormatNormalizer`, whose `AVAudioConverter` is declared Sendable
+    /// but is not safe to drive from two queues, and the compiler will not
+    /// warn about it. Giving the mic its own queue would be a silent data race.
+    nonisolated let audioQueue = DispatchQueue(
+        label: "com.mdebritto.homerec.audio.capture",
+        qos: .userInitiated
+    )
+
+    /// Where each normalised buffer goes. Read by the sample handler on
+    /// `audioQueue`, and written on the main actor by `prepareSession` and
+    /// `cleanup`.
+    ///
+    /// ⚠️ `nonisolated(unsafe)` because that is what it is: touched from both
+    /// sides with nothing ordering them (TD-009). The SDK's unannotated
+    /// protocols let the compiler believe the handler runs on the main actor,
+    /// so without this the race was invisible to it as well.
+    nonisolated(unsafe) private var audioCallback: ((AVAudioPCMBuffer) -> Void)?
 
     /// Forces every captured buffer to the canonical 48 kHz stereo format the
     /// encoders are told to expect (BL-112).
@@ -67,7 +89,9 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     /// from two queues. This one belongs to the `.audio` handler queue. When
     /// BL-130 adds a `.microphone` output it must either share that queue or get
     /// its own normalizer; it must not share this one across queues.
-    private var audioNormalizer = AudioFormatNormalizer()
+    ///
+    /// ⚠️ `nonisolated(unsafe)` for the same reason as `audioCallback` (TD-009).
+    nonisolated(unsafe) private var audioNormalizer = AudioFormatNormalizer()
 
     /// One-shot latches so a rejected buffer is reported once per session rather
     /// than per buffer — this is the capture hot path (BL-150).
@@ -75,8 +99,8 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     /// ⚠️ Written and read on the sample-handler queue only, unlike the
     /// properties above it, so these two add no new cross-queue access. The rest
     /// of this file's race is TD-009 and is not made worse here.
-    private var hasLoggedConversionFailure = false
-    private var hasLoggedNormalizeFailure = false
+    nonisolated(unsafe) private var hasLoggedConversionFailure = false
+    nonisolated(unsafe) private var hasLoggedNormalizeFailure = false
 
     /// Called when the stream stops unexpectedly. See `AudioCapturing`.
     var onStreamError: (@MainActor (String) -> Void)?
@@ -90,11 +114,7 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
     /// - Throws: ScreenCaptureAudioError if setup fails, or `.appNotRunning` if `source`
     ///   is `.app` and no running app matches its bundle ID.
     func setupCapture(source: AudioSource, audioCallback: @escaping (AVAudioPCMBuffer) -> Void) async throws {
-        self.audioCallback = audioCallback
-        // Fresh converter state per session: this manager outlives a single
-        // recording, and a converter carrying the previous take's resampler state
-        // would start the next one mid-phase.
-        self.audioNormalizer = AudioFormatNormalizer()
+        prepareSession(audioCallback: audioCallback)
 
         // Get available displays (and, for .app, running applications)
         let content = try await SCShareableContent.excludingDesktopWindows(
@@ -173,17 +193,7 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
             sampleHandlerQueue: DispatchQueue(label: "com.mdebritto.homerec.screen.capture", qos: .userInitiated)
         )
 
-        // Add audio output.
-        //
-        // ⚠️ `.audio` and `.microphone` deliberately SHARE one sample-handler
-        // queue. They feed the same `AudioFormatNormalizer`, which holds a
-        // stateful `AVAudioConverter` — declared Sendable but not safe to drive
-        // from two queues, and the compiler will not warn about it. Giving the
-        // mic its own queue would be a silent data race.
-        let audioQueue = DispatchQueue(
-            label: "com.mdebritto.homerec.audio.capture",
-            qos: .userInitiated
-        )
+        // Add audio output. `.microphone` shares `audioQueue`; see there.
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
 
         if isMicSource {
@@ -191,6 +201,19 @@ class ScreenCaptureAudioManager: NSObject, AudioCapturing {
         }
 
         Log.capture.debug("Capture stream configured (screen + audio handlers added)")
+    }
+
+    /// The state a session's sample handler reads, set before any stream exists.
+    ///
+    /// Split out of `setupCapture` so a test can begin a session without
+    /// `SCShareableContent`, which needs Screen Recording permission and can
+    /// raise the system prompt.
+    func prepareSession(audioCallback: @escaping (AVAudioPCMBuffer) -> Void) {
+        self.audioCallback = audioCallback
+        // Fresh converter state per session: this manager outlives a single
+        // recording, and a converter carrying the previous take's resampler state
+        // would start the next one mid-phase.
+        self.audioNormalizer = AudioFormatNormalizer()
     }
 
     /// Start audio capture
@@ -265,11 +288,21 @@ extension ScreenCaptureAudioManager: SCStreamDelegate {
 
 extension ScreenCaptureAudioManager: SCStreamOutput {
 
-    func stream(
+    /// Called on `audioQueue` (and the screen queue, for `.screen`), never on
+    /// the main actor, whatever the SDK's unannotated protocol lets the
+    /// compiler assume.
+    nonisolated func stream(
         _ stream: SCStream,
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
+        processSample(sampleBuffer, of: type)
+    }
+
+    /// The handler's work, without the `SCStream` argument, which a test cannot
+    /// build: constructing one needs a display from `SCShareableContent`.
+    /// Production reaches it only through the delegate method above.
+    nonisolated func processSample(_ sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         // Ignore video samples (we only need audio). No logging here: this
         // fires per audio buffer on the capture queue — the hot path.
         //
