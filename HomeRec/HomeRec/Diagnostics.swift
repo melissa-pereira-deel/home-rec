@@ -2,13 +2,7 @@
 //  Diagnostics.swift
 //  HomeRec
 //
-//  Builds a shareable diagnostics report from the app's unified-logging
-//  entries and provides a "Report a Problem" path — so a non-developer can
-//  send actionable info instead of hunting for a log file. (BL-042)
-//
-//  The report goes by email, not as a GitHub issue (BL-141): the people this
-//  app is for will not open a GitHub account to tell us something broke, and
-//  with no telemetry this is the only way they can tell us at all.
+//  Builds shareable diagnostics from the app’s unified log.
 //
 
 import Foundation
@@ -22,7 +16,7 @@ enum Diagnostics {
 
     @MainActor private static var updaterStartupFailure: CapturedUpdaterStartupFailure?
 
-    private struct CapturedUpdaterStartupFailure: Equatable {
+    private struct CapturedUpdaterStartupFailure {
         let domain: String
         let code: Int
         let description: String
@@ -60,26 +54,19 @@ enum Diagnostics {
 
     /// A shareable diagnostics report: environment header + recent app log entries.
     @MainActor
-    static func report(date: Date = Date()) -> String {
-        var lines = [
+    static func report(
+        date: Date = Date(),
+        logLines: [String]? = nil,
+        homeDirectory: String = NSHomeDirectory()
+    ) -> String {
+        let sanitize = reportSanitizer(homeDirectory: homeDirectory)
+        return ([
             "Home Rec Diagnostics",
-            "App version: \(appVersion)",
-            "macOS: \(systemVersion)",
-            "Generated: \(ISO8601DateFormatter().string(from: date))",
-            "",
-            "Recent log entries:"
-        ]
-        lines.append(contentsOf: recentLogLines())
-        if let updaterStartupFailure {
-            lines.append(contentsOf: [
-                "",
-                "Updater startup failure:",
-                "Domain: \(updaterStartupFailure.domain)",
-                "Code: \(updaterStartupFailure.code)",
-                "Description: \(updaterStartupFailure.description)"
-            ])
-        }
-        return lines.joined(separator: "\n")
+            "App version: \(sanitize(appVersion))",
+            "macOS: \(sanitize(systemVersion))",
+            "Generated: \(ISO8601DateFormatter().string(from: date))"
+        ] + updaterLines(sanitize: sanitize) + logSection((logLines ?? recentLogLines()).map(sanitize)))
+            .joined(separator: "\n")
     }
 
     /// Recent entries from this app's subsystem (best-effort; last hour).
@@ -106,63 +93,76 @@ enum Diagnostics {
     /// some mail apps truncate or refuse longer ones, so the log is cut to fit.
     static let maxEmailURLLength = 2000
 
-    /// How many of the newest log lines the email starts from, before trimming
-    /// to fit. Export Diagnostics carries the full log.
     private static let emailLogLineLimit = 40
 
-    /// A `mailto:` link to `supportAddress`, prefilled with versions and the
-    /// newest log entries, cut from the oldest end to fit `maxEmailURLLength`.
-    ///
-    /// The home folder's path is replaced with `~`: unlike an exported file,
-    /// this leaves the Mac, and the path names the user's account.
+    /// Keeps the newest log entries that fit the percent-encoded mailto budget.
+    @MainActor
     static func reportEmailURL(
         appVersion: String,
         systemVersion: String,
         logLines: [String],
         homeDirectory: String = NSHomeDirectory()
     ) -> URL? {
-        let subject = "Home Rec problem report"
-        var tail = logLines.suffix(emailLogLineLimit).map { redactingHome($0, homeDirectory) }
+        let sanitize = reportSanitizer(homeDirectory: homeDirectory)
+        let header = [
+            "Describe the problem:",
+            "",
+            "",
+            "---",
+            "App version: \(bounded(sanitize(appVersion), to: 160))",
+            "macOS: \(bounded(sanitize(systemVersion), to: 160))"
+        ] + updaterLines(sanitize: sanitize)
+        var tail = logLines.suffix(emailLogLineLimit).map { bounded(sanitize($0), to: 450) }
         var trimmed = logLines.count > tail.count
+        let linkPrefix = "mailto:\(supportAddress)?subject=\(mailtoEncoded("Home Rec problem report"))&body="
         while true {
-            let body = emailBody(
-                appVersion: appVersion,
-                systemVersion: systemVersion,
-                logLines: tail,
-                trimmed: trimmed
-            )
-            let link = "mailto:\(supportAddress)?subject=\(mailtoEncoded(subject))&body=\(mailtoEncoded(body))"
-            if link.count <= maxEmailURLLength || tail.isEmpty {
+            var lines = header + logSection(tail)
+            if trimmed {
+                lines.append("(Earlier entries left out. Choose Copy Diagnostic Report or Export Diagnostics… for more context.)")
+            }
+            // RFC 6068 requires CRLF for mailto body line breaks.
+            let link = linkPrefix + mailtoEncoded(lines.joined(separator: "\r\n"))
+            if link.utf8.count <= maxEmailURLLength {
                 return URL(string: link)
             }
+            guard !tail.isEmpty else { return nil }
             tail.removeFirst()
             trimmed = true
         }
     }
 
-    private static func emailBody(
-        appVersion: String,
-        systemVersion: String,
-        logLines: [String],
-        trimmed: Bool
-    ) -> String {
-        var lines = [
-            "Describe the problem:",
+    private static func logSection(_ entries: [String]) -> [String] {
+        ["", "Recent log entries:"] + (entries.isEmpty ? ["(no recent log entries)"] : entries)
+    }
+
+    @MainActor
+    private static func updaterLines(sanitize: (String) -> String) -> [String] {
+        guard let failure = updaterStartupFailure else { return [] }
+        return [
             "",
-            "",
-            "---",
-            "App version: \(appVersion)",
-            "macOS: \(systemVersion)",
-            "",
-            "Recent log entries:"
+            "Updater startup failure:",
+            "Domain: \(bounded(sanitize(failure.domain), to: 140))",
+            "Code: \(failure.code)",
+            "Description: \(bounded(sanitize(failure.description), to: 360))"
         ]
-        lines.append(contentsOf: logLines.isEmpty ? ["(no recent log entries)"] : logLines)
-        if trimmed {
-            lines.append("(Earlier entries left out. For the full log, choose Export Diagnostics… in the Home Rec menu and attach the file.)")
+    }
+
+    /// Keeps entries intact when possible and truncates on character boundaries.
+    private static func bounded(_ text: String, to encodedByteLimit: Int) -> String {
+        let ellipsis = "…"
+        let ellipsisSize = mailtoEncoded(ellipsis).utf8.count
+        var encodedSize = 0
+        var prefixEnd = text.startIndex
+        for index in text.indices {
+            encodedSize += mailtoEncoded(String(text[index])).utf8.count
+            if encodedSize > encodedByteLimit {
+                return String(text[..<prefixEnd]) + ellipsis
+            }
+            if encodedSize <= encodedByteLimit - ellipsisSize {
+                prefixEnd = text.index(after: index)
+            }
         }
-        lines.append(contentsOf: ["", "Prefer GitHub? \(issueBaseURL)"])
-        // RFC 6068: line breaks in a mailto body are CRLF.
-        return lines.joined(separator: "\r\n")
+        return text
     }
 
     /// Percent-encodes for a `mailto:` field. `urlQueryAllowed` leaves `&`, `=`,
@@ -174,9 +174,17 @@ enum Diagnostics {
         return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
     }
 
-    private static func redactingHome(_ text: String, _ homeDirectory: String) -> String {
-        guard !homeDirectory.isEmpty else { return text }
-        return text.replacingOccurrences(of: homeDirectory + "/", with: "~/")
+    private static func reportSanitizer(homeDirectory: String) -> (String) -> String {
+        let home = homeDirectory.replacingOccurrences(of: #"/+$"#, with: "", options: .regularExpression)
+        let path = NSRegularExpression.escapedPattern(for: home)
+        // Match descendants and standalone paths while preserving sibling names.
+        let boundary = #"(?=$|[/\s"'<>\x{2019}\x{201D}\x{60},:;!?()\[\]{}]|\.(?:$|\s))"#
+        let homePattern = home.isEmpty ? nil : try? NSRegularExpression(pattern: path + boundary)
+        return { text in
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            let redacted = homePattern?.stringByReplacingMatches(in: text, range: range, withTemplate: "~") ?? text
+            return redacted.replacingOccurrences(of: #"[\r\n]+"#, with: " ", options: .regularExpression)
+        }
     }
 
     /// Prefilled "Report a Problem" GitHub issue URL including version info.
@@ -216,48 +224,39 @@ extension Diagnostics {
         }
     }
 
-    /// Opens a prefilled email to `supportAddress`. When nothing can open it,
-    /// the full report is copied with the address, and the user is told.
-    ///
-    /// The three effects are injected so both outcomes are testable without a
-    /// mail app or a pasteboard.
-    static func reportProblem(
-        opening open: (URL) -> Bool,
-        copying copy: (String) -> Void,
-        onNoMailApp: () -> Void
-    ) {
-        if let url = reportEmailURL(
-            appVersion: appVersion,
-            systemVersion: systemVersion,
-            logLines: recentLogLines()
-        ), open(url) {
-            return
-        }
-        Log.recorder.info("No app opened the report email; copying the report instead")
-        copy("To: \(supportAddress)\n\n" + redactingHome(report(), NSHomeDirectory()))
-        onNoMailApp()
-    }
-
-    /// "Report a Problem": email first, GitHub for those who prefer it (BL-141).
     static func reportProblem() {
-        reportProblem(
-            opening: { NSWorkspace.shared.open($0) },
-            copying: { text in
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-            },
-            onNoMailApp: showNoMailAppAlert
-        )
-    }
-
-    private static func showNoMailAppAlert() {
         let alert = NSAlert()
-        alert.messageText = "No email app is set up"
-        alert.informativeText = "The report is copied. Paste it into an email to \(supportAddress)."
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Report on GitHub Instead")
-        if alert.runModal() == .alertSecondButtonReturn, let url = reportIssueURL() {
-            NSWorkspace.shared.open(url)
+        alert.messageText = "Report a Problem"
+        alert.informativeText = "Open a draft to \(supportAddress), copy diagnostics to share, or open a GitHub issue with your version information."
+        alert.addButton(withTitle: "Open Email Draft")
+        alert.addButton(withTitle: "Copy Diagnostic Report")
+        alert.addButton(withTitle: "Report on GitHub")
+        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1B}"
+
+        NSApp.activate()
+        while true {
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                if let url = reportEmailURL(
+                    appVersion: appVersion,
+                    systemVersion: systemVersion,
+                    logLines: recentLogLines()
+                ), NSWorkspace.shared.open(url) {
+                    return
+                }
+                alert.informativeText = "The email draft couldn’t open. Copy the report to email it to \(supportAddress), or report the problem on GitHub."
+            case .alertSecondButtonReturn:
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(report(), forType: .string)
+                return
+            case .alertThirdButtonReturn:
+                if let url = reportIssueURL() {
+                    NSWorkspace.shared.open(url)
+                }
+                return
+            default:
+                return
+            }
         }
     }
 }

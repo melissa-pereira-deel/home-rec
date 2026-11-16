@@ -74,11 +74,6 @@ struct ReportByEmailTests {
         #expect(body.contains("[capture] Capture started"))
     }
 
-    @Test("The GitHub route is still offered, for people who use it")
-    func keepsGitHubRoute() throws {
-        #expect(try field("body", of: url()).contains(Diagnostics.issueBaseURL))
-    }
-
     /// `URLComponents` leaves `&`, `=` and `+` unescaped in a query, which
     /// would cut the body short at the first `&` and turn `+` into a space in
     /// some mail apps.
@@ -90,18 +85,28 @@ struct ReportByEmailTests {
         #expect(try field("subject", of: url).contains("Home Rec"), "the body leaked into a second field")
     }
 
-    @Test("Line breaks are CRLF, as mailto requires")
+    @Test("Embedded line breaks are normalized before building the email")
     func crlfLineBreaks() throws {
-        let body = try field("body", of: url())
-        #expect(body.contains("\r\n"))
-        #expect(!body.replacingOccurrences(of: "\r\n", with: "").contains("\n"))
+        let body = try field("body", of: url(logLines: ["one\rtwo\nthree\r\nfour"]))
+        #expect(body.contains("one two three four"))
+        let fields = body.replacingOccurrences(of: "\r\n", with: "")
+        #expect(!fields.contains("\r"))
+        #expect(!fields.contains("\n"))
     }
 
-    @Test("The home folder's path is not sent")
+    @Test("Email and clipboard redact exact home paths and descendants")
     func homeFolderRedacted() throws {
-        let body = try field("body", of: url(logLines: ["[recovery] Scanned /Users/someone/Desktop/take.wav"]))
-        #expect(!body.contains("/Users/someone"))
-        #expect(body.contains("~/Desktop/take.wav"))
+        let logs = ["Scanned /Users/someone", "Opened '/Users/someone/Desktop/take.wav'",
+                    "Other account /Users/someone-else/recordings"]
+        let body = try field("body", of: url(logLines: logs))
+        let report = Diagnostics.report(logLines: logs, homeDirectory: "/Users/someone/")
+        for text in [body, report] {
+            #expect(text.contains("Scanned ~"))
+            #expect(text.contains("'~/Desktop/take.wav'"))
+            #expect(text.contains("/Users/someone-else/recordings"))
+            #expect(!text.contains("Scanned /Users/someone"))
+            #expect(!text.contains("'/Users/someone/"))
+        }
     }
 
     /// Mail apps and webmail handlers truncate or refuse long `mailto:` URLs.
@@ -110,41 +115,73 @@ struct ReportByEmailTests {
     func longLogTrimmedOldestFirst() throws {
         let lines = (1...400).map { "[recorder] entry \($0) with some detail to take up room" }
         let url = try url(logLines: lines)
-        #expect(url.absoluteString.count <= Diagnostics.maxEmailURLLength)
+        #expect(url.absoluteString.utf8.count <= Diagnostics.maxEmailURLLength)
         let body = try field("body", of: url)
         #expect(body.contains("entry 400 "), "the newest line was dropped")
         #expect(!body.contains("entry 1 "), "the oldest line was kept")
         #expect(body.contains("Export Diagnostics"), "nothing says where the rest is")
     }
 
-    @Test("With a mail app, the email opens and nothing else happens")
-    func opensMailApp() throws {
-        var opened: [URL] = []
-        var copied: [String] = []
-        var alerted = 0
-        Diagnostics.reportProblem(
-            opening: { opened.append($0); return true },
-            copying: { copied.append($0) },
-            onNoMailApp: { alerted += 1 }
-        )
-        #expect(opened.count == 1)
-        #expect(opened.first?.scheme == "mailto")
-        #expect(copied.isEmpty)
-        #expect(alerted == 0)
+    @Test("An oversized newest entry is shortened before dropping older context")
+    func oversizedNewestEntry() throws {
+        let link = try url(logLines: ["previous context", "newest entry " + String(repeating: "🧑🏽‍💻", count: 2_000)])
+        let body = try field("body", of: link)
+        #expect(body.contains("previous context"))
+        #expect(body.contains("newest entry "))
+        #expect(body.contains("…"))
+        #expect(link.absoluteString.utf8.count <= Diagnostics.maxEmailURLLength)
     }
 
-    @Test("Without a mail app, the report is copied with the address, and the user is told")
-    func fallsBackToClipboard() throws {
-        var copied: [String] = []
-        var alerted = 0
-        Diagnostics.reportProblem(
-            opening: { _ in false },
-            copying: { copied.append($0) },
-            onNoMailApp: { alerted += 1 }
-        )
-        let text = try #require(copied.first)
-        #expect(text.contains("support@homerec.app"))
-        #expect(text.contains(Diagnostics.appVersion))
-        #expect(alerted == 1)
+    @Test("Updater startup failure appears in email and copied reports with bounded details")
+    func capturesUpdaterContext() throws {
+        Diagnostics.clearUpdaterStartupFailure()
+        defer { Diagnostics.clearUpdaterStartupFailure() }
+        Diagnostics.recordUpdaterStartupFailure(NSError(
+            domain: "Sparkle /Users/someone\r\n" + String(repeating: "D", count: 500),
+            code: 101,
+            userInfo: [NSLocalizedDescriptionKey: "Failed to read /Users/someone/config\n" + String(repeating: "🙂", count: 500)]
+        ))
+        let link = try url(logLines: ["newest context"])
+        let body = try field("body", of: link)
+        let rawReport = Diagnostics.report(logLines: ["newest context"], homeDirectory: "/Users/someone")
+        for text in [body, rawReport] {
+            #expect(text.contains("Updater startup failure:"))
+            #expect(text.contains("Domain: Sparkle ~ "))
+            #expect(text.contains("Code: 101"))
+            #expect(text.contains("Description: Failed to read ~/config "))
+            #expect(text.contains("newest context"))
+            #expect(!text.contains("/Users/someone"))
+            #expect(!text.contains(String(repeating: "D", count: 500)))
+            #expect(!text.contains(String(repeating: "🙂", count: 500)))
+        }
+        let issue = try #require(Diagnostics.reportIssueURL())
+        let issueBody = try field("body", of: issue)
+        #expect(!issueBody.contains("Updater startup failure"))
+        #expect(!issueBody.contains("Recent log entries"))
+        #expect(link.absoluteString.utf8.count <= Diagnostics.maxEmailURLLength)
+    }
+
+    @Test("Two thousand seeded cases fit the encoded byte budget and retain the newest entry")
+    func randomizedEmailURLs() throws {
+        var seed: UInt64 = 48
+        func sample(_ upperBound: Int) -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int((seed >> 32) % UInt64(upperBound))
+        }
+        let fragments = ["x", "ä", "🧑🏽‍💻", "&b=c+d % # ?", "\r\n", "/Users/someone/"]
+        for iteration in 0..<2_000 {
+            let log = (0..<sample(45)).map { index in
+                "\(index) " + String(repeating: fragments[sample(fragments.count)], count: sample(180))
+            }
+            let newest = "newest-\(iteration) "
+                + String(repeating: fragments[sample(fragments.count)], count: sample(600))
+            let link = try url(logLines: log + [newest])
+            let body = try field("body", of: link)
+            let components = try #require(URLComponents(url: link, resolvingAgainstBaseURL: false))
+            #expect(link.absoluteString.utf8.count <= Diagnostics.maxEmailURLLength)
+            #expect(components.queryItems?.map(\.name) == ["subject", "body"])
+            #expect(body.contains("newest-\(iteration)"))
+            #expect(!body.contains("/Users/someone"))
+        }
     }
 }
