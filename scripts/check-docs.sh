@@ -9,10 +9,18 @@
 # Run before a release (it is a step in docs/manual-acceptance.md), or from a
 # SessionStart hook. Exits non-zero when reality and the docs disagree.
 #
-# The tech-debt checks read private/tech-debt.md, which is not part of this
-# public repository. They are skipped when it is absent, so a contributor
-# cloning the repo gets the CLAUDE.md and rot-guard checks and no spurious
-# failures.
+# Two of its inputs are not part of this public repository: CLAUDE.md and
+# private/tech-debt.md are both gitignored. Every check that reads one of them
+# is skipped, with a printed note, when the file is absent, so the script exits
+# 0 on a clean checkout and CI runs it (BL-160).
+#
+# Be clear about what that CI run is worth. On a clean checkout the script can
+# only check what is public: the code invariants that need no doc to compare
+# against (sandbox off, the .screen handler, the version-config count, the
+# nonisolated encoders), the rot guards against README.md, and the release
+# evidence in README.md and docs/manual-acceptance.md. Everything it verifies
+# against CLAUDE.md or private/tech-debt.md is verified only where those files
+# exist — on the maintainer's machine. A green CI run says nothing about them.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -37,7 +45,9 @@ grep -q 'type: .screen' HomeRec/HomeRec/ScreenCaptureAudioManager.swift \
   || bad "The .screen output handler is gone — startCapture() will throw (constraint 2)"
 
 target=$(grep -m1 'MACOSX_DEPLOYMENT_TARGET' HomeRec/HomeRec.xcodeproj/project.pbxproj | tr -dc '0-9.')
-if grep -q "Minimum deployment: macOS ${target%.}" CLAUDE.md 2>/dev/null \
+if [ ! -f CLAUDE.md ]; then
+  note "CLAUDE.md not present — skipping the deployment-target match (constraint 4)"
+elif grep -q "Minimum deployment: macOS ${target%.}" CLAUDE.md \
    || grep -q "macOS ${target%.}" CLAUDE.md; then
   ok "Deployment target ${target%.} matches CLAUDE.md (constraint 4)"
 else
@@ -88,8 +98,14 @@ echo "Rot guards:"
 # `DebugLogger.swift` in its project tree for months while this guard reported
 # "no references to deleted DebugLogger.swift" — it was only ever looking at one
 # file. A guard that checks a subset of the places a claim can rot is worse than
-# none, because it reports success.
-GHOST_DOCS="CLAUDE.md README.md"
+# none, because it reports success — so a doc that is absent is named as
+# skipped, never silently passed over.
+GHOST_DOCS="README.md"
+if [ -f CLAUDE.md ]; then
+  GHOST_DOCS="CLAUDE.md $GHOST_DOCS"
+else
+  note "CLAUDE.md not present — ghost-file checks cover README.md only"
+fi
 
 for ghost in DebugLogger.swift WaveformView.swift ShelfMenu.swift; do
   if [ -f "HomeRec/HomeRec/$ghost" ]; then
@@ -112,10 +128,14 @@ n=$(grep -rc 'NSLog' HomeRec/HomeRec/ --include='*.swift' 2>/dev/null | awk -F: 
   && ok "No NSLog calls (the old TD-004 is genuinely gone)" \
   || note "$n NSLog call(s) — migrate to Log.*"
 
-lines=$(wc -l < CLAUDE.md)
-[ "$lines" -le 200 ] \
-  && ok "CLAUDE.md is $lines lines (target: under 200)" \
-  || bad "CLAUDE.md is $lines lines — over the 200-line target, which reduces instruction adherence"
+if [ ! -f CLAUDE.md ]; then
+  note "CLAUDE.md not present — skipping its line-count check"
+else
+  lines=$(wc -l < CLAUDE.md)
+  [ "$lines" -le 200 ] \
+    && ok "CLAUDE.md is $lines lines (target: under 200)" \
+    || bad "CLAUDE.md is $lines lines — over the 200-line target, which reduces instruction adherence"
+fi
 
 echo
 
