@@ -15,6 +15,7 @@ enum AudioRecorderError: Error, LocalizedError {
     case formatNotSupported
     case bufferConversionFailed
     case notRecording
+    case alreadyRecording
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum AudioRecorderError: Error, LocalizedError {
             return "Failed to convert audio buffer"
         case .notRecording:
             return "Not currently recording"
+        case .alreadyRecording:
+            return "A recording is still open"
         }
     }
 
@@ -39,6 +42,8 @@ enum AudioRecorderError: Error, LocalizedError {
             return "Try restarting the recording"
         case .notRecording:
             return "Start recording first"
+        case .alreadyRecording:
+            return "Wait for the current recording to finish"
         }
     }
 }
@@ -71,7 +76,8 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
     /// Set once, on the processing queue, when a write fails (BL-173). Latched
     /// rather than re-reported: buffers arrive ~47×/sec, so an unlatched failure
     /// would raise an alert for every one of them.
-    private var writeFailed = false
+    private var writeFailure: WriteFailure?
+    private var isClosing = false
 
     /// Snapshot of `onWriteError` taken at start and confined to the processing
     /// queue, so the queue never reads a property the main actor is writing.
@@ -119,18 +125,16 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
     ///     `channels` are the capture (input) format; the encoder owns its output.
     /// - Throws: the format's `makeEncoder()` error, or a file-creation error.
     func startRecording(to fileURL: URL, format: AudioFormat) throws {
-        let encoder = try encoderFactory(format)
-        try encoder.createFile(at: fileURL, sampleRate: sampleRate, channels: channels)
-
-        // Confine the encoder to the processing queue: capture and stop threads
-        // must never touch `encoder` directly, so there's no cross-thread race.
-        // The write-failure latch and its handler are confined the same way and
-        // reset here, so a previous take's failure cannot silence this one.
         let handler = onWriteError
         let waveformHandler = onWaveformData
-        processingQueue.sync {
+        try processingQueue.sync {
+            guard self.encoder == nil, !isClosing else {
+                throw AudioRecorderError.alreadyRecording
+            }
+            let encoder = try encoderFactory(format)
+            try encoder.createFile(at: fileURL, sampleRate: sampleRate, channels: channels)
             self.encoder = encoder
-            self.writeFailed = false
+            self.writeFailure = nil
             self.activeWriteErrorHandler = handler
             self.activeWaveformHandler = waveformHandler
         }
@@ -158,33 +162,37 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
         }
     }
 
-    /// Stop recording
-    /// - Throws: AudioRecorderError if stop fails
-    func stopRecording() throws {
-        // Runs on the processing queue *after* all in-flight buffers (FIFO), so no
-        // trailing audio is dropped and the writer is finalized exactly once.
-        try processingQueue.sync {
-            guard encoder != nil else {
-                throw AudioRecorderError.notRecording
+    /// Drains the capture queue's submitted buffers before finishing the file.
+    /// The latch survives independently of delivery of the UI notification.
+    func stopRecording() async throws {
+        let (finalization, failure) = try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<(Result<Void, any Error>, WriteFailure?), any Error>) in
+            processingQueue.async {
+                guard let encoder = self.encoder else {
+                    continuation.resume(throwing: AudioRecorderError.notRecording)
+                    return
+                }
+                self.isClosing = true
+                self.encoder = nil
+                self.activeWriteErrorHandler = nil
+                self.activeWaveformHandler = nil
+                let result = Result { try encoder.finalize() }
+                continuation.resume(returning: (result, self.writeFailure))
             }
-            // Release the encoder even if finalize fails, otherwise a failed
-            // finalize would leave the recorder permanently "recording" and
-            // refuse every subsequent start.
-            defer {
-                encoder = nil
-                activeWriteErrorHandler = nil
-                activeWaveformHandler = nil
-            }
-            // BL-016: this was `try?`, which discarded every conformer's finalize
-            // error — a failed M4A finish was invisible to the user. The error
-            // now propagates and surfaces as `.stopFailed`.
-            try encoder?.finalize()
         }
+
+        defer { processingQueue.sync { isClosing = false } }
+        do {
+            try finalization.get()
+        } catch let pending as M4AFinishPending {
+            try await pending.waitForClose()
+        }
+        if let failure { throw failure }
     }
 
-    /// Whether the recorder is currently writing to a file.
+    /// Whether the recorder still owns an open or closing file.
     var recording: Bool {
-        processingQueue.sync { encoder != nil }
+        processingQueue.sync { encoder != nil || isClosing }
     }
 
     // MARK: - Private Methods
@@ -204,7 +212,7 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
         // This take is already over. Keep taking buffers off the queue, but stop
         // writing and — the point of BL-173 — stop publishing evidence that the
         // recording is still healthy.
-        guard !writeFailed else { return }
+        guard writeFailure == nil else { return }
 
         // Write FIRST. This used to run after the waveform was already on screen,
         // with the error discarded by `try?`, so a file that had stopped growing
@@ -215,7 +223,6 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
         do {
             try encoder.writeBuffer(pcmBuffer)
         } catch {
-            writeFailed = true
             // Classified here rather than downstream, because this is the only
             // place that still has the typed error. A size ceiling is not a
             // failure — the file is complete — and it must not inherit the
@@ -223,6 +230,7 @@ nonisolated final class AudioRecorder: AudioFileWriting, @unchecked Sendable {
             let reason: WriteFailure = (error as? WAVWriterError) == .sizeLimitReached
                 ? .sizeLimitReached
                 : .other(error.localizedDescription)
+            writeFailure = reason
             // The one log this hot path is allowed: it happens once per take, on
             // the way out, not once per buffer.
             Log.recorder.error(

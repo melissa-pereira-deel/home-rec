@@ -53,7 +53,7 @@ struct GoldenFileTests {
     }
 
     /// The full recorded file (header + data).
-    private func recordedBytes() throws -> [UInt8] {
+    private func recordedBytes() async throws -> [UInt8] {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -65,23 +65,23 @@ struct GoldenFileTests {
             ) { ch, f in sample(buffer: b, channel: ch, frame: f) }
             recorder.processAudioSample(pcmBuffer)
         }
-        try recorder.stopRecording()   // drains the queue, then finalizes
+        try await recorder.stopRecording()   // drains the queue, then finalizes
 
         return [UInt8](try Data(contentsOf: url))
     }
 
-    private func recordedPCMBytes() throws -> [UInt8] {
-        Array(try recordedBytes()[44...])   // strip the 44-byte header
+    private func recordedPCMBytes() async throws -> [UInt8] {
+        Array(try await recordedBytes()[44...])   // strip the 44-byte header
     }
 
     @Test("Canonical PCM buffer input → expected WAV PCM bytes (golden)")
-    func golden() throws {
-        #expect(try recordedPCMBytes() == expectedPCMBytes())
+    func golden() async throws {
+        #expect(try await recordedPCMBytes() == expectedPCMBytes())
     }
 
     @Test("WAV header is the expected 48kHz stereo PCM header (unchanged by the encoder seam)")
-    func goldenHeader() throws {
-        let bytes = try recordedBytes()
+    func goldenHeader() async throws {
+        let bytes = try await recordedBytes()
         #expect(bytes.count >= 44)
 
         func u32(_ o: Int) -> UInt32 {

@@ -35,7 +35,7 @@ struct AudioRecorderTests {
     }
 
     @Test("All submitted buffers are written — no trailing drops on stop")
-    func noBufferDropsOnStop() throws {
+    func noBufferDropsOnStop() async throws {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -47,7 +47,7 @@ struct AudioRecorderTests {
         for _ in 0..<bufferCount {
             recorder.processAudioSample(makePCMBuffer(frames: framesPerBuffer))
         }
-        try recorder.stopRecording()   // drains all in-flight buffers, then finalizes
+        try await recorder.stopRecording()   // drains all in-flight buffers, then finalizes
 
         // 48kHz stereo Int16: frames * channels(2) * 2 bytes
         let expected = bufferCount * framesPerBuffer * 2 * 2
@@ -55,7 +55,7 @@ struct AudioRecorderTests {
     }
 
     @Test("20 rapid start/stop cycles produce no corrupt-header files (TSan target)")
-    func rapidStartStopCycles() throws {
+    func rapidStartStopCycles() async throws {
         let buffersPerCycle = 5
         let framesPerBuffer = 32
         for _ in 0..<20 {
@@ -67,7 +67,7 @@ struct AudioRecorderTests {
             for _ in 0..<buffersPerCycle {
                 recorder.processAudioSample(makePCMBuffer(frames: framesPerBuffer))
             }
-            try recorder.stopRecording()
+            try await recorder.stopRecording()
 
             // Header must be valid and match the audio written (no corruption).
             let expected = buffersPerCycle * framesPerBuffer * 2 * 2
@@ -76,10 +76,10 @@ struct AudioRecorderTests {
     }
 
     @Test("stopRecording without an active recording throws")
-    func stopWithoutStartThrows() {
+    func stopWithoutStartThrows() async {
         let recorder = AudioRecorder()
-        #expect(throws: AudioRecorderError.self) {
-            try recorder.stopRecording()
+        await #expect(throws: AudioRecorderError.self) {
+            try await recorder.stopRecording()
         }
     }
 
@@ -101,15 +101,15 @@ struct AudioRecorderTests {
     }
 
     @Test("A finalize failure propagates instead of being silently swallowed")
-    func finalizeErrorPropagates() throws {
+    func finalizeErrorPropagates() async throws {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url) }
 
         let recorder = AudioRecorder(encoderFactory: { _ in FailingFinalizeEncoder() })
         try recorder.startRecording(to: url, format: .wav)
 
-        #expect(throws: FailingFinalizeEncoder.Boom.self) {
-            try recorder.stopRecording()
+        await #expect(throws: FailingFinalizeEncoder.Boom.self) {
+            try await recorder.stopRecording()
         }
     }
 
@@ -117,7 +117,7 @@ struct AudioRecorderTests {
     /// failed finalize can't strand the recorder in a permanently-recording state
     /// that refuses every subsequent start.
     @Test("A failed finalize still releases the encoder")
-    func failedFinalizeStillClearsState() throws {
+    func failedFinalizeStillClearsState() async throws {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -125,14 +125,14 @@ struct AudioRecorderTests {
         try recorder.startRecording(to: url, format: .wav)
         #expect(recorder.recording)
 
-        #expect(throws: FailingFinalizeEncoder.Boom.self) {
-            try recorder.stopRecording()
+        await #expect(throws: FailingFinalizeEncoder.Boom.self) {
+            try await recorder.stopRecording()
         }
 
         #expect(!recorder.recording)
         // A second stop reports "not recording", not another finalize attempt.
-        #expect(throws: AudioRecorderError.self) {
-            try recorder.stopRecording()
+        await #expect(throws: AudioRecorderError.self) {
+            try await recorder.stopRecording()
         }
         // And a fresh recording can still be started.
         let next = tempURL()

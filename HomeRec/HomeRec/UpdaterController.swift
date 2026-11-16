@@ -263,7 +263,7 @@ final class RelaunchPostponement {
     /// Runs a parked relaunch, at most once. Cleared before it runs, so a
     /// release triggered from inside the relaunch finds nothing to run.
     func release() {
-        guard let relaunch = parked else { return }
+        guard isSafeToInstall(), let relaunch = parked else { return }
         parked = nil
         Log.recorder.info("Recording ended; releasing the postponed update relaunch")
         relaunch()

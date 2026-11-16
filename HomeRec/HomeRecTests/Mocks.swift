@@ -131,7 +131,7 @@ nonisolated final class MockAudioFileWriting: AudioFileWriting, @unchecked Senda
         onWriteError?(reason)
     }
 
-    func stopRecording() throws {
+    func stopRecording() async throws {
         stopCount += 1
         recording = false
         onStop?()
@@ -370,6 +370,7 @@ final class MockRecordingControlling: RecordingControlling {
     private(set) var lastStartFormat: AudioFormat?
     /// Fired when `finalizeAfterFailure()` runs.
     var onFinalize: (() -> Void)?
+    var finalizeError: (any Error)?
     /// Suspends `finalizeAfterFailure()` before it releases anything, so a test
     /// can hold a failed take's teardown open and look at what is allowed
     /// meanwhile (BL-171c).
@@ -400,12 +401,13 @@ final class MockRecordingControlling: RecordingControlling {
         recordingURL = nil
     }
 
-    func finalizeAfterFailure() async {
+    func finalizeAfterFailure() async throws {
         finalizeCount += 1
         await onFinalizeHold?()
         isRecording = false
         recordingURL = nil
         onFinalize?()
+        if let finalizeError { throw finalizeError }
     }
 
     /// Simulate the underlying capture stream failing.

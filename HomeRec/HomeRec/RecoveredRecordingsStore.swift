@@ -22,18 +22,19 @@ nonisolated struct FileIdentity: Codable, Equatable, Sendable {
     let fileNumber: UInt64?
     let creationDate: Date?
 
-    /// `nil` when nothing can be read at `path`, which is how a file that has
-    /// gone is told apart from one that is still there.
+    /// `nil` when there is no identifiable regular file at `path`.
     ///
     /// Read through `FileManager` rather than `URLResourceValues`: a URL caches
     /// its resource values, so a URL kept from before a delete and recreate
     /// could report the old file.
     init?(atPath path: String) {
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
-            return nil
-        }
-        fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
-        creationDate = attributes[.creationDate] as? Date
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              attributes[.type] as? FileAttributeType == .typeRegular else { return nil }
+        let fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+        let creationDate = attributes[.creationDate] as? Date
+        guard fileNumber != nil || creationDate != nil else { return nil }
+        self.fileNumber = fileNumber
+        self.creationDate = creationDate
     }
 }
 

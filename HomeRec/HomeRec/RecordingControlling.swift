@@ -25,5 +25,5 @@ protocol RecordingControlling: AnyObject {
     func stopRecording() async throws
     /// Finalize after an unexpected capture failure: best-effort capture teardown
     /// plus finalizing the partial recording so captured audio is preserved.
-    func finalizeAfterFailure() async
+    func finalizeAfterFailure() async throws
 }

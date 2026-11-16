@@ -19,6 +19,7 @@ struct RecoverableRecording: Identifiable, Equatable {
     /// False when the file was interrupted so early that no audio reached disk —
     /// listed for honesty, but `recover` cannot help it.
     let isRepairable: Bool
+    let identity: FileIdentity
 
     var displayName: String { url.lastPathComponent }
 }
@@ -28,6 +29,7 @@ protocol RecoveryScanning {
     /// - Parameter excluding: the file currently being written, if any. A live
     ///   recording is unfinalized *by definition* and must never be offered.
     func scan(excluding inProgress: URL?) -> [RecoverableRecording]
+    func candidate(at url: URL, excluding inProgress: URL?) -> RecoverableRecording?
 }
 
 @MainActor
@@ -49,39 +51,36 @@ final class RecoveryScanner: RecoveryScanning {
             options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
         )) ?? []
 
-        let excluded = inProgress?.standardizedFileURL
-
-        return contents.compactMap { url -> RecoverableRecording? in
-            guard url.standardizedFileURL != excluded else { return nil }
-            // Only files this app wrote. `generateFilePath` names every recording
-            // `recording_<timestamp>`, optionally with a ` (n)` disambiguator.
-            guard url.lastPathComponent.hasPrefix("recording_") else { return nil }
-            guard let format = AudioFormat(rawValue: url.pathExtension.lowercased()),
-                  let recovery = format.recovery else { return nil }
-
-            // A file that can't be parsed is not evidence of a crash — it's just
-            // not ours to reason about. Skip rather than surfacing noise.
-            guard let unfinalized = try? recovery.isUnfinalized(at: url), unfinalized else { return nil }
-
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-            return RecoverableRecording(
-                url: url,
-                format: format,
-                byteCount: values?.fileSize ?? 0,
-                modifiedAt: values?.contentModificationDate ?? .distantPast,
-                isRepairable: (try? recovery.isRepairable(at: url)) ?? false
-            )
-        }
-        .sorted { $0.modifiedAt > $1.modifiedAt }   // most recent first
+        return contents.compactMap { Self.inspect(at: $0, excluding: inProgress) }
+            .sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
-    /// Make one recording playable. Format-specific work happens behind the
-    /// `AudioFileRecovering` seam; some formats (M4A) need no byte changes at all.
-    static func recover(_ recording: RecoverableRecording) throws {
-        guard let recovery = recording.format.recovery else {
-            throw AudioFileRecoveryError.notRepairable
-        }
-        guard recording.isRepairable else { throw AudioFileRecoveryError.notRepairable }
-        try recovery.repair(at: recording.url)
+    func candidate(at url: URL, excluding inProgress: URL?) -> RecoverableRecording? {
+        guard url.standardizedFileURL.deletingLastPathComponent().path
+                == saveLocation.resolvedDirectory.standardizedFileURL.path else { return nil }
+        return Self.inspect(at: url, excluding: inProgress)
+    }
+
+    private static func inspect(at url: URL, excluding inProgress: URL?) -> RecoverableRecording? {
+        let path = url.standardizedFileURL
+        guard path != inProgress?.standardizedFileURL,
+              url.lastPathComponent.hasPrefix("recording_"),
+              let format = AudioFormat(rawValue: url.pathExtension.lowercased()),
+              let recovery = format.recovery,
+              let identity = FileIdentity(atPath: path.path),
+              (try? recovery.isUnfinalized(at: url)) == true else { return nil }
+
+        let isRepairable = (try? recovery.isRepairable(at: url)) ?? false
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        // If the file changed during inspection, wait for the next scan.
+        guard FileIdentity(atPath: path.path) == identity else { return nil }
+        return RecoverableRecording(
+            url: url,
+            format: format,
+            byteCount: values?.fileSize ?? 0,
+            modifiedAt: values?.contentModificationDate ?? .distantPast,
+            isRepairable: isRepairable,
+            identity: identity
+        )
     }
 }

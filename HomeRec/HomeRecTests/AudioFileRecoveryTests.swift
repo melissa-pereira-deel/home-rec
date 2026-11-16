@@ -109,7 +109,10 @@ struct AudioFileRecoveryTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let pair = try await makePair(.wav, in: dir)
-        try WAVWriter.repair(at: pair.crashed)
+        let beforeIdentity = try #require(FileIdentity(atPath: pair.crashed.path))
+        let repairedIdentity = try #require(try WAVWriter.repair(at: pair.crashed, expectedIdentity: beforeIdentity))
+        #expect(repairedIdentity == FileIdentity(atPath: pair.crashed.path))
+        #expect(repairedIdentity != beforeIdentity)
 
         #expect(try WAVWriter.isUnfinalized(at: pair.crashed) == false)
         let file = try AVAudioFile(forReading: pair.crashed)
@@ -132,7 +135,10 @@ struct AudioFileRecoveryTests {
         #expect((try? AVAudioFile(forReading: pair.crashed)) == nil)
 
         let before = try Data(contentsOf: pair.crashed)
-        try FLACEncoder.repair(at: pair.crashed)
+        let beforeIdentity = try #require(FileIdentity(atPath: pair.crashed.path))
+        let repairedIdentity = try #require(try FLACEncoder.repair(at: pair.crashed, expectedIdentity: beforeIdentity))
+        #expect(repairedIdentity == FileIdentity(atPath: pair.crashed.path))
+        #expect(repairedIdentity != beforeIdentity)
         let after = try Data(contentsOf: pair.crashed)
 
         // After: it opens, and carries real audio.
@@ -312,6 +318,66 @@ struct AudioFileRecoveryTests {
         relaunched.refresh()
         #expect(relaunched.hasScanned)
         #expect(relaunched.recordings.isEmpty)
+    }
+
+    @Test("A stale Recover or Trash row leaves a replacement take untouched",
+          arguments: [false, true])
+    func staleActionLeavesReplacementUntouched(moveToTrash: Bool) async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pair = try await makePair(.wav, in: dir)
+        let scanner = RecoveryScanner(saveLocation: MockSaveLocationProviding(directory: dir))
+        let viewModel = RecoveryViewModel(scanner: scanner)
+        viewModel.refresh()
+        let stale = try #require(viewModel.recordings.first)
+
+        let replacement = try Data(contentsOf: pair.crashed)
+        // Atomic write creates a new file with the same interrupted bytes and path.
+        try replacement.write(to: pair.crashed, options: .atomic)
+        let replacementIdentity = try #require(FileIdentity(atPath: pair.crashed.path))
+        try #require(replacementIdentity != stale.identity)
+
+        if moveToTrash {
+            viewModel.moveToTrash(stale)
+        } else {
+            viewModel.recover(stale)
+        }
+
+        #expect(try Data(contentsOf: pair.crashed) == replacement)
+        #expect(viewModel.recordings.map(\.identity) == [replacementIdentity])
+        #expect(viewModel.errorMessage == AudioFileRecoveryError.recordingChanged.errorDescription)
+    }
+
+    @Test("A stale row is refreshed when the same WAV finishes in place")
+    func staleRowRefreshesWhenFileFinalizesInPlace() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pair = try await makePair(.wav, in: dir)
+        let scanner = RecoveryScanner(saveLocation: MockSaveLocationProviding(directory: dir))
+        let viewModel = RecoveryViewModel(scanner: scanner)
+        viewModel.refresh()
+        let stale = try #require(viewModel.recordings.first)
+
+        let finalized = try Data(contentsOf: pair.finalized)
+        try finalized.write(to: pair.crashed)
+        try #require(FileIdentity(atPath: pair.crashed.path) == stale.identity)
+        viewModel.moveToTrash(stale)
+
+        #expect(try Data(contentsOf: pair.crashed) == finalized)
+        #expect(viewModel.recordings.isEmpty)
+        #expect(viewModel.errorMessage == AudioFileRecoveryError.recordingChanged.errorDescription)
+    }
+
+    @Test("A malformed extended M4A box size stops bounded traversal")
+    func malformedExtendedM4ASize() throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("recording_malformed.m4a")
+        let firstBox = Data([0, 0, 0, 8]) + Data("ftyp".utf8)
+        let oversizedBox = Data([0, 0, 0, 1]) + Data("free".utf8)
+            + Data([0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])
+        try (firstBox + oversizedBox).write(to: url)
+        #expect(try M4AEncoder.isUnfinalized(at: url) == false)
     }
 
     // MARK: - Format wiring

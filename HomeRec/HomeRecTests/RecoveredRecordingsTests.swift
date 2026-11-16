@@ -14,32 +14,6 @@ import Foundation
 @MainActor
 struct RecoveredRecordingsTests {
 
-    /// Lists every file in one folder as an interrupted M4A. M4A repair is a
-    /// no-op, so a recovered file keeps being listed by the scan, exactly as the
-    /// real detector keeps listing a recovered M4A. Only the remembered action
-    /// can hide it.
-    @MainActor
-    private final class FolderScanner: RecoveryScanning {
-        let directory: URL
-
-        init(directory: URL) {
-            self.directory = directory
-        }
-
-        func scan(excluding inProgress: URL?) -> [RecoverableRecording] {
-            let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
-            return names.sorted().map { name in
-                RecoverableRecording(
-                    url: directory.appendingPathComponent(name),
-                    format: .m4a,
-                    byteCount: 4,
-                    modifiedAt: Date(timeIntervalSinceReferenceDate: 0),
-                    isRepairable: true
-                )
-            }
-        }
-    }
-
     /// A scratch folder holding real files, and a settings domain of its own.
     /// The test host is the app itself, so the standard domain would be the
     /// developer's own settings.
@@ -59,14 +33,15 @@ struct RecoveredRecordingsTests {
         @discardableResult
         func makeFile(_ name: String) throws -> URL {
             let url = directory.appendingPathComponent(name)
-            try Data("moof".utf8).write(to: url)
+            // The scanner recognizes a top-level movie fragment.
+            try (Data([0, 0, 0, 8]) + Data("moof".utf8)).write(to: url)
             return url
         }
 
         /// What a fresh launch of the app would build.
         func launch() -> RecoveryViewModel {
             RecoveryViewModel(
-                scanner: FolderScanner(directory: directory),
+                scanner: RecoveryScanner(saveLocation: MockSaveLocationProviding(directory: directory)),
                 recoveredStore: RecoveredRecordingsStore(defaults: defaults)
             )
         }
@@ -94,19 +69,19 @@ struct RecoveredRecordingsTests {
     func recoveredStaysRecoveredAfterRelaunch() throws {
         let f = try Fixture()
         defer { f.cleanup() }
-        try f.makeFile("a.m4a")
-        try f.makeFile("b.m4a")
+        try f.makeFile("recording_a.m4a")
+        try f.makeFile("recording_b.m4a")
 
         let first = f.launch()
         first.refresh()
-        let a = try #require(first.recordings.first { $0.displayName == "a.m4a" })
+        let a = try #require(first.recordings.first { $0.displayName == "recording_a.m4a" })
         first.recover(a)
-        #expect(names(first) == ["b.m4a"])
+        #expect(names(first) == ["recording_b.m4a"])
 
         let relaunched = f.launch()
         relaunched.refresh()
         // Only the recovered one is remembered; the other is still offered.
-        #expect(names(relaunched) == ["b.m4a"])
+        #expect(names(relaunched) == ["recording_b.m4a"])
         #expect(relaunched.errorMessage == nil)
     }
 
@@ -114,16 +89,16 @@ struct RecoveredRecordingsTests {
     func recoveriesAccumulateAcrossLaunches() throws {
         let f = try Fixture()
         defer { f.cleanup() }
-        try f.makeFile("a.m4a")
-        try f.makeFile("b.m4a")
+        try f.makeFile("recording_a.m4a")
+        try f.makeFile("recording_b.m4a")
 
         let first = f.launch()
         first.refresh()
-        first.recover(try #require(first.recordings.first { $0.displayName == "a.m4a" }))
+        first.recover(try #require(first.recordings.first { $0.displayName == "recording_a.m4a" }))
 
         let second = f.launch()
         second.refresh()
-        second.recover(try #require(second.recordings.first { $0.displayName == "b.m4a" }))
+        second.recover(try #require(second.recordings.first { $0.displayName == "recording_b.m4a" }))
 
         let third = f.launch()
         third.refresh()
@@ -137,8 +112,8 @@ struct RecoveredRecordingsTests {
     func goneFilesArePrunedOnLoad() throws {
         let f = try Fixture()
         defer { f.cleanup() }
-        let a = try f.makeFile("a.m4a")
-        try f.makeFile("b.m4a")
+        let a = try f.makeFile("recording_a.m4a")
+        try f.makeFile("recording_b.m4a")
 
         let first = f.launch()
         first.refresh()
@@ -150,15 +125,15 @@ struct RecoveredRecordingsTests {
         relaunched.refresh()
 
         #expect(relaunched.recordings.isEmpty)
-        #expect(try f.persistedPaths() == [f.directory.appendingPathComponent("b.m4a").standardizedFileURL.path])
+        #expect(try f.persistedPaths() == [f.directory.appendingPathComponent("recording_b.m4a").standardizedFileURL.path])
     }
 
     @Test("The store forgets entries whose file has gone, and keeps the rest")
     func storePrunesOnLoad() throws {
         let f = try Fixture()
         defer { f.cleanup() }
-        let kept = try f.makeFile("kept.m4a")
-        let gone = try f.makeFile("gone.m4a")
+        let kept = try f.makeFile("recording_kept.m4a")
+        let gone = try f.makeFile("recording_gone.m4a")
         let store = RecoveredRecordingsStore(defaults: f.defaults)
         let keptIdentity = try #require(FileIdentity(atPath: kept.path))
         store.save([
@@ -219,7 +194,7 @@ struct RecoveredRecordingsTests {
     func identityDistinguishesRecreatedFile() throws {
         let f = try Fixture()
         defer { f.cleanup() }
-        let url = try f.makeFile("x.m4a")
+        let url = try f.makeFile("recording_x.m4a")
         let original = try #require(FileIdentity(atPath: url.path))
 
         // Stable for the same file, including after it is written to again.
@@ -229,7 +204,7 @@ struct RecoveredRecordingsTests {
         try FileManager.default.removeItem(at: url)
         #expect(FileIdentity(atPath: url.path) == nil)
 
-        try f.makeFile("x.m4a")
+        try f.makeFile("recording_x.m4a")
         let recreated = try #require(FileIdentity(atPath: url.path))
         #expect(recreated != original)
     }

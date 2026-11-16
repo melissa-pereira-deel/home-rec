@@ -58,16 +58,23 @@ final class RecoveryViewModel: ObservableObject {
 
     func refresh() {
         recordings = scanner.scan(excluding: inProgressURL())
-            .filter { !isHandled($0.url) }
+            .filter { !isHandled($0) }
         hasScanned = true
     }
 
     func recover(_ recording: RecoverableRecording) {
         guard canModify(recording) else { return }
         do {
-            try RecoveryScanner.recover(recording)
-            markHandled(recording.url)
+            guard recording.isRepairable, let recovery = recording.format.recovery else {
+                throw AudioFileRecoveryError.notRepairable
+            }
+            if let repairedIdentity = try recovery.repair(at: recording.url, expectedIdentity: recording.identity) {
+                handled[recording.url.standardizedFileURL.path] = repairedIdentity
+                recoveredStore?.save(handled)
+            }
             refresh()
+        } catch AudioFileRecoveryError.recordingChanged {
+            reportRecordingChanged()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -80,38 +87,46 @@ final class RecoveryViewModel: ObservableObject {
     func moveToTrash(_ recording: RecoverableRecording) {
         guard canModify(recording) else { return }
         do {
+            guard FileIdentity(atPath: recording.url.standardizedFileURL.path) == recording.identity else {
+                throw AudioFileRecoveryError.recordingChanged
+            }
             try FileManager.default.trashItem(at: recording.url, resultingItemURL: nil)
             refresh()
+        } catch AudioFileRecoveryError.recordingChanged {
+            reportRecordingChanged()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func isHandled(_ url: URL) -> Bool {
-        let path = url.standardizedFileURL.path
-        guard let recovered = handled[path] else { return false }
-        return FileIdentity(atPath: path) == recovered
+    private func isHandled(_ recording: RecoverableRecording) -> Bool {
+        handled[recording.url.standardizedFileURL.path] == recording.identity
     }
 
-    /// Read after the repair, not before: WAV and FLAC repair write a new file
-    /// and swap it in, so the file left at the path is the one to remember.
-    private func markHandled(_ url: URL) {
-        let path = url.standardizedFileURL.path
-        guard let identity = FileIdentity(atPath: path) else { return }
-        handled[path] = identity
-        recoveredStore?.save(handled)
-    }
-
-    /// Recheck stale rows immediately before touching disk. This check and the
-    /// synchronous file operation share MainActor with session acquisition, so
-    /// a new recording cannot claim the file between them.
+    /// Session acquisition shares MainActor with this synchronous check and
+    /// file operation, so a new recording cannot claim this path between them.
     private func canModify(_ recording: RecoverableRecording) -> Bool {
-        guard recording.url.standardizedFileURL != inProgressURL()?.standardizedFileURL else {
+        let activeURL = inProgressURL()
+        let path = recording.url.standardizedFileURL
+        guard path != activeURL?.standardizedFileURL else {
             errorMessage = "This recording is still in use. Wait until it finishes before recovering it or moving it to Trash."
             refresh()
             return false
         }
+        guard !isHandled(recording),
+              FileIdentity(atPath: path.path) == recording.identity,
+              let current = scanner.candidate(at: recording.url, excluding: activeURL),
+              current.identity == recording.identity,
+              current.isRepairable == recording.isRepairable else {
+            reportRecordingChanged()
+            return false
+        }
         return true
+    }
+
+    private func reportRecordingChanged() {
+        errorMessage = AudioFileRecoveryError.recordingChanged.localizedDescription
+        refresh()
     }
 
     // MARK: - Display helpers

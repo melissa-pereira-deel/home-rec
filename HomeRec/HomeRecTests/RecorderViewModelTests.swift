@@ -160,6 +160,7 @@ struct RecorderViewModelTests {
 
         await viewModel.startRecording()
         controller.emitStreamError("permission turned off")
+        await waitUntil("the interrupted take to close") { viewModel.allowsProcessTermination }
         #expect(viewModel.recoverySuggestion == .openSettings)
         #expect(viewModel.showError)
 

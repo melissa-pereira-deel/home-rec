@@ -164,38 +164,28 @@ class RecordingController: RecordingControlling {
             captureError = error
         }
 
-        // Finalize the file, but capture the error rather than rethrowing here:
-        // the teardown below must run either way, or a failed finalize would leak
-        // the capture session and leave a stale recording URL behind. (BL-016 —
-        // the error used to be swallowed inside AudioRecorder, so before now this
-        // path could never be reached.)
-        let finalizeError: Error?
-        do {
-            try audioRecorder.stopRecording()
-            finalizeError = nil
-        } catch {
-            finalizeError = error
+        // Remove the capture output and flush its callback before scheduling
+        // the encoder close, so every delivered buffer goes ahead of Stop.
+        await captureManager.cleanup()
+        defer {
+            audioRecorder.onWaveformData = nil
+            session = nil
         }
 
-        // Clean up capture manager
-        await captureManager.cleanup()
-
-        audioRecorder.onWaveformData = nil
-        session = nil
-
-        // Capture first: it happened first, and it is the more likely cause.
         if let captureError {
             Log.recorder.error(
                 "Stop capture failed: \(captureError.localizedDescription, privacy: .public)"
             )
-            throw captureError
         }
-        if let finalizeError {
+        do {
+            try await audioRecorder.stopRecording()
+        } catch {
             Log.recorder.error(
-                "Finalize failed on stop: \(finalizeError.localizedDescription, privacy: .public)"
+                "Finalizing the take reported: \(error.localizedDescription, privacy: .public)"
             )
-            throw finalizeError
+            throw error
         }
+        if let captureError { throw captureError }
         Log.recorder.info("Recording stopped")
     }
 
@@ -222,8 +212,8 @@ class RecordingController: RecordingControlling {
     /// bytes. FLAC and M4A orphans are skipped by the scanner but still litter
     /// the save folder with unopenable files.
     private func rollbackFailedStart(fileURL: URL) async {
-        try? audioRecorder.stopRecording()
         await captureManager.cleanup()
+        try? await audioRecorder.stopRecording()
         audioRecorder.onWaveformData = nil
         try? FileManager.default.removeItem(at: fileURL)
         session = nil
@@ -233,18 +223,19 @@ class RecordingController: RecordingControlling {
     /// Finalize after an unexpected capture failure. The stream has already
     /// stopped, so capture teardown is best-effort; finalizing the recorder
     /// preserves the audio captured before the failure as a playable file.
-    func finalizeAfterFailure() async {
+    func finalizeAfterFailure() async throws {
         try? await captureManager.stopCapture()
-        // Deliberately swallowed, unlike the user-initiated stop path (BL-016):
-        // the caller is already reporting `.streamFailed`, which is the more
-        // useful diagnosis, and replacing it with a finalize error would bury
-        // the actual cause. The partial file is preserved either way — for WAV
-        // by its periodic header, for M4A by its movie fragments.
-        try? audioRecorder.stopRecording()
         await captureManager.cleanup()
-        audioRecorder.onWaveformData = nil
-        session = nil
-        Log.recorder.error("Recording finalized after stream failure")
+        defer {
+            audioRecorder.onWaveformData = nil
+            session = nil
+        }
+
+        do {
+            try await audioRecorder.stopRecording()
+        } catch is WriteFailure {
+            // The close succeeded and the write failure was already reported.
+        }
     }
 
     /// Check if currently recording
@@ -302,8 +293,8 @@ class RecordingController: RecordingControlling {
             // `.notRecording` into a `try?`, and `cleanup` is safe after no,
             // partial or full setup.
             try? await captureManager.stopCapture()
-            try? audioRecorder.stopRecording()
             await captureManager.cleanup()
+            try? await audioRecorder.stopRecording()
         }
     }
 }
