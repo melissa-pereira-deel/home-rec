@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Home Rec keeps a recording protected until its file finishes closing. Updates and your next take wait for that close, and Quit gives the file up to five seconds to finish. Your last recording is still there after you reopen the app. If something goes wrong, you can report it by email.
+
 ### Added
 
 - **Report a problem** — Choose Open Email Draft, Copy Diagnostic Report, or Report on GitHub from the Home Rec menu. The draft to support@homerec.app includes your Home Rec and macOS versions, recent log entries, and Sparkle startup error details when available. Copy Diagnostic Report and Export Diagnostics include more log context. These reports shorten paths in your home folder to `~`. The GitHub issue is prefilled with version information. (BL-141)
@@ -14,16 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Quitting while saving an M4A can no longer hang the app** — When you quit, Home Rec finishes writing the open recording before it closes, which is what keeps the file complete. For M4A that last step hands the file to the system to close, and Home Rec waited for it to report back with no limit on how long it would wait. If that report never came, the app stopped responding to anything at all — including the quit you had just asked for — and the only way out was to force-quit it, which is the exact outcome finishing the file was meant to avoid. Home Rec now waits a bounded five seconds in total, then stops waiting and quits. The recording is still in your save folder and still plays: M4A audio is written to disk as it is captured, so at most the last second or so is missing. It may also appear in **Recover Recordings**, where there is nothing to repair. WAV and FLAC were never affected.
-
-- **Quitting or updating right after a recording fails no longer cuts off the save** — When a take ends on its own — the stream stops, the disk refuses a write, a WAV reaches its size limit — Home Rec tells you at once and then finishes writing the file. For that moment the app looked idle to everything that asks "is a recording open?", so pressing ⌘Q, or an update that had finished downloading, could close the app while the file was still being completed. That left the same damaged file quitting mid-recording used to: a WAV that under-reports its length, an M4A or FLAC that may not open without Recover Recordings. Home Rec now finishes the file first. Quitting waits for it, normally too briefly to notice, and an update waits its turn and installs straight afterwards. (BL-171c)
-- **A recording that fails while it is starting or stopping now tells you** — If the audio stream stopped in the instant a recording was starting, Home Rec missed it and carried on: the timer counted and the window said "recording" over a stream that had already ended. If a failure arrived in the instant you pressed stop, it was missed the same way, and a take that had ended early looked like one that ended when you stopped it. Both are now reported like any other failed recording, and whatever was captured is kept in your save folder. (BL-171c)
+- **Quit stays responsive while an M4A is closing.** Home Rec gives the writer up to five seconds to finish when you quit. If it needs longer, parts of the take may still be playable from your save folder or appear in Recover Recordings. If a take finishes with unwritten audio at the end, Home Rec tells you.
+- **An update waits for a failed take to finish closing.** If the capture stops unexpectedly, a write fails, or a WAV reaches its size limit, Home Rec closes the file and reports the outcome. A downloaded update stays parked until the file is released. (BL-171c)
+- **Start and Stop report capture and write failures.** That includes a write refused while the final buffers are being saved. Home Rec tells you when a take ended early or could not finish saving.
 - **A problem with one recording can no longer stop the next** — A late report from a recording that had already finished — a write that failed in its last moments, a stream that reported stopping after the fact — could be mistaken for a problem with the recording you had just started, and stop it with an error about a take that was fine. Reports are now matched to the recording they came from, and one from a finished recording is ignored. (BL-171c)
 - **A recording you have recovered no longer comes back in Recover Recordings** — Recovering an M4A took it off the list, but only until you quit. An interrupted M4A already plays, so recovering it leaves the file as it is, and the next time Home Rec opened it found the same file, took it for a new interruption and offered it again — every launch, however many times you recovered it. Home Rec now remembers the recordings you have recovered. It remembers the file itself, not just its name: if a later recording is interrupted under the same name, that one is still offered. Recordings you have since deleted or moved are forgotten. (BL-140a)
-
-### Changed
-
-- **Building Home Rec from source now needs Xcode 26 or newer** — earlier versions of Xcode cannot compile it. Nothing changes if you install Home Rec from the download.
 
 ## [1.1.3] - 2026-09-17
 

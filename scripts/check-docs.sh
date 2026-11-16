@@ -11,18 +11,36 @@
 #
 # Two of its inputs are not part of this public repository: CLAUDE.md and
 # private/tech-debt.md are both gitignored. Every check that reads one of them
-# is skipped, with a printed note, when the file is absent, so the script exits
-# 0 on a clean checkout and CI runs it (BL-160).
+# is skipped, with a printed note, when the file is absent, so CI can run the
+# public checks on a clean checkout (BL-160).
 #
 # Be clear about what that CI run is worth. On a clean checkout the script can
 # only check what is public: the code invariants that need no doc to compare
-# against (sandbox off, the .screen handler, the version-config count, the
+# against (sandbox off, the .screen handler, the version settings, the
 # nonisolated encoders), the rot guards against README.md, and the release
 # evidence in README.md and docs/manual-acceptance.md. Everything it verifies
 # against CLAUDE.md or private/tech-debt.md is verified only where those files
 # exist — on the maintainer's machine. A green CI run says nothing about them.
 
 set -uo pipefail
+
+mode=docs
+if [ "$#" -eq 3 ] && [[ "$1" = --candidate || "$1" = --release ]]; then
+  mode="${1#--}"
+  requested_version="$2"
+  dmg="$3"
+elif [ "$#" -ne 0 ]; then
+  echo "Usage: $0 [{--candidate|--release} VERSION DMG]" >&2
+  exit 2
+fi
+
+# Resolve relative artifact paths against the caller's working directory.
+if [ "$mode" != docs ]; then
+  case "$dmg" in
+    /*) ;;
+    *) dmg="$PWD/$dmg" ;;
+  esac
+fi
 cd "$(dirname "$0")/.." || exit 1
 
 fail=0
@@ -54,10 +72,35 @@ else
   bad "project.pbxproj says ${target%.} but CLAUDE.md disagrees (constraint 4)"
 fi
 
-count=$(grep -c 'MARKETING_VERSION' HomeRec/HomeRec.xcodeproj/project.pbxproj)
-[ "$count" -eq 6 ] \
-  && ok "MARKETING_VERSION appears in 6 configs, as documented" \
-  || bad "MARKETING_VERSION appears $count times, docs say 6 — find/replace will miss some"
+# The build script reads the first marketing version. Detect a missed bump in
+# any of the project or target configurations before that value can mask it.
+project_setting() {
+  awk -v key="$1" '
+    $1 == key {
+      count++
+      if ($2 != "=" || NF != 3 || !sub(/;$/, "", $3)) invalid = 1
+      if ($3 ~ /^"[^"]*"$/) gsub(/"/, "", $3)
+      if (count > 1 && "setting:" value != "setting:" $3) invalid = 1
+      value = $3
+    }
+    END {
+      if (count != 6 || invalid) exit 1
+      print value
+    }
+  ' HomeRec/HomeRec.xcodeproj/project.pbxproj
+}
+
+if VERSION=$(project_setting MARKETING_VERSION) && [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){2}$ ]]; then
+  ok "All six MARKETING_VERSION settings agree on $VERSION"
+else
+  bad "Expected six identical MARKETING_VERSION settings in major.minor.patch form"
+  VERSION=
+fi
+if BUILD_VERSION=$(project_setting CURRENT_PROJECT_VERSION) && [[ "$BUILD_VERSION" =~ ^[0-9]+$ ]]; then
+  ok "All six CURRENT_PROJECT_VERSION settings agree on $BUILD_VERSION"
+else
+  bad "Expected six identical numeric CURRENT_PROJECT_VERSION settings"
+fi
 
 # The audio hot path must stay off the main actor. This is the class of bug that
 # was reintroduced into the very file written to fix it.
@@ -144,32 +187,105 @@ echo
 # checklist that gets skipped exactly when the release is urgent.
 echo "Release evidence:"
 
-VERSION="$(awk -F' = ' '/MARKETING_VERSION/ {gsub(/[;" ]/, "", $2); print $2; exit}' \
-             HomeRec/HomeRec.xcodeproj/project.pbxproj)"
+# Read only the newest version entry. A matching field in an older entry
+# cannot fill a gap in the current one.
+runlog=$(awk '
+  /^## v[0-9]/ {
+    if (entry) exit
+    entry = 1
+  }
+  entry { print }
+' docs/manual-acceptance.md)
+runlog_version=$(printf '%s\n' "$runlog" | awk 'NR == 1 { print substr($2, 2) }')
+source_commit=
+accepted_digest=
 
-if [ -z "$VERSION" ]; then
-  bad "could not read MARKETING_VERSION from the Xcode project"
-else
-  # Newest run-log entry. Headings look like: "## v1.1.0 — <what>, <date> · \`sha\`"
-  RUNLOG="$(grep -m1 -o '^## v[0-9][0-9.]*' docs/manual-acceptance.md 2>/dev/null | sed 's/^## v//')"
-  if [ -z "$RUNLOG" ]; then
-    bad "no run-log entries found in docs/manual-acceptance.md"
-  elif [ "$RUNLOG" = "$VERSION" ]; then
-    ok "Manual-acceptance run log covers v$VERSION"
+runlog_field() {
+  awk -v label="- $1:" '
+    index($0, label) == 1 {
+      count++
+      value = substr($0, length(label) + 1)
+    }
+    END {
+      if (count == 1 && value ~ /^ `[0-9a-f]+`$/) {
+        print substr(value, 3, length(value) - 3)
+      }
+    }
+  ' <<< "$runlog"
+}
+
+if [ -n "$VERSION" ]; then
+  if [ "$runlog_version" != "$VERSION" ]; then
+    bad "MARKETING_VERSION is $VERSION but the newest run-log entry is v${runlog_version:-<missing>}"
+  elif [ "$VERSION" = 1.1.3 ] && [ "$mode" = docs ]; then
+    ok "Manual-acceptance run log covers historical v$VERSION"
   else
-    bad "MARKETING_VERSION is $VERSION but the newest run-log entry is v$RUNLOG — docs/manual-acceptance.md has no record that this build was tested by a person"
+    source_commit=$(runlog_field "Tested source commit")
+    accepted_digest=$(runlog_field "Tested DMG SHA-256")
+    if [[ "$source_commit" =~ ^[0-9a-f]{40}$ && "$source_commit" =~ [1-9a-f] ]]; then
+      ok "Manual-acceptance run log records a full source commit for v$VERSION"
+    else
+      bad "The v$VERSION run log needs one full Tested source commit"
+    fi
+    if [[ "$accepted_digest" =~ ^[0-9a-f]{64}$ && "$accepted_digest" =~ [1-9a-f] ]]; then
+      ok "Manual-acceptance run log records a DMG SHA-256 for v$VERSION"
+    else
+      bad "The v$VERSION run log needs one full Tested DMG SHA-256"
+    fi
   fi
 
-  # The README is the shop window and has drifted before: it claimed 1.0 while
-  # 1.1.1 was shipping, and listed already-shipped Sparkle under "Next up".
-  if grep -q "badge/Version-$VERSION-" README.md; then
+  if grep -Fq "badge/Version-$VERSION-" README.md; then
     ok "README version badge matches v$VERSION"
   else
     bad "README version badge does not say $VERSION"
   fi
-  grep -q "\*\*Version:\*\* $VERSION " README.md \
+  grep -Fq "**Version:** $VERSION " README.md \
     && ok "README footer matches v$VERSION" \
     || bad "README footer does not say $VERSION"
+fi
+
+if [ "$mode" != docs ] && [ "$fail" -eq 0 ]; then
+  if [ "$requested_version" != "$VERSION" ]; then
+    bad "Requested release v$requested_version differs from project version v$VERSION"
+  fi
+  if ! status=$(git status --porcelain) || [ -n "$status" ]; then
+    bad "Release verification requires a clean checkout"
+  fi
+  if [ "$(git cat-file -t "$source_commit" 2>/dev/null)" != commit ]; then
+    bad "Tested source commit $source_commit is unavailable in this checkout"
+  elif git diff --quiet "$source_commit" HEAD -- . ':(exclude)docs/manual-acceptance.md'; then
+    ok "HEAD matches the tested tree outside docs/manual-acceptance.md"
+  else
+    bad "HEAD differs from the tested tree outside docs/manual-acceptance.md"
+    git diff --name-status "$source_commit" HEAD -- . ':(exclude)docs/manual-acceptance.md'
+  fi
+  if digest=$(shasum -a 256 < "$dmg") && [ "${digest%% *}" = "$accepted_digest" ]; then
+    ok "DMG SHA-256 matches the manual-acceptance run log"
+  else
+    bad "DMG SHA-256 does not match the manual-acceptance run log"
+  fi
+
+  if [ "$mode" = release ]; then
+    tag="refs/tags/v$VERSION"
+    head=$(git rev-parse HEAD)
+    if [ "$(git rev-parse --verify "${tag}^{commit}" 2>/dev/null)" != "$head" ]; then
+      bad "Local tag v$VERSION must point to HEAD"
+    elif remote_refs=$(git ls-remote --exit-code origin "$tag" "${tag}^{}"); then
+      # Annotated tags include a peeled ref. Lightweight tags directly name a commit.
+      remote_commit=$(printf '%s\n' "$remote_refs" | awk -v tag="$tag" '
+        $2 == tag { direct = $1 }
+        $2 == tag "^{}" { peeled = $1 }
+        END { print (peeled ? peeled : direct) }
+      ')
+      if [ "$remote_commit" = "$head" ]; then
+        ok "Published tag v$VERSION points to the verified commit"
+      else
+        bad "Published tag v$VERSION points to $remote_commit instead of $head"
+      fi
+    else
+      bad "Could not verify published tag v$VERSION on origin"
+    fi
+  fi
 fi
 
 echo
