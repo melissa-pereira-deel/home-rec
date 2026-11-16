@@ -13,7 +13,10 @@ This guide covers the per-release flow. One-time setup lives in
   ```bash
   security find-identity -v -p codesigning | grep "Developer ID Application"
   ```
-- A stored notarytool profile in the Keychain. Verify with:
+- A stored notarytool profile in the Keychain. `scripts/build-dmg.sh` checks it
+  first and stops before building if it cannot sign in. If that happens, see
+  [When the notary service returns 401](notarization.md#when-the-notary-service-returns-401).
+  To check before tagging rather than after, run the same call by hand:
   ```bash
   xcrun notarytool history --keychain-profile "HomeRecNotary"
   ```

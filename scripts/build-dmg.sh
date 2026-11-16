@@ -12,9 +12,11 @@
 #   - Xcode + command line tools
 #   - create-dmg:  brew install create-dmg
 #   - A Developer ID Application identity in Keychain
-#   - A stored notarytool profile, created once with:
+#   - A stored notarytool profile, created with (the password is prompted):
 #       xcrun notarytool store-credentials "HomeRecNotary" \
-#         --apple-id "you@example.com" --team-id "TEAMID" --password "<app-specific-pw>"
+#         --apple-id "you@example.com" --team-id "S3J47F2UXA"
+#     It is checked before anything is built. To refresh a dead one, see
+#     docs/distribution/notarization.md.
 #
 # Required environment variables:
 #   TEAM_ID      Apple Developer Team ID (e.g. ABCDE12345)
@@ -64,6 +66,18 @@ command -v create-dmg >/dev/null 2>&1 || {
   echo "error: create-dmg not found. Install with: brew install create-dmg" >&2
   exit 1
 }
+
+# Check the notary credential before anything slow runs (BL-181). The service
+# is otherwise first reached after the archive, the export and the signing have
+# all finished, so a dead profile cost a full build before it said so. `history`
+# is the cheapest call that has to authenticate.
+echo "==> Checking notarytool profile \"$AC_PROFILE\"…"
+if ! NOTARY_CHECK="$(xcrun notarytool history --keychain-profile "$AC_PROFILE" 2>&1)"; then
+  echo "error: notarytool profile \"$AC_PROFILE\" cannot sign in. Nothing has been built." >&2
+  printf '%s\n' "$NOTARY_CHECK" | sed 's/^/       /' >&2
+  echo "       See docs/distribution/notarization.md, \"When the notary service returns 401\"." >&2
+  exit 1
+fi
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
