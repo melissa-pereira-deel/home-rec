@@ -30,12 +30,15 @@ enum AudioFileRecoveryError: Error, LocalizedError, Equatable {
     case unreadable
     case notRepairable
     case repairFailed
+    case recordingChanged
 
     var errorDescription: String? {
         switch self {
         case .unreadable:     return "The recording couldn't be read"
         case .notRepairable:  return "This recording is too short to recover"
         case .repairFailed:   return "The recording couldn't be repaired"
+        case .recordingChanged:
+            return "This recording changed since it was listed. The list has been refreshed."
         }
     }
 
@@ -44,6 +47,7 @@ enum AudioFileRecoveryError: Error, LocalizedError, Equatable {
         case .unreadable:     return "Check that the file still exists and is readable"
         case .notRepairable:  return "Recordings shorter than about a tenth of a second contain no audio to recover"
         case .repairFailed:   return "Check that there is enough free disk space, then try again"
+        case .recordingChanged: return nil
         }
     }
 }
@@ -60,7 +64,17 @@ protocol AudioFileRecovering {
 
     /// Make the file playable, in place. Must be atomic: a crash mid-repair
     /// leaves either the original or a valid repaired file, never a hybrid.
-    static func repair(at url: URL) throws
+    /// Return the identity to remember if the repaired file is still present.
+    static func repair(at url: URL, expectedIdentity: FileIdentity) throws -> FileIdentity?
+}
+
+extension AudioFileRecovering {
+    static func repair(at url: URL) throws {
+        guard let identity = FileIdentity(atPath: url.standardizedFileURL.path) else {
+            throw AudioFileRecoveryError.unreadable
+        }
+        _ = try repair(at: url, expectedIdentity: identity)
+    }
 }
 
 // MARK: - Shared helpers
@@ -85,7 +99,11 @@ private enum RecoveryIO {
 
     /// Copy → mutate → atomic replace. `replaceItemAt` is atomic on the same
     /// volume, so an interrupted repair can never leave a half-patched take.
-    static func atomicallyPatch(_ url: URL, _ mutate: (inout Data) throws -> Void) throws {
+    static func atomicallyPatch(
+        _ url: URL,
+        expectedIdentity: FileIdentity,
+        _ mutate: (inout Data) throws -> Void
+    ) throws -> FileIdentity? {
         guard var bytes = try? Data(contentsOf: url) else {
             throw AudioFileRecoveryError.unreadable
         }
@@ -93,13 +111,32 @@ private enum RecoveryIO {
 
         let temp = url.deletingLastPathComponent()
             .appendingPathComponent(".homerec-repair-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: temp) }
         do {
             try bytes.write(to: temp, options: .atomic)
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: temp)
         } catch {
-            try? FileManager.default.removeItem(at: temp)
             throw AudioFileRecoveryError.repairFailed
         }
+        return try replace(url, with: temp, expectedIdentity: expectedIdentity)
+    }
+
+    static func replace(_ url: URL, with temp: URL, expectedIdentity: FileIdentity) throws -> FileIdentity? {
+        let staged = FileIdentity(atPath: temp.path)
+        let path = url.standardizedFileURL.path
+        guard FileIdentity(atPath: path) == expectedIdentity else {
+            throw AudioFileRecoveryError.recordingChanged
+        }
+        do {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: temp)
+        } catch {
+            throw AudioFileRecoveryError.repairFailed
+        }
+        // Replacement can preserve the original's creation date. Check the
+        // staged inode before remembering the identity now at the path.
+        guard let staged, let installed = FileIdentity(atPath: path),
+              installed == staged || (staged.fileNumber != nil && staged.fileNumber == installed.fileNumber)
+        else { return nil }
+        return installed
     }
 
     static func uint32LE(_ d: Data, _ offset: Int) -> UInt32 {
@@ -157,12 +194,10 @@ extension WAVWriter: AudioFileRecovering {
     }
 
 
-    static func repair(at url: URL) throws {
-        let total = try RecoveryIO.size(of: url)
-        guard total > headerByteCount else { throw AudioFileRecoveryError.notRepairable }
-        let dataSize = Self.repairableDataSize(totalBytes: total)
-
-        try RecoveryIO.atomicallyPatch(url) { bytes in
+    static func repair(at url: URL, expectedIdentity: FileIdentity) throws -> FileIdentity? {
+        try RecoveryIO.atomicallyPatch(url, expectedIdentity: expectedIdentity) { bytes in
+            guard bytes.count > headerByteCount else { throw AudioFileRecoveryError.notRepairable }
+            let dataSize = Self.repairableDataSize(totalBytes: bytes.count)
             func put(_ value: UInt32, at offset: Int) {
                 bytes[offset]     = UInt8(value & 0xFF)
                 bytes[offset + 1] = UInt8((value >> 8) & 0xFF)
@@ -193,25 +228,24 @@ extension M4AEncoder: AudioFileRecovering {
         var offset = 0
         var types: [String] = []
 
-        while offset + 8 <= total {
+        while total - offset >= 8 {
             try handle.seek(toOffset: UInt64(offset))
             guard let header = try handle.read(upToCount: 8), header.count == 8 else { break }
 
             // Box sizes are big-endian.
-            var size = (Int(header[0]) << 24) | (Int(header[1]) << 16)
-                     | (Int(header[2]) << 8)  | Int(header[3])
+            var size = (UInt64(header[0]) << 24) | (UInt64(header[1]) << 16)
+                     | (UInt64(header[2]) << 8)  | UInt64(header[3])
             let type = String(decoding: header[4..<8], as: UTF8.self)
             types.append(type)
 
             if size == 0 { break }                     // extends to EOF
             if size == 1 {                             // 64-bit extended size
                 guard let ext = try handle.read(upToCount: 8), ext.count == 8 else { break }
-                var big = 0
-                for byte in ext { big = (big << 8) | Int(byte) }
-                size = big
+                size = ext.reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+                guard size >= 16 else { break }
             }
-            guard size >= 8 else { break }
-            offset += size
+            guard size >= 8, size <= UInt64(total - offset) else { break }
+            offset += Int(size)
         }
         return types
     }
@@ -225,10 +259,13 @@ extension M4AEncoder: AudioFileRecovering {
         try isUnfinalized(at: url)
     }
 
-    static func repair(at url: URL) throws {
-        // Nothing to do — `movieFragmentInterval` (BL-016) means the fragments on
-        // disk are already a playable file. Remuxing to a flat layout is an
-        // explicit non-goal; it would rewrite the whole take for no user benefit.
+    static func repair(at url: URL, expectedIdentity: FileIdentity) throws -> FileIdentity? {
+        // The existing fragments already play. Confirm which file was handled.
+        guard let identity = FileIdentity(atPath: url.standardizedFileURL.path),
+              identity == expectedIdentity else {
+            throw AudioFileRecoveryError.recordingChanged
+        }
+        return identity
     }
 }
 
@@ -324,7 +361,7 @@ extension FLACEncoder: AudioFileRecovering {
         return total > 0 ? total : nil
     }
 
-    static func repair(at url: URL) throws {
+    static func repair(at url: URL, expectedIdentity: FileIdentity) throws -> FileIdentity? {
         guard try isRepairable(at: url) else { throw AudioFileRecoveryError.notRepairable }
         guard var bytes = try? Data(contentsOf: url) else {
             throw AudioFileRecoveryError.unreadable
@@ -332,6 +369,10 @@ extension FLACEncoder: AudioFileRecovering {
 
         let temp = url.deletingLastPathComponent()
             .appendingPathComponent(".homerec-repair-\(UUID().uuidString)")
+        guard bytes.count >= streamInfoRange.upperBound else {
+            throw AudioFileRecoveryError.unreadable
+        }
+        defer { try? FileManager.default.removeItem(at: temp) }
         do {
             // Pass 1: a valid header with an unknown length — enough to decode.
             patchStreamInfo(&bytes, totalSamples: 0)
@@ -343,11 +384,9 @@ extension FLACEncoder: AudioFileRecovering {
                 patchStreamInfo(&bytes, totalSamples: frames)
                 try bytes.write(to: temp, options: .atomic)
             }
-
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: temp)
         } catch {
-            try? FileManager.default.removeItem(at: temp)
             throw AudioFileRecoveryError.repairFailed
         }
+        return try RecoveryIO.replace(url, with: temp, expectedIdentity: expectedIdentity)
     }
 }
