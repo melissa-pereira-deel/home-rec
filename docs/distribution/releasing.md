@@ -92,6 +92,10 @@ DMG, verifies the DMG, and produces the Sparkle entry. Continue once it succeeds
 Keep the three copied files together through publication. Copy them to durable
 storage if the release will outlast the temporary directory.
 
+For a noninteractive build, set `DMG_SKIP_FINDER_LAYOUT=1` before running the
+command above. This uses Finder's standard layout with the app and Applications
+link. Use that same DMG throughout testing and publication.
+
 ### 3. Read the notes the update dialog will show
 
 An empty or developer-facing section is the last screen a user sees before

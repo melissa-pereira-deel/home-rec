@@ -157,7 +157,7 @@ xcrun notarytool submit "$DIST_DIR/$APP_NAME.zip" --keychain-profile "$AC_PROFIL
 xcrun stapler staple "$APP"
 
 echo "==> Building DMG…"
-DMG_OPTIONS=()
+DMG_OPTIONS=(--volname "Home Rec")
 if [[ -f "$VOL_ICON" ]]; then
   DMG_OPTIONS+=(--volicon "$VOL_ICON")
 fi
@@ -165,7 +165,6 @@ if [[ "${DMG_SKIP_FINDER_LAYOUT:-0}" == 1 ]]; then
   DMG_OPTIONS+=(--skip-jenkins)
 fi
 create-dmg \
-  --volname "Home Rec" \
   "${DMG_OPTIONS[@]}" \
   --window-size 600 400 \
   --icon-size 100 \
