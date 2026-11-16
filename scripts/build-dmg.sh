@@ -21,6 +21,7 @@
 # Required environment variables:
 #   TEAM_ID      Apple Developer Team ID (e.g. ABCDE12345)
 #   AC_PROFILE   notarytool keychain profile name (e.g. HomeRecNotary)
+# Optional: DMG_SKIP_FINDER_LAYOUT=1 for a noninteractive build.
 #
 # Usage:
 #   TEAM_ID=ABCDE12345 AC_PROFILE=HomeRecNotary ./scripts/build-dmg.sh
@@ -135,6 +136,18 @@ mv "$APP" "$NON_ICLOUD_STAGING/"
 APP="$NON_ICLOUD_STAGING/$APP_NAME.app"
 xattr -cr "$APP"
 
+# Read the packaged plist directly. CFPreferences can treat paths in temporary
+# directories as missing defaults domains and silently leave the appcast empty.
+BUNDLE_PLIST="$APP/Contents/Info.plist"
+BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$BUNDLE_PLIST")"
+BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUNDLE_PLIST")"
+MIN_SYSTEM_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$BUNDLE_PLIST")"
+if [[ "$BUNDLE_VERSION" != "$VERSION" || ! "$BUILD_VERSION" =~ ^[0-9]+$ ||
+      ! "$MIN_SYSTEM_VERSION" =~ ^[0-9]+([.][0-9]+){1,2}$ ]]; then
+  echo "error: the signed app's version, build number or minimum macOS version is invalid." >&2
+  exit 1
+fi
+
 echo "==> Verifying signature…"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
@@ -144,13 +157,16 @@ xcrun notarytool submit "$DIST_DIR/$APP_NAME.zip" --keychain-profile "$AC_PROFIL
 xcrun stapler staple "$APP"
 
 echo "==> Building DMG…"
-DMG_VOLICON_ARGS=()
+DMG_OPTIONS=()
 if [[ -f "$VOL_ICON" ]]; then
-  DMG_VOLICON_ARGS=(--volicon "$VOL_ICON")
+  DMG_OPTIONS+=(--volicon "$VOL_ICON")
+fi
+if [[ "${DMG_SKIP_FINDER_LAYOUT:-0}" == 1 ]]; then
+  DMG_OPTIONS+=(--skip-jenkins)
 fi
 create-dmg \
   --volname "Home Rec" \
-  "${DMG_VOLICON_ARGS[@]}" \
+  "${DMG_OPTIONS[@]}" \
   --window-size 600 400 \
   --icon-size 100 \
   --icon "$APP_NAME.app" 175 190 \
@@ -335,9 +351,9 @@ cat > "$APPCAST_ITEM" <<ITEM
     <item>
       <title>$VERSION</title>
       <pubDate>$(date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
-      <sparkle:version>$(defaults read "$APP/Contents/Info" CFBundleVersion)</sparkle:version>
+      <sparkle:version>$BUILD_VERSION</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>$(defaults read "$APP/Contents/Info" LSMinimumSystemVersion)</sparkle:minimumSystemVersion>
+      <sparkle:minimumSystemVersion>$MIN_SYSTEM_VERSION</sparkle:minimumSystemVersion>
       <description><![CDATA[
 $RELEASE_NOTES_HTML
       ]]></description>
