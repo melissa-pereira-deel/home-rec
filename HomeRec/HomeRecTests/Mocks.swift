@@ -374,10 +374,18 @@ final class MockRecordingControlling: RecordingControlling {
     /// can hold a failed take's teardown open and look at what is allowed
     /// meanwhile (BL-171c).
     var onFinalizeHold: (() async -> Void)?
+    /// Runs inside `startRecording(format:)` before it returns or throws — the
+    /// window in which a real stream can fail while the view model is still
+    /// `.starting` (BL-171c).
+    var onStart: (() async -> Void)?
+    /// Runs inside `stopRecording()` before it returns or throws, for a failure
+    /// that lands while the view model is `.stopping`.
+    var onStop: (() async -> Void)?
 
     func startRecording(format: AudioFormat) async throws -> URL {
         startCount += 1
         lastStartFormat = format
+        await onStart?()
         if let startError { throw startError }
         isRecording = true
         recordingURL = fileURL
@@ -386,6 +394,7 @@ final class MockRecordingControlling: RecordingControlling {
 
     func stopRecording() async throws {
         stopCount += 1
+        await onStop?()
         if let stopError { throw stopError }
         isRecording = false
         recordingURL = nil

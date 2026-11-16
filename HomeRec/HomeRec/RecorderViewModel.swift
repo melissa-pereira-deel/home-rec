@@ -172,6 +172,10 @@ class RecorderViewModel: ObservableObject {
     /// marks it.
     @Published private(set) var isFinishingFailedTake = false
 
+    /// A failure reported while a start or stop was in flight, waiting for that
+    /// operation to land. See `handleTakeFailure`.
+    private var pendingFailure: RecorderError?
+
     /// Whether ending this process now is safe — quitting, or letting Sparkle
     /// replace the app.
     ///
@@ -446,6 +450,24 @@ class RecorderViewModel: ObservableObject {
             self.failureTeardown = nil
         }
 
+        // Anything held up to here was reported by the take that just finished
+        // closing — it arrives while this one waits in `.starting`, which is
+        // also the state a report about *this* take is held in. It is not this
+        // take's failure, and applying it would stop a take that never failed.
+        pendingFailure = nil
+        // And nothing held during this start may outlive it. If the start
+        // throws, its own error is the one to show: it is more specific, and
+        // the rollback has already released everything a held failure would
+        // have finalized.
+        defer {
+            if let dropped = pendingFailure {
+                Log.recorder.error(
+                    "Dropped a failure held during a start that did not complete: \(String(describing: dropped), privacy: .public)"
+                )
+                pendingFailure = nil
+            }
+        }
+
         // Recording a microphone needs its own grant, and it is a *different*
         // flow rather than the same one parameterised (BL-130): unlike Screen
         // Recording, macOS will genuinely re-prompt for this, so asking is the
@@ -486,6 +508,14 @@ class RecorderViewModel: ObservableObject {
             longRecordingWarned = false
 
             transition(to: .recording)
+
+            // A failure reported while the start was still in flight. The take
+            // is open now, so it can be ended the way any failed take is.
+            if let failure = pendingFailure {
+                pendingFailure = nil
+                failTake(with: failure)
+                return
+            }
 
             // Start duration timer
             startTimer()
@@ -578,9 +608,20 @@ class RecorderViewModel: ObservableObject {
 
         do {
             try await controller.stopRecording()
-            transition(to: .idle)
+            // A failure reported while the stop was in flight: the take ended
+            // before the user ended it. The stop has already closed the file,
+            // so there is nothing left to finalize — only to say.
+            if let failure = pendingFailure {
+                pendingFailure = nil
+                transition(to: .error(failure))
+            } else {
+                transition(to: .idle)
+            }
 
         } catch {
+            // The stop's own error wins over anything held: it names what went
+            // wrong with the file the user is about to look for.
+            pendingFailure = nil
             Log.recorder.error("Failed to stop recording: \(error.localizedDescription, privacy: .public)")
             transition(to: .error(.stopFailed(error.localizedDescription)))
         }
@@ -880,35 +921,63 @@ class RecorderViewModel: ObservableObject {
 
     // MARK: - Private Methods
 
-    /// Handle an unexpected capture-stream failure mid-recording: surface the
-    /// error state immediately, then finalize the partial recording so the
-    /// audio captured before the failure is preserved.
     /// A buffer could not be written, so the file has stopped growing (BL-173).
-    ///
-    /// Deliberately the same shape as `handleStreamFailure`: stop the timer, zero
-    /// the waveform, enter `.error`, finalize what was captured. The guard is
-    /// load-bearing rather than defensive — `(.idle, .error)` is not a legal
-    /// transition and `transition` rejects illegal moves *silently*, which is
-    /// exactly how BL-161's microphone error went missing.
     private func handleWriteFailure(_ reason: WriteFailure) {
-        guard state == .recording else { return }
-        stopTimer()
-        waveformSamples = Array(repeating: 0, count: 200)
-        beginFailureTeardown()
         switch reason {
         case .sizeLimitReached:
-            transition(to: .error(.sizeLimitReached))
+            handleTakeFailure(.sizeLimitReached)
         case .other(let message):
-            transition(to: .error(.writeFailed(message)))
+            handleTakeFailure(.writeFailed(message))
         }
     }
 
+    /// The capture stream stopped on its own, mid-take.
     private func handleStreamFailure(_ message: String) {
-        guard state == .recording else { return }
+        handleTakeFailure(.streamFailed(message))
+    }
+
+    /// Decide what a failure report means for the state the take is in.
+    ///
+    /// This used to be `guard state == .recording else { return }`, twice, and
+    /// the two states it threw away are the ones where a report is real
+    /// (BL-171c). A stream that died while the take was still **starting** was
+    /// dropped, and the take went on to `.recording` with a running timer over
+    /// a dead stream. One that arrived while **stopping** was dropped too, so a
+    /// take that ended early looked like one that ended when the user said.
+    ///
+    /// Those two cannot move to `.error` on the spot: the start or stop in
+    /// flight owns the encoder until it lands, and tearing down under it is the
+    /// race this file keeps closing. So the failure is held and applied when
+    /// that operation returns — see `startRecording` and `stopRecording`.
+    ///
+    /// ⚠️ The switch is still load-bearing where it ignores. `(.idle, .error)`
+    /// is not a legal transition and `transition` rejects illegal moves without
+    /// surfacing anything, which is how BL-161's microphone error went missing.
+    /// So the ignored states say so in the log, by name.
+    private func handleTakeFailure(_ failure: RecorderError) {
+        switch state {
+        case .recording, .recovering:
+            failTake(with: failure)
+        case .starting, .stopping:
+            // First one wins: it is the cause, and what follows is usually its
+            // consequence.
+            if pendingFailure == nil { pendingFailure = failure }
+        case .idle, .error:
+            Log.recorder.error("""
+                Ignored a take failure reported with no take open: \
+                \(String(describing: failure), privacy: .public) while \
+                \(String(describing: self.state), privacy: .public)
+                """)
+        }
+    }
+
+    /// End an open take on a failure: stop the timer, zero the waveform, show
+    /// the error, then finalize what was captured so it is preserved.
+    private func failTake(with failure: RecorderError) {
         stopTimer()
         waveformSamples = Array(repeating: 0, count: 200)
         beginFailureTeardown()
-        transition(to: .error(.streamFailed(message)))
+        transition(to: .error(failure))
     }
 
     /// Finalize what a failed take captured, and say so until it is done.
