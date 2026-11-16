@@ -22,6 +22,7 @@ This guide covers the per-release flow. One-time setup lives in
   ```
 - `create-dmg` installed: `brew install create-dmg`
 - `gh` CLI authenticated against the repo: `gh auth status`
+- Python 3 for staging and appcast enclosure verification
 
 ## Per-release flow
 
@@ -108,14 +109,23 @@ for someone who builds the app. The same text is in the appcast entry's
 ### 4. Run the manual pass on that DMG, then record it
 
 Work through [the manual acceptance checklist](../manual-acceptance.md) on
-`$RC_DIR/HomeRec.dmg`, using this DMG as **N+1** for the staging feed. Use a
-staging copy of the saved appcast item and point its enclosure at the local
-copy of the DMG. The staging N build points at the staging feed.
+`$RC_DIR/HomeRec.dmg`, using this DMG as **N+1** for the staging feed. The
+staging script serves a copy of the saved item with the enclosure rewritten
+to localhost. Point the staging N build at the staging feed.
+
+```bash
+scripts/staging-feed.sh "$RC_DIR/appcast-item-$VERSION.xml" "$RC_DIR/HomeRec.dmg"
+```
 
 After the pass, get the digest of the file you tested and verify its sidecar.
 
 ```bash
-( cd "$RC_DIR" && shasum -a 256 -c HomeRec.dmg.sha256 && shasum -a 256 HomeRec.dmg )
+(
+  set -eo pipefail
+  cd "$RC_DIR"
+  shasum -a 256 HomeRec.dmg | cmp - HomeRec.dmg.sha256
+  shasum -a 256 HomeRec.dmg
+)
 ```
 
 Add the newest entry to the run log with the version, date and results. Record
@@ -153,7 +163,7 @@ local and published tags to resolve to the checked commit. GitHub's
 
 ```bash
 scripts/check-docs.sh --release "$VERSION" "$RC_DIR/HomeRec.dmg" &&
-  ( cd "$RC_DIR" && shasum -a 256 -c HomeRec.dmg.sha256 ) &&
+  ( set -o pipefail; cd "$RC_DIR" && shasum -a 256 HomeRec.dmg | cmp - HomeRec.dmg.sha256 ) &&
   gh release create "v$VERSION" --verify-tag \
     --title "Home Rec v$VERSION" \
     --notes-file <(awk -v v="$VERSION" 'index($0, "## [" v "]") == 1 {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md | sed '/^---$/d') \
@@ -165,18 +175,39 @@ scripts/check-docs.sh --release "$VERSION" "$RC_DIR/HomeRec.dmg" &&
 
 Download the public DMG from the version-pinned enclosure URL in the saved
 appcast item. Check those bytes against the digest in the committed acceptance
-log and check the published sidecar from the same release.
+log. The sidecar must contain the canonical checksum line for `HomeRec.dmg`.
 
 ```bash
 (
-  set -e
+  set -eo pipefail
   BASE_URL="https://github.com/melissa-pereira-deel/home-rec/releases/download/v$VERSION"
+  ENCLOSURE_URL=$(python3 - "$RC_DIR/appcast-item-$VERSION.xml" "$BASE_URL/HomeRec.dmg" <<'PYTHON'
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+item_path, expected_url = sys.argv[1:]
+fragment = Path(item_path).read_text(encoding="utf-8")
+root = ET.fromstring(
+    '<feed xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">'
+    + fragment + "</feed>"
+)
+enclosures = root.findall("./item/enclosure")
+if len(root) != 1 or len(enclosures) != 1:
+    sys.exit("Expected one appcast item with exactly one enclosure.")
+
+url = enclosures[0].get("url")
+if url != expected_url:
+    sys.exit(f"Expected version-pinned enclosure {expected_url}. Found {url!r}.")
+print(url)
+PYTHON
+  )
   PUBLIC_DIR=$(mktemp -d "${TMPDIR:-/tmp}/HomeRec-public.XXXXXX")
   trap 'rm -r "$PUBLIC_DIR"' EXIT
-  curl -fLsS "$BASE_URL/HomeRec.dmg" -o "$PUBLIC_DIR/HomeRec.dmg"
+  curl -fLsS "$ENCLOSURE_URL" -o "$PUBLIC_DIR/HomeRec.dmg"
   scripts/check-docs.sh --release "$VERSION" "$PUBLIC_DIR/HomeRec.dmg"
   curl -fLsS "$BASE_URL/HomeRec.dmg.sha256" -o "$PUBLIC_DIR/HomeRec.dmg.sha256"
-  ( cd "$PUBLIC_DIR" && shasum -a 256 -c HomeRec.dmg.sha256 )
+  ( cd "$PUBLIC_DIR" && shasum -a 256 HomeRec.dmg | cmp - HomeRec.dmg.sha256 )
 )
 ```
 

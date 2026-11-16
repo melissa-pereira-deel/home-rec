@@ -200,14 +200,28 @@ runlog_version=$(printf '%s\n' "$runlog" | awk 'NR == 1 { print substr($2, 2) }'
 source_commit=
 accepted_digest=
 
+runlog_field() {
+  awk -v label="- $1:" '
+    index($0, label) == 1 {
+      count++
+      value = substr($0, length(label) + 1)
+    }
+    END {
+      if (count == 1 && value ~ /^ `[0-9a-f]+`$/) {
+        print substr(value, 3, length(value) - 3)
+      }
+    }
+  ' <<< "$runlog"
+}
+
 if [ -n "$VERSION" ]; then
   if [ "$runlog_version" != "$VERSION" ]; then
     bad "MARKETING_VERSION is $VERSION but the newest run-log entry is v${runlog_version:-<missing>}"
   elif [ "$VERSION" = 1.1.3 ] && [ "$mode" = docs ]; then
     ok "Manual-acceptance run log covers historical v$VERSION"
   else
-    source_commit=$(printf '%s\n' "$runlog" | sed -n 's/^- Tested source commit: `\([0-9a-f]*\)`$/\1/p')
-    accepted_digest=$(printf '%s\n' "$runlog" | sed -n 's/^- Tested DMG SHA-256: `\([0-9a-f]*\)`$/\1/p')
+    source_commit=$(runlog_field "Tested source commit")
+    accepted_digest=$(runlog_field "Tested DMG SHA-256")
     if [[ "$source_commit" =~ ^[0-9a-f]{40}$ && "$source_commit" =~ [1-9a-f] ]]; then
       ok "Manual-acceptance run log records a full source commit for v$VERSION"
     else
