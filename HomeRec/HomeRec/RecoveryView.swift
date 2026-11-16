@@ -112,7 +112,8 @@ final class RecoveryWindowController {
 
         let viewModel = RecoveryViewModel(
             scanner: RecoveryScanner(saveLocation: SaveLocationManager()),
-            inProgressURL: inProgressURL
+            inProgressURL: inProgressURL,
+            recoveredStore: RecoveredRecordingsStore(defaults: .standard)
         )
         self.viewModel = viewModel
 
