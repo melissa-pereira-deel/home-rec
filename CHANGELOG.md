@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Your last recording is still there after you reopen Home Rec** — The menu-bar popover shows the recording you made last, with a button to reveal it in Finder, but Home Rec forgot it the moment it quit: open the app the next day and there was only a record button. It now remembers the recording once the file has finished saving, so it is there the next time you open Home Rec, in the popover and in the main window. If you have since moved or deleted the file, it is not shown, and pressing Reveal on a file that has gone takes the row away instead of doing nothing. A recording cut off by a crash or a power cut is not remembered this way; Recover Recordings is where to find it. (BL-143)
+
 ### Fixed
 
 - **Quitting while saving an M4A can no longer hang the app** — When you quit, Home Rec finishes writing the open recording before it closes, which is what keeps the file complete. For M4A that last step hands the file to the system to close, and Home Rec waited for it to report back with no limit on how long it would wait. If that report never came, the app stopped responding to anything at all — including the quit you had just asked for — and the only way out was to force-quit it, which is the exact outcome finishing the file was meant to avoid. Home Rec now waits a bounded five seconds in total, then stops waiting and quits. The recording is still in your save folder and still plays: M4A audio is written to disk as it is captured, so at most the last second or so is missing. It may also appear in **Recover Recordings**, where there is nothing to repair. WAV and FLAC were never affected.

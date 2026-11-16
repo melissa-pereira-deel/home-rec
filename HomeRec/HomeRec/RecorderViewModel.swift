@@ -31,6 +31,10 @@ class RecorderViewModel: ObservableObject {
     @Published var showOnboarding = false
     /// Last successfully started take, retained for Reveal in Finder after stop.
     /// Active file ownership belongs to the controller's session.
+    ///
+    /// Restored at launch from `lastRecordingStore`, which is written only once
+    /// a take's file has closed (BL-143). A take cut off mid-recording is left
+    /// to Recovery, and the row keeps the last take that finished.
     @Published var lastRecordingURL: URL?
     @Published var permissionStatus: PermissionStatus = .notDetermined
     @Published var waveformSamples: [Float] = Array(repeating: 0, count: 200)
@@ -227,6 +231,10 @@ class RecorderViewModel: ObservableObject {
     private let pollClock: PollClock
     private let registrationTimeout: TimeInterval
     private let defaults: UserDefaults
+    /// `nil` remembers nothing between launches. The app passes one. Tests that
+    /// are not about this leave it out, so they never read or write the real
+    /// app's settings: the test host is the app, and `.standard` is its domain.
+    private let lastRecordingStore: LastRecordingStore?
     private let onboardingCompletedKey = "hasCompletedOnboarding"
     private let selectedFormatKey = "selectedFormat"
 
@@ -243,7 +251,8 @@ class RecorderViewModel: ObservableObject {
         installNoticePresenter: (() -> Void)? = nil,
         notificationCenter: NotificationCenter = .default,
         pollClock: PollClock? = nil,
-        registrationTimeout: TimeInterval = 2.0
+        registrationTimeout: TimeInterval = 2.0,
+        lastRecordingStore: LastRecordingStore? = nil
     ) {
         self.notificationCenter = notificationCenter
         self.pollClock = pollClock ?? SystemPollClock()
@@ -265,6 +274,8 @@ class RecorderViewModel: ObservableObject {
         self.permissions = permissions ?? PermissionManager()
         self.clock = clock ?? SystemDurationClock()
         self.defaults = defaults
+        self.lastRecordingStore = lastRecordingStore
+        self.lastRecordingURL = lastRecordingStore?.load()
         self.showOnboarding = !defaults.bool(forKey: onboardingCompletedKey)
         self.selectedFormat = Self.loadFormat(from: defaults, key: selectedFormatKey)
         self.controller.onStreamError = { [weak self] message in
@@ -625,6 +636,9 @@ class RecorderViewModel: ObservableObject {
             Log.recorder.error("Failed to stop recording: \(error.localizedDescription, privacy: .public)")
             transition(to: .error(.stopFailed(error.localizedDescription)))
         }
+        // Either way the session has ended and let go of the file, and the row
+        // is showing it.
+        lastRecordingStore?.save(lastRecordingURL)
     }
 
     /// Toggle recording state
@@ -644,6 +658,15 @@ class RecorderViewModel: ObservableObject {
     func revealInFinder() {
         guard let url = lastRecordingURL else { return }
 
+        // The row can now outlive the launch that made it, so the file has had
+        // days to be moved. Finder cannot select a file that is not there; take
+        // the row away rather than keep offering a Reveal that cannot work.
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            Log.recorder.info("Reveal: the last recording is no longer where it was saved")
+            lastRecordingURL = nil
+            lastRecordingStore?.save(nil)
+            return
+        }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
@@ -990,8 +1013,12 @@ class RecorderViewModel: ObservableObject {
     /// nothing.
     private func beginFailureTeardown() {
         isFinishingFailedTake = true
+        let url = lastRecordingURL
         failureTeardown = Task { [weak self] in
             await self?.controller.finalizeAfterFailure()
+            // Remembered only now that the file is closed, so a launch can
+            // never offer a file that was still being written.
+            self?.lastRecordingStore?.save(url)
             self?.isFinishingFailedTake = false
         }
     }
