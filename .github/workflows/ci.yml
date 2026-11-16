@@ -198,12 +198,40 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO
 
-# NOT ADDED, deliberately: a job running `scripts/check-docs.sh`.
-# It cannot pass on a clean checkout. Most of what it verifies lives in
-# CLAUDE.md, which is gitignored, so on CI the file is absent and the script
-# exits 1 on a missing-file error rather than on any disagreement about the
-# code. It already skips its private/tech-debt.md section when that file is
-# absent; the CLAUDE.md section needs the same treatment before this is worth a
-# job, and the residue that would actually run here is only the rot guards.
-# Adding it as-is would pin CI red permanently — the failure this file's other
-# changes exist to remove.
+  docs-check:
+    name: Docs check
+    # BLOCKING gate (BL-160): `scripts/check-docs.sh`, which fails when the
+    # docs claim something the code no longer does. It used to be left out of
+    # CI because it could not pass on a clean checkout — the checks that read
+    # the gitignored CLAUDE.md exited 1 on the missing file, not on any
+    # disagreement about the code. Those checks now skip with a printed note
+    # when the file is absent, as the private/tech-debt.md ones always did.
+    #
+    # The ceiling, stated plainly: here the script can only check what is
+    # public — the code invariants that need no doc (sandbox off, the .screen
+    # handler, the version-config count, the nonisolated encoders), the rot
+    # guards against README.md, and the release evidence in README.md and
+    # docs/manual-acceptance.md. Everything it verifies against CLAUDE.md or
+    # private/tech-debt.md is checked only on the maintainer's machine; the
+    # log names each skipped check, and a green run here says nothing about
+    # them.
+    #
+    # The release-evidence checks make this job red on any commit whose
+    # MARKETING_VERSION has no run-log entry in docs/manual-acceptance.md, or
+    # whose README badge or footer names another version. That is the BL-179
+    # gate, moved from "before the tag" to "before the merge": a version bump
+    # does not go green until the manual pass for it is recorded.
+    #
+    # A separate job, like release-build, so it fails independently and always
+    # reports. It is plain shell and needs no Xcode, so it runs on Linux — which
+    # means the script must stay portable between GNU and BSD tools, since it is
+    # also run by hand on macOS.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check documented facts
+        run: scripts/check-docs.sh
